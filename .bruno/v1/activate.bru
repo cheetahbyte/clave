@@ -1,0 +1,43 @@
+meta {
+  name: activate
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:8000/api/{{version}}/activate
+  body: none
+  auth: inherit
+}
+
+tests {
+  // Bruno Test Script
+  test("Activation successful - returns signed token", function() {
+    const data = res.getBody();
+    
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getHeader("content-type")).to.be.a('string').and.include("application/json");
+    
+    // Verify response structure
+    expect(data).to.have.property('token');
+    expect(data).to.have.property('status', 'activated');
+    
+    // Store token for subsequent tests
+    if (data.token) {
+      bru.setVar("license_jwt", data.token);
+    }
+  });
+  
+  test("Fails with invalid license key", function() {
+    // This assumes you send a deliberate bad key in a separate request or collection run
+    if (req.getBody().key === "INVALID-KEY") {
+      expect(res.getStatus()).to.equal(403);
+      expect(res.getBody().error).to.equal("Invalid License");
+    }
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
