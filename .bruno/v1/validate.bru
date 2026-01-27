@@ -1,0 +1,35 @@
+meta {
+  name: validate
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:8000/{{version}}/validate
+  body: none
+  auth: inherit
+}
+
+tests {
+  // Bruno Test Script
+  test("Validation successful", function() {
+    const data = res.getBody();
+    
+    expect(res.getStatus()).to.equal(200);
+    expect(data).to.have.property('valid', true);
+    
+    expect(data.hwid).to.equal(bru.getVar("machine_hwid"));
+  });
+  
+  test("Fails on expired or tampered token", function() {
+    if (res.getStatus() !== 200) {
+      expect(res.getStatus()).to.equal(401);
+      expect(data.error).to.contain("expired");
+    }
+  });
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
