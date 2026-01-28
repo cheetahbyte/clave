@@ -11,7 +11,10 @@ import (
 )
 
 type Querier interface {
+	ActivateLicense(ctx context.Context, arg ActivateLicenseParams) (int32, error)
+	CreateLicense(ctx context.Context, arg CreateLicenseParams) (License, error)
 	GetActivationsForLicense(ctx context.Context, licenseID pgtype.Int4) ([]Activation, error)
+	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error)
 	GetLicenseById(ctx context.Context, id int32) (License, error)
 	GetOneById(ctx context.Context, id int32) (Product, error)
 	GetProducts(ctx context.Context) ([]Product, error)

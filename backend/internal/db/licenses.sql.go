@@ -7,10 +7,64 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createLicense = `-- name: CreateLicense :one
+INSERT INTO licenses(product_id, max_activations, lookup_digest, key_phc) values($1, $2, $3, $4) returning id, product_id, max_activations, is_active, expires_at, created_at, lookup_digest, key_phc
+`
+
+type CreateLicenseParams struct {
+	ProductID      pgtype.Int4 `json:"product_id"`
+	MaxActivations pgtype.Int4 `json:"max_activations"`
+	LookupDigest   []byte      `json:"lookup_digest"`
+	KeyPhc         string      `json:"key_phc"`
+}
+
+func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (License, error) {
+	row := q.db.QueryRow(ctx, createLicense,
+		arg.ProductID,
+		arg.MaxActivations,
+		arg.LookupDigest,
+		arg.KeyPhc,
+	)
+	var i License
+	err := row.Scan(
+		&i.ID,
+		&i.ProductID,
+		&i.MaxActivations,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.LookupDigest,
+		&i.KeyPhc,
+	)
+	return i, err
+}
+
+const getLicenseByDigest = `-- name: GetLicenseByDigest :one
+select id, product_id, max_activations, is_active, expires_at, created_at, lookup_digest, key_phc from licenses where lookup_digest = $1
+`
+
+func (q *Queries) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error) {
+	row := q.db.QueryRow(ctx, getLicenseByDigest, lookupDigest)
+	var i License
+	err := row.Scan(
+		&i.ID,
+		&i.ProductID,
+		&i.MaxActivations,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.LookupDigest,
+		&i.KeyPhc,
+	)
+	return i, err
+}
+
 const getLicenseById = `-- name: GetLicenseById :one
-select id, product_id, key_hash, max_activations, is_active, expires_at, created_at from licenses where id = $1
+select id, product_id, max_activations, is_active, expires_at, created_at, lookup_digest, key_phc from licenses where id = $1
 `
 
 func (q *Queries) GetLicenseById(ctx context.Context, id int32) (License, error) {
@@ -19,11 +73,12 @@ func (q *Queries) GetLicenseById(ctx context.Context, id int32) (License, error)
 	err := row.Scan(
 		&i.ID,
 		&i.ProductID,
-		&i.KeyHash,
 		&i.MaxActivations,
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.LookupDigest,
+		&i.KeyPhc,
 	)
 	return i, err
 }

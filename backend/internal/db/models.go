@@ -19,11 +19,12 @@ type Activation struct {
 type License struct {
 	ID             int32              `json:"id"`
 	ProductID      pgtype.Int4        `json:"product_id"`
-	KeyHash        string             `json:"key_hash"`
 	MaxActivations pgtype.Int4        `json:"max_activations"`
 	IsActive       pgtype.Bool        `json:"is_active"`
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	LookupDigest   []byte             `json:"lookup_digest"`
+	KeyPhc         string             `json:"key_phc"`
 }
 
 type Product struct {
