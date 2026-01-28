@@ -22,7 +22,7 @@ func formatKey(prefix, raw string, groupSize int) string {
 }
 
 func GenerateLicenseKey() (string, error) {
-	b := make([]byte, 20)
+	b := make([]byte, 15)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
