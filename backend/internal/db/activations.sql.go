@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateLicense = `-- name: ActivateLicense :one
+insert into activations (license_id, hwid) values($1, $2) returning id
+`
+
+type ActivateLicenseParams struct {
+	LicenseID pgtype.Int4 `json:"license_id"`
+	Hwid      string      `json:"hwid"`
+}
+
+func (q *Queries) ActivateLicense(ctx context.Context, arg ActivateLicenseParams) (int32, error) {
+	row := q.db.QueryRow(ctx, activateLicense, arg.LicenseID, arg.Hwid)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getActivationsForLicense = `-- name: GetActivationsForLicense :many
 select id, license_id, hwid, last_check_in, created_at from activations where license_id = $1
 `

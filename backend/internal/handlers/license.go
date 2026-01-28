@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
+
+	"github.com/cheetahbyte/clave/internal/handlers/dto"
 )
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -11,8 +14,36 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+func (h *Handlers) CreateLicense(w http.ResponseWriter, r *http.Request) {
+	var data dto.LicenseCreationRequest
+	if err := decodeJSON(w, r, &data); err != nil {
+		slog.Error("failed to read body", "err", err.Error())
+		return
+	}
+
+	result, err := h.Services.License().NewLicense(r.Context(), data)
+
+	if err != nil {
+		slog.Error("failed to create license", "err", err.Error())
+		return
+	}
+
+	writeJSON(w, 200, result)
+}
+
 func (h *Handlers) ActivateLicense(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, map[string]any{
-		"test": 1,
-	})
+	var data dto.ActivateLicenseRequest
+	if err := decodeJSON(w, r, &data); err != nil {
+		slog.Error("failed to read body", "err", err.Error())
+		return
+	}
+
+	result, err := h.Services.License().ActivateLicense(r.Context(), data)
+
+	if err != nil {
+		slog.Error("failed to activate license", "err", err.Error())
+		return
+	}
+
+	writeJSON(w, 200, result)
 }
