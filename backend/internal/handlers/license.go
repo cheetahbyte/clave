@@ -11,7 +11,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func ActivateLicense(w http.ResponseWriter, r *http.Request) {
+func (h *Handlers) ActivateLicense(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{
 		"test": 1,
 	})
