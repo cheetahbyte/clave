@@ -27,6 +27,17 @@ func (q *Queries) ActivateLicense(ctx context.Context, arg ActivateLicenseParams
 	return id, err
 }
 
+const countActivations = `-- name: CountActivations :one
+select count(*) from activations where license_id = $1
+`
+
+func (q *Queries) CountActivations(ctx context.Context, licenseID pgtype.Int4) (int64, error) {
+	row := q.db.QueryRow(ctx, countActivations, licenseID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getActivationsForLicense = `-- name: GetActivationsForLicense :many
 select id, license_id, hwid, last_check_in, created_at from activations where license_id = $1
 `

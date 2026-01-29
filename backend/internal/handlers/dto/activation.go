@@ -3,9 +3,10 @@ package dto
 type ActivateLicenseRequest struct {
 	LicenseKey string `json:"licenseKey"`
 	DeviceID   string `json:"deviceId"`
-	ProductID  string `json:"productId"`
+	ProductID  int32  `json:"productId"`
 }
 
 type ActivateLicenseResponse struct {
-	ActivationID int32 `json:"activationId"`
+	ActivationId int32  `json:"activationId"`
+	Token        string `json:"token"`
 }
