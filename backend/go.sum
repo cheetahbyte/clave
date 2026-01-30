@@ -1,5 +1,7 @@
 github.com/alexedwards/argon2id v1.0.0 h1:wJzDx66hqWX7siL/SRUmgz3F8YMrd/nfX/xHHcQQP0w=
 github.com/alexedwards/argon2id v1.0.0/go.mod h1:tYKkqIjzXvZdzPvADMWOEZ+l6+BD6CtBXMj5fnJppiw=
+github.com/cheetahbyte/problems v0.0.0-20260129213440-bbfbf6d934e3 h1:fCBAPw9PmjvtOoSUYZ+6ExPv0HZnVDJX+6sOpPIbCUM=
+github.com/cheetahbyte/problems v0.0.0-20260129213440-bbfbf6d934e3/go.mod h1:3tZ6Xepbkn2TFeShbOPl+VyVGTllNonjoRrvPxNB+dM=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -72,3 +74,5 @@ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8
 gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+schneider.vip/problem v1.9.1 h1:HYdGPzbTHnNziF7cC4ftbn/eTrjSIXhKfricAMaLIMk=
+schneider.vip/problem v1.9.1/go.mod h1:6hLRfO1e1MQWdG23Kl5b3Yp5FSexE+YiGVqCkAp3HUQ=

@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/cheetahbyte/clave/internal/services"
+	problem "github.com/cheetahbyte/problems"
 )
 
 type Handlers struct {
@@ -50,4 +52,26 @@ func decodeJSON[T any](w http.ResponseWriter, r *http.Request, dst *T) error {
 	}
 
 	return nil
+}
+
+func (h *Handlers) writeError(w http.ResponseWriter, r *http.Request, err error) {
+	var p *problem.Problem
+
+	if errors.As(err, &p) {
+		p.WriteTo(w)
+		return
+	}
+
+	slog.Error("unhandled error",
+		"path", r.URL.Path,
+		"method", r.Method,
+		"err", err,
+	)
+
+	p = problem.Of(http.StatusInternalServerError).
+		Append(problem.Type("https://api.yourapp.dev/problems/internal")).
+		Append(problem.Title("Internal Server Error")).
+		Append(problem.Detail("An unexpected error occurred"))
+
+	p.WriteTo(w)
 }
