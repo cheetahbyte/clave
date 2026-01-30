@@ -17,6 +17,7 @@ func Register(r *chi.Mux, h *handlers.Handlers) {
 		apiRouter.Route("/v1", func(v1Router chi.Router) {
 			v1Router.Post("/activate", h.ActivateLicense)
 			v1Router.Post("/", h.CreateLicense)
+			v1Router.Post("/validate", h.ValidateLicense)
 		})
 	})
 }

@@ -34,11 +34,25 @@ func (h *Handlers) CreateLicense(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ActivateLicense(w http.ResponseWriter, r *http.Request) {
 	var data dto.ActivateLicenseRequest
 	if err := decodeJSON(w, r, &data); err != nil {
-		// decodeJSON should already have written a problem+json
 		return
 	}
 
 	result, err := h.Services.License().ActivateLicense(r.Context(), data)
+	if err != nil {
+		h.writeError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handlers) ValidateLicense(w http.ResponseWriter, r *http.Request) {
+	var data dto.LicenseValidationRequest
+	if err := decodeJSON(w, r, &data); err != nil {
+		return
+	}
+
+	result, err := h.Services.License().ValidateLicense(r.Context(), data)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
