@@ -52,7 +52,7 @@ func (h *Handlers) ValidateLicense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.Services.License().ValidateLicense(r.Context(), data)
+	result, err := h.Services.Validation().Validate(r.Context(), data)
 	if err != nil {
 		h.writeError(w, r, err)
 		return
