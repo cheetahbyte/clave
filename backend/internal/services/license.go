@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
@@ -225,6 +227,91 @@ func (svc *LicenseService) ActivateLicense(ctx context.Context, data dto.Activat
 	return dto.ActivateLicenseResponse{ActivationId: activationId, Token: signed}, nil
 }
 
+func (svc *LicenseService) ValidateLicense(ctx context.Context, data dto.LicenseValidationRequest) (dto.LicenseValidationResponse, error) {
+	instance := "/licenses/validate"
+
+	pbB64 := os.Getenv("LICENSE_JWT_PUBLIC_KEY")
+	pbBytes, err := base64.StdEncoding.DecodeString(pbB64)
+	if err != nil {
+		return dto.LicenseValidationResponse{}, problem.Of(500).
+			Append(problem.Title("Server misconfigured")).
+			Append(problem.Instance(instance))
+	}
+
+	pub := ed25519.PublicKey(pbBytes)
+	if len(pub) != ed25519.PublicKeySize {
+		return dto.LicenseValidationResponse{}, problem.Of(500).
+			Append(problem.Title("Server misconfigured")).
+			Append(problem.Instance(instance))
+	}
+
+	claims, err := parseJWT(data.Token, pub)
+	if err != nil {
+		return dto.LicenseValidationResponse{}, problem.Of(401).
+			Append(problem.Title("Invalid token")).
+			Append(problem.Instance(instance))
+	}
+
+	licenseId, err := licenseIDFromSubject(claims.Subject)
+	if err != nil {
+		return dto.LicenseValidationResponse{}, problem.Of(401).
+			Append(problem.Title("Invalid token")).
+			Append(problem.Instance(instance))
+	}
+
+	license, err := svc.repo.GetLicenseById(ctx, licenseId.Int32)
+	if err != nil {
+		return dto.LicenseValidationResponse{}, problem.Of(404).
+			Append(problem.Title("License not found")).
+			Append(problem.Instance(instance))
+	}
+
+	if license.ExpiresAt.Valid && time.Now().UTC().After(license.ExpiresAt.Time.UTC()) {
+		return dto.LicenseValidationResponse{}, problem.Of(403).
+			Append(problem.Title("License expired")).
+			Append(problem.Instance(instance))
+	}
+
+	if data.DeviceID != "" && claims.HWID != "" && data.DeviceID != claims.HWID {
+		return dto.LicenseValidationResponse{}, problem.Of(403).
+			Append(problem.Title("HWID mismatch")).
+			Append(problem.Instance(instance))
+	}
+
+	pkB64 := os.Getenv("LICENSE_JWT_PRIVATE_KEY")
+	pkBytes, err := base64.StdEncoding.DecodeString(pkB64)
+	if err != nil {
+		return dto.LicenseValidationResponse{}, problem.Of(500).
+			Append(problem.Title("Server misconfigured")).
+			Append(problem.Instance(instance))
+	}
+
+	priv := ed25519.PrivateKey(pkBytes)
+	if len(priv) != ed25519.PrivateKeySize {
+		return dto.LicenseValidationResponse{}, problem.Of(500).
+			Append(problem.Title("Server misconfigured")).
+			Append(problem.Instance(instance))
+	}
+
+	newToken, _, err := svc.issueAndSignToken(
+		license,
+		priv,
+		"",
+		claims.Features,
+		claims.HWID,
+		10*time.Minute,
+	)
+	if err != nil {
+		return dto.LicenseValidationResponse{}, problem.Of(500).
+			Append(problem.Title("Token signing failed")).
+			Append(problem.Instance(instance))
+	}
+
+	return dto.LicenseValidationResponse{
+		Token: newToken,
+	}, nil
+}
+
 type LicenseClaims struct {
 	ProductID  int32    `json:"product_id"`
 	HWID       string   `json:"hwid,omitempty"`
@@ -232,4 +319,43 @@ type LicenseClaims struct {
 	LicenseExp *int64   `json:"license_exp,omitempty"`
 
 	jwt.RegisteredClaims
+}
+
+func parseJWT(tokenString string, pub ed25519.PublicKey) (*LicenseClaims, error) {
+	claims := &LicenseClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
+		if t.Method != jwt.SigningMethodEdDSA {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return pub, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}))
+	if err != nil {
+		return nil, err
+	}
+
+	if !token.Valid {
+		return nil, errors.New("invalid token")
+	}
+
+	return claims, nil
+}
+
+func licenseIDFromSubject(sub string) (pgtype.Int4, error) {
+	const prefix = "lic_"
+
+	if !strings.HasPrefix(sub, prefix) {
+		return pgtype.Int4{}, fmt.Errorf("invalid subject format: %q", sub)
+	}
+
+	idStr := strings.TrimPrefix(sub, prefix)
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return pgtype.Int4{}, fmt.Errorf("invalid license id in subject: %w", err)
+	}
+
+	return pgtype.Int4{
+		Int32: int32(id),
+		Valid: true,
+	}, nil
 }
