@@ -34,16 +34,15 @@ func (h *Handlers) CreateLicense(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ActivateLicense(w http.ResponseWriter, r *http.Request) {
 	var data dto.ActivateLicenseRequest
 	if err := decodeJSON(w, r, &data); err != nil {
-		slog.Error("failed to read body", "err", err.Error())
+		// decodeJSON should already have written a problem+json
 		return
 	}
 
 	result, err := h.Services.License().ActivateLicense(r.Context(), data)
-
 	if err != nil {
-		slog.Error("failed to activate license", "err", err.Error())
+		h.writeError(w, r, err)
 		return
 	}
 
-	writeJSON(w, 200, result)
+	writeJSON(w, http.StatusOK, result)
 }
