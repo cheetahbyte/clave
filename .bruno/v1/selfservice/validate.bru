@@ -1,0 +1,22 @@
+meta {
+  name: validate
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:8000/api/{{version}}/selfservice/auth/validate
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "token": "Bv9582_9qVCNPj1UhC5qkIzEO8aaN0aCHFiu4MyoDek"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

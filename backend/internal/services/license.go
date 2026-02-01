@@ -18,17 +18,18 @@ import (
 	"github.com/cheetahbyte/clave/internal/handlers/dto"
 	"github.com/cheetahbyte/clave/internal/licensecrypto"
 	problem "github.com/cheetahbyte/problems"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type LicenseService struct {
-	repo *db.Queries
+	repo           *db.Queries
+	signingService *SigningService
 }
 
-func NewLicenseService(q *db.Queries) *LicenseService {
+func NewLicenseService(q *db.Queries, signingService *SigningService) *LicenseService {
 	return &LicenseService{
-		repo: q,
+		repo:           q,
+		signingService: signingService,
 	}
 }
 
@@ -65,52 +66,6 @@ func (svc *LicenseService) NewLicense(ctx context.Context, data dto.LicenseCreat
 	return dto.LicenseCreationResponse{
 		LicenseKey: key,
 	}, nil
-}
-
-func (svc *LicenseService) issueAndSignToken(license db.License, signingKey ed25519.PrivateKey, audience string, features []string, hwid string, tokenTTL time.Duration) (string, *LicenseClaims, error) {
-	if len(signingKey) != ed25519.PrivateKeySize {
-		return "", nil, errors.New("invalid ed25519 private key size")
-	}
-
-	if tokenTTL <= 0 {
-		return "", nil, errors.New("tokenTTL must be > 0")
-	}
-
-	now := time.Now().UTC()
-	expires := now.Add(tokenTTL)
-
-	var licenseExp *int64
-	if license.ExpiresAt.Valid {
-		v := license.ExpiresAt.Time.UTC().Unix()
-		licenseExp = &v
-		if license.ExpiresAt.Time.UTC().Before(expires) {
-			expires = license.ExpiresAt.Time.UTC()
-		}
-	}
-
-	claims := &LicenseClaims{
-		ProductID:  license.ProductID.Int32,
-		HWID:       hwid,
-		Features:   features,
-		LicenseExp: licenseExp,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   fmt.Sprintf("lic_%d", license.ID),
-			IssuedAt:  jwt.NewNumericDate(now),
-			NotBefore: jwt.NewNumericDate(now.Add(-30 * time.Second)),
-			ExpiresAt: jwt.NewNumericDate(expires),
-		},
-	}
-
-	if audience != "" {
-		claims.Audience = jwt.ClaimStrings{audience}
-	}
-
-	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
-	signed, err := tok.SignedString(signingKey)
-	if err != nil {
-		return "", nil, errors.New("failed to sign jwt")
-	}
-	return signed, claims, nil
 }
 
 func (svc *LicenseService) ActivateLicense(ctx context.Context, data dto.ActivateLicenseRequest) (dto.ActivateLicenseResponse, error) {
@@ -212,7 +167,7 @@ func (svc *LicenseService) ActivateLicense(ctx context.Context, data dto.Activat
 		return dto.ActivateLicenseResponse{}, p
 	}
 
-	signed, _, err := svc.issueAndSignToken(license, priv, "test", []string{"test"}, data.DeviceID, 10*time.Minute)
+	signed, _, err := svc.signingService.IssueAndSignLicenseToken(license, "test", []string{"test"}, data.DeviceID, 10*time.Minute)
 	if err != nil {
 		slog.Error("failed to sign jwt", "licenseId", license.ID, "err", err)
 
@@ -227,32 +182,9 @@ func (svc *LicenseService) ActivateLicense(ctx context.Context, data dto.Activat
 	return dto.ActivateLicenseResponse{ActivationId: activationId, Token: signed}, nil
 }
 
-type LicenseClaims struct {
-	ProductID  int32    `json:"product_id"`
-	HWID       string   `json:"hwid,omitempty"`
-	Features   []string `json:"features,omitempty"`
-	LicenseExp *int64   `json:"license_exp,omitempty"`
-
-	jwt.RegisteredClaims
-}
-
-func parseJWT(tokenString string, pub ed25519.PublicKey) (*LicenseClaims, error) {
-	claims := &LicenseClaims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
-		if t.Method != jwt.SigningMethodEdDSA {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return pub, nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}))
-	if err != nil {
-		return nil, err
-	}
-
-	if !token.Valid {
-		return nil, errors.New("invalid token")
-	}
-
-	return claims, nil
+// TODO: better error handling
+func (svc *LicenseService) ListLicensesForCustomer(ctx context.Context, email string) ([]db.ListByCustomerEmailRow, error) {
+	return svc.repo.ListByCustomerEmail(ctx, email)
 }
 
 func licenseIDFromSubject(sub string) (pgtype.Int4, error) {

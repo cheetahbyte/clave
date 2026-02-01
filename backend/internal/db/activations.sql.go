@@ -7,42 +7,13 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const activateLicense = `-- name: ActivateLicense :one
-insert into activations (license_id, hwid) values($1, $2) returning id
-`
-
-type ActivateLicenseParams struct {
-	LicenseID pgtype.Int4 `json:"license_id"`
-	Hwid      string      `json:"hwid"`
-}
-
-func (q *Queries) ActivateLicense(ctx context.Context, arg ActivateLicenseParams) (int32, error) {
-	row := q.db.QueryRow(ctx, activateLicense, arg.LicenseID, arg.Hwid)
-	var id int32
-	err := row.Scan(&id)
-	return id, err
-}
-
-const countActivations = `-- name: CountActivations :one
-select count(*) from activations where license_id = $1
-`
-
-func (q *Queries) CountActivations(ctx context.Context, licenseID pgtype.Int4) (int64, error) {
-	row := q.db.QueryRow(ctx, countActivations, licenseID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const getActivationsForLicense = `-- name: GetActivationsForLicense :many
-select id, license_id, hwid, last_check_in, created_at from activations where license_id = $1
+select id, device_id, license_id, checked_in_at, created_at from activations where license_id = $1
 `
 
-func (q *Queries) GetActivationsForLicense(ctx context.Context, licenseID pgtype.Int4) ([]Activation, error) {
+func (q *Queries) GetActivationsForLicense(ctx context.Context, licenseID int32) ([]Activation, error) {
 	rows, err := q.db.Query(ctx, getActivationsForLicense, licenseID)
 	if err != nil {
 		return nil, err
@@ -53,9 +24,9 @@ func (q *Queries) GetActivationsForLicense(ctx context.Context, licenseID pgtype
 		var i Activation
 		if err := rows.Scan(
 			&i.ID,
+			&i.DeviceID,
 			&i.LicenseID,
-			&i.Hwid,
-			&i.LastCheckIn,
+			&i.CheckedInAt,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

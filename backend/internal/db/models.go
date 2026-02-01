@@ -5,26 +5,37 @@
 package db
 
 import (
+	"net/netip"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Activation struct {
 	ID          int32              `json:"id"`
-	LicenseID   pgtype.Int4        `json:"license_id"`
-	Hwid        string             `json:"hwid"`
-	LastCheckIn pgtype.Timestamptz `json:"last_check_in"`
+	DeviceID    pgtype.UUID        `json:"device_id"`
+	LicenseID   int32              `json:"license_id"`
+	CheckedInAt pgtype.Timestamptz `json:"checked_in_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type Device struct {
+	ID        pgtype.UUID        `json:"id"`
+	LicenseID int32              `json:"license_id"`
+	HwidHash  []byte             `json:"hwid_hash"`
+	Hostname  pgtype.Text        `json:"hostname"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type License struct {
 	ID             int32              `json:"id"`
 	ProductID      pgtype.Int4        `json:"product_id"`
-	MaxActivations pgtype.Int4        `json:"max_activations"`
-	IsActive       pgtype.Bool        `json:"is_active"`
-	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	LookupDigest   []byte             `json:"lookup_digest"`
 	KeyPhc         string             `json:"key_phc"`
+	CustomerEmail  string             `json:"customer_email"`
+	MaxActivations int32              `json:"max_activations"`
+	IsActive       bool               `json:"is_active"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type Product struct {
@@ -32,4 +43,16 @@ type Product struct {
 	Name      string             `json:"name"`
 	Version   pgtype.Text        `json:"version"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type SelfServiceToken struct {
+	ID        pgtype.UUID        `json:"id"`
+	Email     string             `json:"email"`
+	TokenHash string             `json:"token_hash"`
+	Purpose   string             `json:"purpose"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	UsedAt    pgtype.Timestamptz `json:"used_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	CreatedIp *netip.Addr        `json:"created_ip"`
+	UserAgent pgtype.Text        `json:"user_agent"`
 }
