@@ -13,6 +13,7 @@
         {
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
+              fish
               # Go
               go
               gopls
@@ -20,7 +21,7 @@
               gotools
 
               # Node
-              nodejs_20
+              nodejs_22
               corepack
 
               # Utilities
@@ -28,7 +29,7 @@
               jq
               curl
             ];
-
+            NIX_SHELL = "fish";
             shellHook = ''
               export GOPATH="$PWD/.gopath"
               export GOMODCACHE="$GOPATH/pkg/mod"
