@@ -12,12 +12,12 @@ import (
 )
 
 const createLicense = `-- name: CreateLicense :one
-INSERT INTO licenses(product_id, max_activations, lookup_digest, key_phc) values($1, $2, $3, $4) returning id, product_id, max_activations, is_active, expires_at, created_at, lookup_digest, key_phc
+INSERT INTO licenses(product_id, max_activations, lookup_digest, key_phc) values($1, $2, $3, $4) returning id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at
 `
 
 type CreateLicenseParams struct {
 	ProductID      pgtype.Int4 `json:"product_id"`
-	MaxActivations pgtype.Int4 `json:"max_activations"`
+	MaxActivations int32       `json:"max_activations"`
 	LookupDigest   []byte      `json:"lookup_digest"`
 	KeyPhc         string      `json:"key_phc"`
 }
@@ -33,18 +33,19 @@ func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (L
 	err := row.Scan(
 		&i.ID,
 		&i.ProductID,
+		&i.LookupDigest,
+		&i.KeyPhc,
+		&i.CustomerEmail,
 		&i.MaxActivations,
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.CreatedAt,
-		&i.LookupDigest,
-		&i.KeyPhc,
 	)
 	return i, err
 }
 
 const getLicenseByDigest = `-- name: GetLicenseByDigest :one
-select id, product_id, max_activations, is_active, expires_at, created_at, lookup_digest, key_phc from licenses where lookup_digest = $1
+select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at from licenses where lookup_digest = $1
 `
 
 func (q *Queries) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error) {
@@ -53,18 +54,19 @@ func (q *Queries) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (
 	err := row.Scan(
 		&i.ID,
 		&i.ProductID,
+		&i.LookupDigest,
+		&i.KeyPhc,
+		&i.CustomerEmail,
 		&i.MaxActivations,
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.CreatedAt,
-		&i.LookupDigest,
-		&i.KeyPhc,
 	)
 	return i, err
 }
 
 const getLicenseById = `-- name: GetLicenseById :one
-select id, product_id, max_activations, is_active, expires_at, created_at, lookup_digest, key_phc from licenses where id = $1
+select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at from licenses where id = $1
 `
 
 func (q *Queries) GetLicenseById(ctx context.Context, id int32) (License, error) {
@@ -73,12 +75,51 @@ func (q *Queries) GetLicenseById(ctx context.Context, id int32) (License, error)
 	err := row.Scan(
 		&i.ID,
 		&i.ProductID,
+		&i.LookupDigest,
+		&i.KeyPhc,
+		&i.CustomerEmail,
 		&i.MaxActivations,
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.CreatedAt,
-		&i.LookupDigest,
-		&i.KeyPhc,
 	)
 	return i, err
+}
+
+const listByCustomerEmail = `-- name: ListByCustomerEmail :many
+select lt.is_active, lt.id, lt.max_activations, lt.expires_at, p.name from licenses lt join products p on lt.product_id = p.id where customer_email = $1
+`
+
+type ListByCustomerEmailRow struct {
+	IsActive       bool               `json:"is_active"`
+	ID             int32              `json:"id"`
+	MaxActivations int32              `json:"max_activations"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Name           string             `json:"name"`
+}
+
+func (q *Queries) ListByCustomerEmail(ctx context.Context, customerEmail string) ([]ListByCustomerEmailRow, error) {
+	rows, err := q.db.Query(ctx, listByCustomerEmail, customerEmail)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListByCustomerEmailRow{}
+	for rows.Next() {
+		var i ListByCustomerEmailRow
+		if err := rows.Scan(
+			&i.IsActive,
+			&i.ID,
+			&i.MaxActivations,
+			&i.ExpiresAt,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

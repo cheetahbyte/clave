@@ -10,12 +10,14 @@ import (
 )
 
 type ServiceStack struct {
-	license    *LicenseService
-	validation *ValidationService
+	license     *LicenseService
+	validation  *ValidationService
+	selfservice *SelfServiceService
+	signing     *SigningService
 }
 
 func InitServices(q *db.Queries) ServiceStack {
-	license := NewLicenseService(q)
+
 	publicKey := os.Getenv("LICENSE_JWT_PUBLIC_KEY")
 	pbBytes, err := base64.StdEncoding.DecodeString(publicKey)
 	if err != nil {
@@ -25,6 +27,7 @@ func InitServices(q *db.Queries) ServiceStack {
 	if len(pub) != ed25519.PublicKeySize {
 		slog.Error("invalid ed25519 public key size", "size", len(pub))
 	}
+
 	privateKey := os.Getenv("LICENSE_JWT_PRIVATE_KEY")
 	pkBytes, err := base64.StdEncoding.DecodeString(privateKey)
 	if err != nil {
@@ -35,10 +38,43 @@ func InitServices(q *db.Queries) ServiceStack {
 		slog.Error("invalid ed25519 private key size", "size", len(priv))
 	}
 
-	validation := NewValidationService(q, license, pub, priv)
-	return ServiceStack{license: license, validation: validation}
+	pepper := os.Getenv("SELF_SERVICE_TOKEN_PEPPER")
+	if pepper == "" {
+		slog.Error("SELF_SERVICE_TOKEN_PEPPER is not set")
+	}
+
+	signingService := NewSigningService(pub, priv)
+
+	license := NewLicenseService(q, signingService)
+
+	validation := NewValidationService(q, signingService, license)
+
+	selfservice := NewSelfServiceService(
+		q,
+		[]byte(pepper),
+		signingService,
+	)
+
+	return ServiceStack{
+		license:     license,
+		validation:  validation,
+		selfservice: selfservice,
+		signing:     signingService,
+	}
 }
 
-func (s ServiceStack) License() *LicenseService { return s.license }
+func (s ServiceStack) License() *LicenseService {
+	return s.license
+}
 
-func (s ServiceStack) Validation() *ValidationService { return s.validation }
+func (s ServiceStack) Validation() *ValidationService {
+	return s.validation
+}
+
+func (s ServiceStack) SelfService() *SelfServiceService {
+	return s.selfservice
+}
+
+func (s ServiceStack) SigningService() *SigningService {
+	return s.signing
+}

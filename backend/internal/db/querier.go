@@ -6,19 +6,18 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
-	ActivateLicense(ctx context.Context, arg ActivateLicenseParams) (int32, error)
-	CountActivations(ctx context.Context, licenseID pgtype.Int4) (int64, error)
+	ConsumeSelfServiceToken(ctx context.Context, tokenHash string) (string, error)
 	CreateLicense(ctx context.Context, arg CreateLicenseParams) (License, error)
-	GetActivationsForLicense(ctx context.Context, licenseID pgtype.Int4) ([]Activation, error)
+	CreateSelfServiceLink(ctx context.Context, arg CreateSelfServiceLinkParams) (SelfServiceToken, error)
+	GetActivationsForLicense(ctx context.Context, licenseID int32) ([]Activation, error)
 	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error)
 	GetLicenseById(ctx context.Context, id int32) (License, error)
 	GetOneById(ctx context.Context, id int32) (Product, error)
 	GetProducts(ctx context.Context) ([]Product, error)
+	ListByCustomerEmail(ctx context.Context, customerEmail string) ([]ListByCustomerEmailRow, error)
 }
 
 var _ Querier = (*Queries)(nil)

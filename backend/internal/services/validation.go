@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/ed25519"
 	"time"
 
 	"github.com/cheetahbyte/clave/internal/db"
@@ -12,24 +11,22 @@ import (
 
 type ValidationService struct {
 	repo           *db.Queries
-	publicKey      ed25519.PublicKey
-	privateKey     ed25519.PrivateKey
 	licenseService *LicenseService
+	signingService *SigningService
 }
 
-func NewValidationService(q *db.Queries, licenseService *LicenseService, publicKey ed25519.PublicKey, privateKey ed25519.PrivateKey) *ValidationService {
+func NewValidationService(q *db.Queries, signingService *SigningService, licenseService *LicenseService) *ValidationService {
 	return &ValidationService{
 		repo:           q,
+		signingService: signingService,
 		licenseService: licenseService,
-		publicKey:      publicKey,
-		privateKey:     privateKey,
 	}
 }
 
 func (svc *ValidationService) Validate(ctx context.Context, data dto.LicenseValidationRequest) (dto.LicenseValidationResponse, error) {
 	instance := "/licenses/validate"
 
-	claims, err := parseJWT(data.Token, svc.publicKey)
+	claims, err := svc.signingService.ParseJWT(data.Token)
 	if err != nil {
 		return dto.LicenseValidationResponse{}, problem.Of(401).
 			Append(problem.Title("Invalid token")).
@@ -65,8 +62,7 @@ func (svc *ValidationService) Validate(ctx context.Context, data dto.LicenseVali
 	sevenDays := 7 * 24 * time.Hour
 	remaining := time.Until(license.ExpiresAt.Time)
 
-	newToken, _, err := svc.licenseService.issueAndSignToken(license,
-		svc.privateKey,
+	newToken, _, err := svc.signingService.IssueAndSignLicenseToken(license,
 		"test",
 		claims.Features,
 		claims.HWID,
