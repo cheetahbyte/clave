@@ -22,13 +22,13 @@ type Device struct {
 	ID        pgtype.UUID        `json:"id"`
 	LicenseID int32              `json:"license_id"`
 	HwidHash  []byte             `json:"hwid_hash"`
-	Hostname  pgtype.Text        `json:"hostname"`
+	Hostname  *string            `json:"hostname"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type License struct {
 	ID             int32              `json:"id"`
-	ProductID      pgtype.Int4        `json:"product_id"`
+	ProductID      *int32             `json:"product_id"`
 	LookupDigest   []byte             `json:"lookup_digest"`
 	KeyPhc         string             `json:"key_phc"`
 	CustomerEmail  string             `json:"customer_email"`
@@ -41,7 +41,7 @@ type License struct {
 type Product struct {
 	ID        int32              `json:"id"`
 	Name      string             `json:"name"`
-	Version   pgtype.Text        `json:"version"`
+	Version   *string            `json:"version"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -54,5 +54,5 @@ type SelfServiceToken struct {
 	UsedAt    pgtype.Timestamptz `json:"used_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	CreatedIp *netip.Addr        `json:"created_ip"`
-	UserAgent pgtype.Text        `json:"user_agent"`
+	UserAgent *string            `json:"user_agent"`
 }

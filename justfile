@@ -38,3 +38,9 @@ seed-be:
 
 gen-be:
     cd ./backend && sqlc generate
+
+test:
+    @just test-be
+
+test-be:
+    cd backend && go test ./...

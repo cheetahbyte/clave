@@ -27,9 +27,6 @@ func (h *Handlers) RequestSelfServiceLink(w http.ResponseWriter, r *http.Request
 
 	ip := clientIPAddr(r)
 
-	uaStr := strings.TrimSpace(r.UserAgent())
-	ua := pgtype.Text{String: uaStr, Valid: uaStr != ""}
-
 	expiresAt := pgtype.Timestamptz{
 		Time:  time.Now().Add(15 * time.Minute),
 		Valid: true,
@@ -40,7 +37,6 @@ func (h *Handlers) RequestSelfServiceLink(w http.ResponseWriter, r *http.Request
 		TokenHash: "",
 		ExpiresAt: expiresAt,
 		CreatedIp: ip,
-		UserAgent: ua,
 	}
 
 	rawToken, err := h.Services.SelfService().RequestToken(r.Context(), params)

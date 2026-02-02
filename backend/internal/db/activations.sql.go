@@ -7,7 +7,42 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const activateLicense = `-- name: ActivateLicense :one
+insert into activations (device_id, license_id) values($1, $2) returning id, device_id, license_id, checked_in_at, created_at
+`
+
+type ActivateLicenseParams struct {
+	DeviceID  pgtype.UUID `json:"device_id"`
+	LicenseID int32       `json:"license_id"`
+}
+
+func (q *Queries) ActivateLicense(ctx context.Context, arg ActivateLicenseParams) (Activation, error) {
+	row := q.db.QueryRow(ctx, activateLicense, arg.DeviceID, arg.LicenseID)
+	var i Activation
+	err := row.Scan(
+		&i.ID,
+		&i.DeviceID,
+		&i.LicenseID,
+		&i.CheckedInAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const countActivations = `-- name: CountActivations :one
+select count(*) from activations where license_id = $1
+`
+
+func (q *Queries) CountActivations(ctx context.Context, licenseID int32) (int64, error) {
+	row := q.db.QueryRow(ctx, countActivations, licenseID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const getActivationsForLicense = `-- name: GetActivationsForLicense :many
 select id, device_id, license_id, checked_in_at, created_at from activations where license_id = $1

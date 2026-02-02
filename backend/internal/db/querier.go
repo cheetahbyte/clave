@@ -9,7 +9,10 @@ import (
 )
 
 type Querier interface {
+	ActivateLicense(ctx context.Context, arg ActivateLicenseParams) (Activation, error)
 	ConsumeSelfServiceToken(ctx context.Context, tokenHash string) (string, error)
+	CountActivations(ctx context.Context, licenseID int32) (int64, error)
+	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
 	CreateLicense(ctx context.Context, arg CreateLicenseParams) (License, error)
 	CreateSelfServiceLink(ctx context.Context, arg CreateSelfServiceLinkParams) (SelfServiceToken, error)
 	GetActivationsForLicense(ctx context.Context, licenseID int32) ([]Activation, error)
