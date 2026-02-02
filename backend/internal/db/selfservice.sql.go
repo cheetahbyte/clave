@@ -65,7 +65,7 @@ type CreateSelfServiceLinkParams struct {
 	Purpose   interface{}        `json:"purpose"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	CreatedIp *netip.Addr        `json:"created_ip"`
-	UserAgent pgtype.Text        `json:"user_agent"`
+	UserAgent *string            `json:"user_agent"`
 }
 
 func (q *Queries) CreateSelfServiceLink(ctx context.Context, arg CreateSelfServiceLinkParams) (SelfServiceToken, error) {

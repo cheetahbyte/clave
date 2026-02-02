@@ -2,6 +2,8 @@ package services
 
 import (
 	"crypto/ed25519"
+	"crypto/hmac"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -13,17 +15,25 @@ import (
 type SigningService struct {
 	publicKey  ed25519.PublicKey
 	privateKey ed25519.PrivateKey
+	hmacSecret []byte
 }
 
 func (svc *SigningService) GetPublicKey() ed25519.PublicKey {
 	return svc.publicKey
 }
 
-func NewSigningService(publicKey ed25519.PublicKey, privateKey ed25519.PrivateKey) *SigningService {
+func NewSigningService(publicKey ed25519.PublicKey, privateKey ed25519.PrivateKey, hmacSecret string) *SigningService {
 	return &SigningService{
 		publicKey:  publicKey,
 		privateKey: privateKey,
+		hmacSecret: []byte(hmacSecret),
 	}
+}
+
+func (svc *SigningService) HMACSign(n string) []byte {
+	mac := hmac.New(sha256.New, []byte(svc.hmacSecret))
+	mac.Write([]byte(n))
+	return mac.Sum(nil)
 }
 
 func (svc *SigningService) ParseJWT(tokenString string) (*LicenseClaims, error) {
@@ -63,7 +73,7 @@ func (svc *SigningService) IssueAndSignLicenseToken(license db.License, audience
 	}
 
 	claims := &LicenseClaims{
-		ProductID:  license.ProductID.Int32,
+		ProductID:  *license.ProductID,
 		HWID:       hwid,
 		Features:   features,
 		LicenseExp: licenseExp,

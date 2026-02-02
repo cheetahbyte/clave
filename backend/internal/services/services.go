@@ -14,6 +14,7 @@ type ServiceStack struct {
 	validation  *ValidationService
 	selfservice *SelfServiceService
 	signing     *SigningService
+	activation  *ActivationService
 }
 
 func InitServices(q *db.Queries) ServiceStack {
@@ -43,11 +44,18 @@ func InitServices(q *db.Queries) ServiceStack {
 		slog.Error("SELF_SERVICE_TOKEN_PEPPER is not set")
 	}
 
-	signingService := NewSigningService(pub, priv)
+	hmacSecret := os.Getenv("LICENSE_HMAC_SECRET")
+	if pepper == "" {
+		slog.Error("LICENSE_HMAC_SECRET is not set")
+	}
+
+	signingService := NewSigningService(pub, priv, hmacSecret)
 
 	license := NewLicenseService(q, signingService)
 
 	validation := NewValidationService(q, signingService, license)
+
+	activation := NewActivationService(q, signingService)
 
 	selfservice := NewSelfServiceService(
 		q,
@@ -60,7 +68,12 @@ func InitServices(q *db.Queries) ServiceStack {
 		validation:  validation,
 		selfservice: selfservice,
 		signing:     signingService,
+		activation:  activation,
 	}
+}
+
+func (s *ServiceStack) Activation() *ActivationService {
+	return s.activation
 }
 
 func (s ServiceStack) License() *LicenseService {

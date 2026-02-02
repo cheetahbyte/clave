@@ -15,3 +15,4 @@ sql:
         emit_prepared_queries: false
         emit_exact_table_names: false
         emit_enum_valid_method: true
+        emit_pointers_for_null_types: true

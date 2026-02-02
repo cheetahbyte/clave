@@ -12,14 +12,15 @@ import (
 )
 
 const createLicense = `-- name: CreateLicense :one
-INSERT INTO licenses(product_id, max_activations, lookup_digest, key_phc) values($1, $2, $3, $4) returning id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at
+INSERT INTO licenses(product_id, max_activations, lookup_digest, key_phc, customer_email) values($1, $2, $3, $4, $5) returning id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at
 `
 
 type CreateLicenseParams struct {
-	ProductID      pgtype.Int4 `json:"product_id"`
-	MaxActivations int32       `json:"max_activations"`
-	LookupDigest   []byte      `json:"lookup_digest"`
-	KeyPhc         string      `json:"key_phc"`
+	ProductID      *int32 `json:"product_id"`
+	MaxActivations int32  `json:"max_activations"`
+	LookupDigest   []byte `json:"lookup_digest"`
+	KeyPhc         string `json:"key_phc"`
+	CustomerEmail  string `json:"customer_email"`
 }
 
 func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (License, error) {
@@ -28,6 +29,7 @@ func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (L
 		arg.MaxActivations,
 		arg.LookupDigest,
 		arg.KeyPhc,
+		arg.CustomerEmail,
 	)
 	var i License
 	err := row.Scan(
