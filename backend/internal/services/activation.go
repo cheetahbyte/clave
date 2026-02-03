@@ -8,27 +8,33 @@ import (
 	"github.com/alexedwards/argon2id"
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/handlers/dto"
+	"github.com/cheetahbyte/clave/internal/repositories"
 	problem "github.com/cheetahbyte/problems"
 )
 
-type ActivationService struct {
-	repo           *db.Queries
-	signingService *SigningService
-	licenseService *LicenseService
+type ActivationProvider interface {
+	Activate(ctx context.Context, data dto.ActivateLicenseRequest) (dto.ActivateLicenseResponse, error)
 }
 
-func NewActivationService(q *db.Queries, ss *SigningService) *ActivationService {
+type ActivationService struct {
+	repo           *repositories.ActivationRepo
+	signingService SigningProvider
+	licenseService LicenseProvider
+}
+
+func NewActivationService(rep *repositories.ActivationRepo, ss SigningProvider, ls LicenseProvider) *ActivationService {
 	return &ActivationService{
-		repo:           q,
+		repo:           rep,
 		signingService: ss,
+		licenseService: ls,
 	}
 }
 
 func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLicenseRequest) (dto.ActivateLicenseResponse, error) {
 	instance := "/licenses/activate"
-	lookupDigest := svc.licenseService.LookupDigest(data.LicenseKey)
+	lookupDigest := svc.signingService.HMACSign(data.LicenseKey, true)
 
-	license, err := svc.repo.GetLicenseByDigest(ctx, lookupDigest)
+	license, err := svc.licenseService.GetLicenseByDigest(ctx, lookupDigest)
 	if err != nil {
 		slog.Warn("license not found", "digest", lookupDigest, "err", err)
 
@@ -52,7 +58,7 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 		return dto.ActivateLicenseResponse{}, p
 	}
 
-	count, err := svc.repo.CountActivations(ctx, license.ID)
+	count, err := svc.repo.CountByLicense(ctx, license.ID)
 	if err != nil {
 		slog.Error("failed to count activations", "licenseId", license.ID, "err", err)
 
@@ -81,7 +87,7 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 
 	device, err := svc.repo.CreateDevice(ctx, db.CreateDeviceParams{
 		LicenseID: license.ID,
-		HwidHash:  svc.signingService.HMACSign(data.Device.HWID),
+		HwidHash:  svc.signingService.HMACSign(data.Device.HWID, DONT_NORMALIZE_KEY),
 		Hostname:  data.Device.Hostname,
 	})
 
@@ -100,10 +106,7 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 		return dto.ActivateLicenseResponse{}, p
 	}
 
-	activation, err := svc.repo.ActivateLicense(ctx, db.ActivateLicenseParams{
-		DeviceID:  device.ID,
-		LicenseID: license.ID,
-	})
+	activation, err := svc.repo.ActivateLicense(ctx, license.ID, device.ID)
 	if err != nil {
 		slog.Error("failed to activate license", "licenseId", license.ID, "hwid", data.Device.HWID, "err", err)
 

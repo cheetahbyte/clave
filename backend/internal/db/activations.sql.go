@@ -8,7 +8,7 @@ package db
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const activateLicense = `-- name: ActivateLicense :one
@@ -16,8 +16,8 @@ insert into activations (device_id, license_id) values($1, $2) returning id, dev
 `
 
 type ActivateLicenseParams struct {
-	DeviceID  pgtype.UUID `json:"device_id"`
-	LicenseID int32       `json:"license_id"`
+	DeviceID  uuid.UUID `json:"device_id"`
+	LicenseID int32     `json:"license_id"`
 }
 
 func (q *Queries) ActivateLicense(ctx context.Context, arg ActivateLicenseParams) (Activation, error) {

@@ -1,2 +1,4 @@
 .gopath/
 .direnv/
+.gocache/
+.idea/

@@ -12,13 +12,22 @@ import (
 
 	"github.com/alexedwards/argon2id"
 	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/domain"
 	"github.com/cheetahbyte/clave/internal/handlers/dto"
+	"github.com/cheetahbyte/clave/internal/repositories"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type LicenseProvider interface {
+	GetLicenseById(ctx context.Context, licenseId int32) (*domain.License, error)
+	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (*domain.License, error)
+	NewLicense(ctx context.Context, data dto.LicenseCreationRequest) (dto.LicenseCreationResponse, error)
+	ListLicensesForCustomer(ctx context.Context, email string)
+}
+
 type LicenseService struct {
-	repo           *db.Queries
-	signingService *SigningService
+	repo           repositories.LicenseRepository
+	signingService SigningProvider
 }
 
 func NewLicenseService(q *db.Queries, signingService *SigningService) *LicenseService {
@@ -49,7 +58,6 @@ func (svc *LicenseService) NewLicense(ctx context.Context, data dto.LicenseCreat
 		MaxActivations: data.MaxActivations,
 		LookupDigest:   digest,
 		KeyPhc:         hash,
-		CustomerEmail:  data.CustomerEmail,
 	})
 
 	if err != nil {
@@ -60,6 +68,14 @@ func (svc *LicenseService) NewLicense(ctx context.Context, data dto.LicenseCreat
 	return dto.LicenseCreationResponse{
 		LicenseKey: key,
 	}, nil
+}
+
+func (svc *LicenseService) GetLicenseById(ctx context.Context, licenseId int32) (*domain.License, error) {
+	return svc.repo.GetLicenseByID(ctx, licenseId)
+}
+
+func (svc *LicenseService) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (*domain.License, error) {
+	return svc.repo.GetLicenseByDigest(ctx, lookupDigest)
 }
 
 func (svc *LicenseService) generateKey() (string, error) {
@@ -89,18 +105,6 @@ func (svc *LicenseService) formatKey(prefix, raw string, groupSize int) string {
 	}
 
 	return prefix + "-" + strings.Join(parts, "-")
-}
-
-func (svc *LicenseService) LookupDigest(licenseKey string) []byte {
-	return svc.signingService.HMACSign(svc.normalizeKey(licenseKey))
-}
-
-func (svc *LicenseService) normalizeKey(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.ToUpper(s)
-	s = strings.ReplaceAll(s, "-", "")
-	s = strings.ReplaceAll(s, " ", "")
-	return s
 }
 
 // TODO: better error handling
