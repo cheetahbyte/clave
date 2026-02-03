@@ -6,11 +6,24 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/golang-jwt/jwt/v5"
 )
+
+const (
+	NORMALIZE_KEY      = true
+	DONT_NORMALIZE_KEY = false
+)
+
+type SigningProvider interface {
+	HMACSign(n string, normalized bool) []byte
+	ParseJWT(tokenString string) (*LicenseClaims, error)
+	IssueAndSignLicenseToken(license db.License, audience string, features []string, hwid string, tokenTTL time.Duration) (string, *LicenseClaims, error)
+	IssueAndSignSelfServiceToken(claims jwt.MapClaims) (string, error)
+}
 
 type SigningService struct {
 	publicKey  ed25519.PublicKey
@@ -22,6 +35,14 @@ func (svc *SigningService) GetPublicKey() ed25519.PublicKey {
 	return svc.publicKey
 }
 
+func (svc *SigningService) normalizeKey(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.ToUpper(s)
+	s = strings.ReplaceAll(s, "-", "")
+	s = strings.ReplaceAll(s, " ", "")
+	return s
+}
+
 func NewSigningService(publicKey ed25519.PublicKey, privateKey ed25519.PrivateKey, hmacSecret string) *SigningService {
 	return &SigningService{
 		publicKey:  publicKey,
@@ -30,7 +51,10 @@ func NewSigningService(publicKey ed25519.PublicKey, privateKey ed25519.PrivateKe
 	}
 }
 
-func (svc *SigningService) HMACSign(n string) []byte {
+func (svc *SigningService) HMACSign(n string, normalized bool) []byte {
+	if normalized {
+		n = svc.normalizeKey(n)
+	}
 	mac := hmac.New(sha256.New, []byte(svc.hmacSecret))
 	mac.Write([]byte(n))
 	return mac.Sum(nil)

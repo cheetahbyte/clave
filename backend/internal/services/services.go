@@ -55,7 +55,7 @@ func InitServices(q *db.Queries) ServiceStack {
 
 	validation := NewValidationService(q, signingService, license)
 
-	activation := NewActivationService(q, signingService)
+	activation := NewActivationService(q, signingService, license)
 
 	selfservice := NewSelfServiceService(
 		q,

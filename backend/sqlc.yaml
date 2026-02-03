@@ -16,3 +16,8 @@ sql:
         emit_exact_table_names: false
         emit_enum_valid_method: true
         emit_pointers_for_null_types: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"

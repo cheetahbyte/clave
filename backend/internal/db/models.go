@@ -7,19 +7,20 @@ package db
 import (
 	"net/netip"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Activation struct {
 	ID          int32              `json:"id"`
-	DeviceID    pgtype.UUID        `json:"device_id"`
+	DeviceID    uuid.UUID          `json:"device_id"`
 	LicenseID   int32              `json:"license_id"`
 	CheckedInAt pgtype.Timestamptz `json:"checked_in_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type Device struct {
-	ID        pgtype.UUID        `json:"id"`
+	ID        uuid.UUID          `json:"id"`
 	LicenseID int32              `json:"license_id"`
 	HwidHash  []byte             `json:"hwid_hash"`
 	Hostname  *string            `json:"hostname"`
@@ -46,7 +47,7 @@ type Product struct {
 }
 
 type SelfServiceToken struct {
-	ID        pgtype.UUID        `json:"id"`
+	ID        uuid.UUID          `json:"id"`
 	Email     string             `json:"email"`
 	TokenHash string             `json:"token_hash"`
 	Purpose   string             `json:"purpose"`
