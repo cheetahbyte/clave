@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/repositories"
 )
 
 type ServiceStack struct {
@@ -53,9 +54,9 @@ func InitServices(q *db.Queries) ServiceStack {
 
 	license := NewLicenseService(q, signingService)
 
-	validation := NewValidationService(q, signingService, license)
+	validation := NewValidationService(signingService, license)
 
-	activation := NewActivationService(q, signingService, license)
+	activation := NewActivationService(repositories.NewActivationRepo(q), signingService, license)
 
 	selfservice := NewSelfServiceService(
 		q,

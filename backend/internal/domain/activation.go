@@ -1,5 +1,5 @@
 package domain
 
 type Activation struct {
-	ID int64
+	ID int32
 }

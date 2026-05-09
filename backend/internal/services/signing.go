@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/domain"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -21,7 +21,7 @@ const (
 type SigningProvider interface {
 	HMACSign(n string, normalized bool) []byte
 	ParseJWT(tokenString string) (*LicenseClaims, error)
-	IssueAndSignLicenseToken(license db.License, audience string, features []string, hwid string, tokenTTL time.Duration) (string, *LicenseClaims, error)
+	IssueAndSignLicenseToken(license *domain.License, audience string, features []string, hwid string, tokenTTL time.Duration) (string, *LicenseClaims, error)
 	IssueAndSignSelfServiceToken(claims jwt.MapClaims) (string, error)
 }
 
@@ -79,7 +79,7 @@ func (svc *SigningService) ParseJWT(tokenString string) (*LicenseClaims, error) 
 	return claims, nil
 }
 
-func (svc *SigningService) IssueAndSignLicenseToken(license db.License, audience string, features []string, hwid string, tokenTTL time.Duration) (string, *LicenseClaims, error) {
+func (svc *SigningService) IssueAndSignLicenseToken(license *domain.License, audience string, features []string, hwid string, tokenTTL time.Duration) (string, *LicenseClaims, error) {
 	if tokenTTL <= 0 {
 		return "", nil, errors.New("tokenTTL must be > 0")
 	}
@@ -88,16 +88,16 @@ func (svc *SigningService) IssueAndSignLicenseToken(license db.License, audience
 	expires := now.Add(tokenTTL)
 
 	var licenseExp *int64
-	if license.ExpiresAt.Valid {
-		v := license.ExpiresAt.Time.UTC().Unix()
+	if !license.ExpiresAt.IsZero() {
+		v := license.ExpiresAt.UTC().Unix()
 		licenseExp = &v
-		if license.ExpiresAt.Time.UTC().Before(expires) {
-			expires = license.ExpiresAt.Time.UTC()
+		if license.ExpiresAt.UTC().Before(expires) {
+			expires = license.ExpiresAt.UTC()
 		}
 	}
 
 	claims := &LicenseClaims{
-		ProductID:  *license.ProductID,
+		ProductID:  license.ProductID,
 		HWID:       hwid,
 		Features:   features,
 		LicenseExp: licenseExp,
