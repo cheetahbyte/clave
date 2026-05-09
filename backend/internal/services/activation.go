@@ -10,6 +10,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/handlers/dto"
 	"github.com/cheetahbyte/clave/internal/repositories"
 	problem "github.com/cheetahbyte/problems"
+	"github.com/google/uuid"
 )
 
 type ActivationProvider interface {
@@ -65,6 +66,49 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 			Append(problem.Instance(instance))
 		return dto.ActivateLicenseResponse{}, p
 	}
+
+	hwidHash := svc.signingService.HMACSign(data.Device.HWID, DONT_NORMALIZE_KEY)
+
+	existingDevice, devErr := svc.repo.GetDeviceByLicenseAndHwidHash(ctx, license.ID, hwidHash)
+	if devErr != nil {
+		slog.Error("failed to look up existing device", "licenseId", license.ID, "err", devErr)
+		p := problem.Of(500).
+			Append(problem.Type("https://api.yourapp.dev/problems/internal")).
+			Append(problem.Title("Internal error")).
+			Append(problem.Detail("Failed to process activation request")).
+			Append(problem.Instance(instance))
+		return dto.ActivateLicenseResponse{}, p
+	}
+
+	if existingDevice != nil {
+		activation, actErr := svc.repo.GetActivationByLicenseAndDevice(ctx, license.ID, existingDevice.ID)
+		if actErr != nil {
+			slog.Error("failed to look up existing activation", "licenseId", license.ID, "deviceId", existingDevice.ID, "err", actErr)
+			p := problem.Of(500).
+				Append(problem.Type("https://api.yourapp.dev/problems/internal")).
+				Append(problem.Title("Internal error")).
+				Append(problem.Detail("Failed to process activation request")).
+				Append(problem.Instance(instance))
+			return dto.ActivateLicenseResponse{}, p
+		}
+
+		if activation != nil {
+			slog.Info("activation already exists, reusing", "licenseId", license.ID, "activationId", activation.ID)
+
+			signed, _, err := svc.signingService.IssueAndSignLicenseToken(license, "test", []string{"test"}, data.Device.HWID, 24*7*time.Hour)
+			if err != nil {
+				slog.Error("failed to sign jwt", "licenseId", license.ID, "err", err)
+				p := problem.Of(500).
+					Append(problem.Type("https://api.yourapp.dev/problems/token-signing-failed")).
+					Append(problem.Title("Token signing failed")).
+					Append(problem.Detail("Failed to issue activation token")).
+					Append(problem.Instance(instance))
+				return dto.ActivateLicenseResponse{}, p
+			}
+			return dto.ActivateLicenseResponse{ActivationId: activation.ID, Token: signed}, nil
+		}
+	}
+
 	count, err := svc.repo.CountByLicense(ctx, license.ID)
 	if err != nil {
 		slog.Error("failed to count activations", "licenseId", license.ID, "err", err)
@@ -92,28 +136,33 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 		return dto.ActivateLicenseResponse{}, p
 	}
 
-	device, err := svc.repo.CreateDevice(ctx, db.CreateDeviceParams{
-		LicenseID: license.ID,
-		HwidHash:  svc.signingService.HMACSign(data.Device.HWID, DONT_NORMALIZE_KEY),
-		Hostname:  data.Device.Hostname,
-	})
-
-	if err != nil {
-		slog.Warn(
-			"failed to create device",
-			"licenseId", license.ID,
-			"deviceHwid", data.Device.HWID,
-			"err", err,
-		)
-		p := problem.Of(500).
-			Append(problem.Type("https://api.yourapp.dev/problems/internal")).
-			Append(problem.Title("Internal error")).
-			Append(problem.Detail("Failed to process activation request")).
-			Append(problem.Instance(instance))
-		return dto.ActivateLicenseResponse{}, p
+	var deviceID uuid.UUID
+	if existingDevice != nil {
+		deviceID = existingDevice.ID
+	} else {
+		device, err := svc.repo.CreateDevice(ctx, db.CreateDeviceParams{
+			LicenseID: license.ID,
+			HwidHash:  hwidHash,
+			Hostname:  data.Device.Hostname,
+		})
+		if err != nil {
+			slog.Warn(
+				"failed to create device",
+				"licenseId", license.ID,
+				"deviceHwid", data.Device.HWID,
+				"err", err,
+			)
+			p := problem.Of(500).
+				Append(problem.Type("https://api.yourapp.dev/problems/internal")).
+				Append(problem.Title("Internal error")).
+				Append(problem.Detail("Failed to process activation request")).
+				Append(problem.Instance(instance))
+			return dto.ActivateLicenseResponse{}, p
+		}
+		deviceID = device.ID
 	}
 
-	activation, err := svc.repo.ActivateLicense(ctx, license.ID, device.ID)
+	activation, err := svc.repo.ActivateLicense(ctx, license.ID, deviceID)
 	if err != nil {
 		slog.Error("failed to activate license", "licenseId", license.ID, "hwid", data.Device.HWID, "err", err)
 
