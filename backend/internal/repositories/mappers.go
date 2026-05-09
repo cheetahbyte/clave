@@ -21,7 +21,7 @@ func mapToDomainLicense(row db.License) *domain.License {
 
 func mapToDomainActivation(row db.Activation) *domain.Activation {
 	return &domain.Activation{
-		ID: int64(row.ID),
+		ID: row.ID,
 		// Hier DeviceID, CreatedAt etc. mappen
 	}
 }

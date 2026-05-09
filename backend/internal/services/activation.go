@@ -49,7 +49,6 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 	match, verr := argon2id.ComparePasswordAndHash(data.LicenseKey, license.KeyPhc)
 	if verr != nil || !match {
 		slog.Warn("license verification failed", "licenseId", license.ID, "err", verr)
-
 		p := problem.Of(401).
 			Append(problem.Type("https://api.yourapp.dev/problems/invalid-license")).
 			Append(problem.Title("Invalid license")).
@@ -57,7 +56,15 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 			Append(problem.Instance(instance))
 		return dto.ActivateLicenseResponse{}, p
 	}
-
+	if !license.IsActive {
+		slog.Warn("license revoked", "licenseId", license.ID)
+		p := problem.Of(403).
+			Append(problem.Type("https://api.yourapp.dev/problems/license-revoked")).
+			Append(problem.Title("License revoked")).
+			Append(problem.Detail("This license has been revoked")).
+			Append(problem.Instance(instance))
+		return dto.ActivateLicenseResponse{}, p
+	}
 	count, err := svc.repo.CountByLicense(ctx, license.ID)
 	if err != nil {
 		slog.Error("failed to count activations", "licenseId", license.ID, "err", err)

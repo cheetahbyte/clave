@@ -22,7 +22,7 @@ type LicenseProvider interface {
 	GetLicenseById(ctx context.Context, licenseId int32) (*domain.License, error)
 	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (*domain.License, error)
 	NewLicense(ctx context.Context, data dto.LicenseCreationRequest) (dto.LicenseCreationResponse, error)
-	ListLicensesForCustomer(ctx context.Context, email string)
+	ListLicensesForCustomer(ctx context.Context, email string) ([]db.ListByCustomerEmailRow, error)
 }
 
 type LicenseService struct {
@@ -32,7 +32,7 @@ type LicenseService struct {
 
 func NewLicenseService(q *db.Queries, signingService *SigningService) *LicenseService {
 	return &LicenseService{
-		repo:           q,
+		repo:           repositories.NewLicenseRepo(q),
 		signingService: signingService,
 	}
 }
@@ -40,7 +40,7 @@ func NewLicenseService(q *db.Queries, signingService *SigningService) *LicenseSe
 func (svc *LicenseService) NewLicense(ctx context.Context, data dto.LicenseCreationRequest) (dto.LicenseCreationResponse, error) {
 
 	key, _ := svc.generateKey()
-	digest := svc.LookupDigest(key)
+	digest := svc.signingService.HMACSign(key, NORMALIZE_KEY)
 	salt := make([]byte, 16)
 	_, err := rand.Read(salt)
 	if err != nil {

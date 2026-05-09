@@ -13,10 +13,15 @@ type ActivationRepository interface {
 	CountByLicense(ctx context.Context, licenseId int32) (int64, error)
 	GetActivations(ctx context.Context, licenseID int32) ([]*domain.Activation, error)
 	ActivateLicense(ctx context.Context, licenseId int32, deviceID uuid.UUID) (*domain.Activation, error)
+	CreateDevice(ctx context.Context, params db.CreateDeviceParams) (db.Device, error)
 }
 
 type ActivationRepo struct {
 	q *db.Queries
+}
+
+func NewActivationRepo(q *db.Queries) *ActivationRepo {
+	return &ActivationRepo{q: q}
 }
 
 func (repo *ActivationRepo) CountByLicense(ctx context.Context, licenseId int32) (int64, error) {
@@ -48,4 +53,8 @@ func (repo *ActivationRepo) ActivateLicense(ctx context.Context, licenseId int32
 		},
 		mapToDomainActivation,
 	)
+}
+
+func (repo *ActivationRepo) CreateDevice(ctx context.Context, params db.CreateDeviceParams) (db.Device, error) {
+	return repo.q.CreateDevice(ctx, params)
 }

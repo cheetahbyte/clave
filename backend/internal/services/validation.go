@@ -4,20 +4,17 @@ import (
 	"context"
 	"time"
 
-	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/handlers/dto"
 	problem "github.com/cheetahbyte/problems"
 )
 
 type ValidationService struct {
-	repo           *db.Queries
 	licenseService *LicenseService
 	signingService *SigningService
 }
 
-func NewValidationService(q *db.Queries, signingService *SigningService, licenseService *LicenseService) *ValidationService {
+func NewValidationService(signingService *SigningService, licenseService *LicenseService) *ValidationService {
 	return &ValidationService{
-		repo:           q,
 		signingService: signingService,
 		licenseService: licenseService,
 	}
@@ -40,33 +37,40 @@ func (svc *ValidationService) Validate(ctx context.Context, data dto.LicenseVali
 			Append(problem.Instance(instance))
 	}
 
-	license, err := svc.repo.GetLicenseById(ctx, licenseId.Int32)
-	if err != nil {
+	license, err := svc.licenseService.GetLicenseById(ctx, licenseId.Int32)
+	if err != nil || license == nil {
 		return dto.LicenseValidationResponse{}, problem.Of(404).
 			Append(problem.Title("License not found")).
 			Append(problem.Instance(instance))
 	}
 
-	if license.ExpiresAt.Valid && time.Now().UTC().After(license.ExpiresAt.Time.UTC()) {
+	if !license.IsActive {
+		return dto.LicenseValidationResponse{}, problem.Of(403).
+			Append(problem.Title("License revoked")).
+			Append(problem.Detail("This license has been revoked")).
+			Append(problem.Instance(instance))
+	}
+
+	if !license.ExpiresAt.IsZero() && time.Now().UTC().After(license.ExpiresAt.UTC()) {
 		return dto.LicenseValidationResponse{}, problem.Of(403).
 			Append(problem.Title("License expired")).
 			Append(problem.Instance(instance))
 	}
 
-	if data.DeviceID != "" && claims.HWID != "" && data.DeviceID != claims.HWID {
+	if claims.HWID != "" && data.DeviceID != claims.HWID {
 		return dto.LicenseValidationResponse{}, problem.Of(403).
 			Append(problem.Title("HWID mismatch")).
 			Append(problem.Instance(instance))
 	}
 
 	sevenDays := 7 * 24 * time.Hour
-	remaining := time.Until(license.ExpiresAt.Time)
+	remaining := time.Until(license.ExpiresAt)
 
 	newToken, _, err := svc.signingService.IssueAndSignLicenseToken(license,
 		"test",
 		claims.Features,
 		claims.HWID,
-		tern(time.Now().Add(sevenDays).After(license.ExpiresAt.Time),
+		tern(time.Now().Add(sevenDays).After(license.ExpiresAt),
 			sevenDays,
 			remaining,
 		),
