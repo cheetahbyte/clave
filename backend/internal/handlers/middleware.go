@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+	problem "github.com/cheetahbyte/problems"
 )
 
 type selfServiceContextKey string
@@ -70,5 +72,35 @@ func (h *Handlers) RequireSelfServiceAuth(next http.Handler) http.Handler {
 
 		ctx := context.WithValue(r.Context(), selfServiceEmailKey, email)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (h *Handlers) RequireAdminBearerToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := os.Getenv("ADMIN_BEARER_TOKEN")
+		if raw == "" {
+			p := problem.Of(500).
+				Append(problem.Title("Server misconfiguration")).
+				Append(problem.Detail("Admin token not configured"))
+			p.WriteTo(w)
+			return
+		}
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") {
+			p := problem.Of(401).
+				Append(problem.Title("Unauthorized")).
+				Append(problem.Detail("Missing or malformed authorization header"))
+			p.WriteTo(w)
+			return
+		}
+		token := strings.TrimPrefix(auth, "Bearer ")
+		if token != raw {
+			p := problem.Of(401).
+				Append(problem.Title("Unauthorized")).
+				Append(problem.Detail("Invalid authorization token"))
+			p.WriteTo(w)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
