@@ -5,9 +5,9 @@ RUN go mod download
 COPY backend/ .
 RUN CGO_ENABLED=0 go build -o /app/clave ./cmd/clave
 
-FROM alpine:latest
-RUN apk add --no-cache ca-certificates tzdata
+FROM scratch
 COPY --from=builder /app/clave /clave
 COPY migrations /migrations
 EXPOSE 8000
+USER 65532:65532
 CMD ["/clave"]

@@ -2,6 +2,8 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/cheetahbyte/clave/internal/db"
@@ -14,6 +16,8 @@ type ActivationRepository interface {
 	GetActivations(ctx context.Context, licenseID int32) ([]*domain.Activation, error)
 	ActivateLicense(ctx context.Context, licenseId int32, deviceID uuid.UUID) (*domain.Activation, error)
 	CreateDevice(ctx context.Context, params db.CreateDeviceParams) (db.Device, error)
+	GetDeviceByLicenseAndHwidHash(ctx context.Context, licenseID int32, hwidHash []byte) (*db.Device, error)
+	GetActivationByLicenseAndDevice(ctx context.Context, licenseID int32, deviceID uuid.UUID) (*domain.Activation, error)
 }
 
 type ActivationRepo struct {
@@ -57,4 +61,32 @@ func (repo *ActivationRepo) ActivateLicense(ctx context.Context, licenseId int32
 
 func (repo *ActivationRepo) CreateDevice(ctx context.Context, params db.CreateDeviceParams) (db.Device, error) {
 	return repo.q.CreateDevice(ctx, params)
+}
+
+func (repo *ActivationRepo) GetDeviceByLicenseAndHwidHash(ctx context.Context, licenseID int32, hwidHash []byte) (*db.Device, error) {
+	device, err := repo.q.GetDeviceByLicenseAndHwidHash(ctx, db.GetDeviceByLicenseAndHwidHashParams{
+		LicenseID: licenseID,
+		HwidHash:  hwidHash,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &device, nil
+}
+
+func (repo *ActivationRepo) GetActivationByLicenseAndDevice(ctx context.Context, licenseID int32, deviceID uuid.UUID) (*domain.Activation, error) {
+	activation, err := repo.q.GetActivationByLicenseAndDevice(ctx, db.GetActivationByLicenseAndDeviceParams{
+		LicenseID: licenseID,
+		DeviceID:  deviceID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return mapToDomainActivation(activation), nil
 }
