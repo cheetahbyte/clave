@@ -12,7 +12,7 @@ import (
 )
 
 const createLicense = `-- name: CreateLicense :one
-INSERT INTO licenses(product_id, max_activations, lookup_digest, key_phc, customer_email) values($1, $2, $3, $4, $5) returning id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at
+INSERT INTO licenses(product_id, max_activations, lookup_digest, key_phc, customer_email) values($1, $2, $3, $4, $5) returning id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features
 `
 
 type CreateLicenseParams struct {
@@ -42,12 +42,13 @@ func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (L
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.Features,
 	)
 	return i, err
 }
 
 const getLicenseByDigest = `-- name: GetLicenseByDigest :one
-select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at from licenses where lookup_digest = $1
+select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features from licenses where lookup_digest = $1
 `
 
 func (q *Queries) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error) {
@@ -63,12 +64,13 @@ func (q *Queries) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.Features,
 	)
 	return i, err
 }
 
 const getLicenseById = `-- name: GetLicenseById :one
-select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at from licenses where id = $1
+select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features from licenses where id = $1
 `
 
 func (q *Queries) GetLicenseById(ctx context.Context, id int32) (License, error) {
@@ -84,6 +86,7 @@ func (q *Queries) GetLicenseById(ctx context.Context, id int32) (License, error)
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+		&i.Features,
 	)
 	return i, err
 }

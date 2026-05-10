@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cheetahbyte/clave/internal/handlers/dto"
@@ -66,13 +67,13 @@ func (svc *ValidationService) Validate(ctx context.Context, data dto.LicenseVali
 	sevenDays := 7 * 24 * time.Hour
 	remaining := time.Until(license.ExpiresAt)
 
-	newToken, _, err := svc.signingService.IssueAndSignLicenseToken(license,
-		"test",
-		claims.Features,
+	newToken, newClaims, err := svc.signingService.IssueAndSignLicenseToken(license,
+		fmt.Sprintf("%d", license.ProductID),
+		license.Features,
 		claims.HWID,
 		tern(time.Now().Add(sevenDays).After(license.ExpiresAt),
-			sevenDays,
 			remaining,
+			sevenDays,
 		),
 	)
 
@@ -83,7 +84,8 @@ func (svc *ValidationService) Validate(ctx context.Context, data dto.LicenseVali
 	}
 
 	return dto.LicenseValidationResponse{
-		Token: newToken,
+		Token:      newToken,
+		ValidUntil: newClaims.ExpiresAt.Unix(),
 	}, nil
 }
 

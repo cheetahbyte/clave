@@ -18,9 +18,13 @@ func Register(r *chi.Mux, h *handlers.Handlers) {
 
 	r.Route("/api", func(apiRouter chi.Router) {
 		apiRouter.Route("/v1", func(v1Router chi.Router) {
-			v1Router.Post("/activate", h.ActivateLicense)
+			v1Router.Get("/pubkey", h.PubKey)
 			v1Router.With(h.RequireAdminBearerToken).Post("/", h.CreateLicense)
-			v1Router.Post("/validate", h.ValidateLicense)
+			v1Router.Group(func(enc chi.Router) {
+				enc.Use(handlers.EncryptionMiddleware(h.Services.Encryption()))
+				enc.Post("/activate", h.ActivateLicense)
+				enc.Post("/validate", h.ValidateLicense)
+			})
 		})
 	})
 }
