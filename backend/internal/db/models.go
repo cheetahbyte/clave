@@ -37,6 +37,7 @@ type License struct {
 	IsActive       bool               `json:"is_active"`
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	Features       []string           `json:"features"`
 }
 
 type Product struct {

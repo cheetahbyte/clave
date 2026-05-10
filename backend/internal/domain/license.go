@@ -10,6 +10,7 @@ type License struct {
 	CustomerEmail  string
 	MaxActivations int32
 	IsActive       bool
+	Features       []string
 	ExpiresAt      time.Time
 	CreatedAt      time.Time
 }

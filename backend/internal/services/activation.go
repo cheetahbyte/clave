@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -95,7 +96,7 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 		if activation != nil {
 			slog.Info("activation already exists, reusing", "licenseId", license.ID, "activationId", activation.ID)
 
-			signed, _, err := svc.signingService.IssueAndSignLicenseToken(license, "test", []string{"test"}, data.Device.HWID, 24*7*time.Hour)
+			signed, claims, err := svc.signingService.IssueAndSignLicenseToken(license, fmt.Sprintf("%d", license.ProductID), license.Features, data.Device.HWID, 24*7*time.Hour)
 			if err != nil {
 				slog.Error("failed to sign jwt", "licenseId", license.ID, "err", err)
 				p := problem.Of(500).
@@ -105,7 +106,7 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 					Append(problem.Instance(instance))
 				return dto.ActivateLicenseResponse{}, p
 			}
-			return dto.ActivateLicenseResponse{ActivationId: activation.ID, Token: signed}, nil
+			return dto.ActivateLicenseResponse{ActivationId: activation.ID, Token: signed, ValidUntil: claims.ExpiresAt.Unix()}, nil
 		}
 	}
 
@@ -174,7 +175,7 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 		return dto.ActivateLicenseResponse{}, p
 	}
 
-	signed, _, err := svc.signingService.IssueAndSignLicenseToken(license, "test", []string{"test"}, data.Device.HWID, 24*7*time.Hour)
+	signed, claims, err := svc.signingService.IssueAndSignLicenseToken(license, fmt.Sprintf("%d", license.ProductID), license.Features, data.Device.HWID, 24*7*time.Hour)
 	if err != nil {
 		slog.Error("failed to sign jwt", "licenseId", license.ID, "err", err)
 
@@ -185,5 +186,5 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 			Append(problem.Instance(instance))
 		return dto.ActivateLicenseResponse{}, p
 	}
-	return dto.ActivateLicenseResponse{ActivationId: activation.ID, Token: signed}, nil
+	return dto.ActivateLicenseResponse{ActivationId: activation.ID, Token: signed, ValidUntil: claims.ExpiresAt.Unix()}, nil
 }

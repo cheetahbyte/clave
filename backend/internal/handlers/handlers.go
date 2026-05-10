@@ -22,6 +22,12 @@ func New(s services.ServiceStack) *Handlers {
 	return &Handlers{Services: s}
 }
 
+func (h *Handlers) PubKey(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"publicKey": h.Services.Encryption().PublicKeyBase64(),
+	})
+}
+
 var validate = validator.New()
 
 func decodeJSON[T any](w http.ResponseWriter, r *http.Request, dst *T) error {

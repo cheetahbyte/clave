@@ -10,12 +10,14 @@ import (
 	"github.com/cheetahbyte/clave/internal/repositories"
 )
 
+
 type ServiceStack struct {
 	license     *LicenseService
 	validation  *ValidationService
 	selfservice *SelfServiceService
 	signing     *SigningService
 	activation  *ActivationService
+	encryption  *EncryptionService
 }
 
 func InitServices(q *db.Queries) ServiceStack {
@@ -50,6 +52,16 @@ func InitServices(q *db.Queries) ServiceStack {
 		slog.Error("LICENSE_HMAC_SECRET is not set")
 	}
 
+	x25519Key := os.Getenv("X25519_PRIVATE_KEY")
+	x25519Bytes, err := base64.RawURLEncoding.DecodeString(x25519Key)
+	if err != nil {
+		slog.Error("failed to decode X25519 private key", "err", err)
+	}
+	encryptionService, err := NewEncryptionService(x25519Bytes)
+	if err != nil {
+		slog.Error("failed to init encryption service", "err", err)
+	}
+
 	signingService := NewSigningService(pub, priv, hmacSecret)
 
 	license := NewLicenseService(q, signingService)
@@ -70,6 +82,7 @@ func InitServices(q *db.Queries) ServiceStack {
 		selfservice: selfservice,
 		signing:     signingService,
 		activation:  activation,
+		encryption:  encryptionService,
 	}
 }
 
@@ -91,4 +104,8 @@ func (s ServiceStack) SelfService() *SelfServiceService {
 
 func (s ServiceStack) SigningService() *SigningService {
 	return s.signing
+}
+
+func (s ServiceStack) Encryption() *EncryptionService {
+	return s.encryption
 }

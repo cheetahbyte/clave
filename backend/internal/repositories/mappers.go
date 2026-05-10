@@ -13,6 +13,7 @@ func mapToDomainLicense(row db.License) *domain.License {
 		KeyPhc:         row.KeyPhc,
 		CustomerEmail:  row.CustomerEmail,
 		IsActive:       row.IsActive,
+		Features:       row.Features,
 		CreatedAt:      row.CreatedAt.Time,
 		ExpiresAt:      row.ExpiresAt.Time,
 		MaxActivations: row.MaxActivations,
