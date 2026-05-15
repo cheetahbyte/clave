@@ -23,8 +23,22 @@ func New(s services.ServiceStack) *Handlers {
 }
 
 func (h *Handlers) PubKey(w http.ResponseWriter, r *http.Request) {
+	enc := h.Services.Encryption()
+	if enc == nil {
+		if h.Services.EncryptionDisabled() {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"enabled":   false,
+				"publicKey": "",
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "encryption service unavailable"})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{
-		"publicKey": h.Services.Encryption().PublicKeyBase64(),
+		"publicKey": enc.PublicKeyBase64(),
 	})
 }
 
