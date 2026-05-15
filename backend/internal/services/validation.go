@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cheetahbyte/clave/internal/handlers/dto"
@@ -38,7 +37,7 @@ func (svc *ValidationService) Validate(ctx context.Context, data dto.LicenseVali
 			Append(problem.Instance(instance))
 	}
 
-	license, err := svc.licenseService.GetLicenseById(ctx, licenseId.Int32)
+	license, err := svc.licenseService.GetLicenseById(ctx, licenseId)
 	if err != nil || license == nil {
 		return dto.LicenseValidationResponse{}, problem.Of(404).
 			Append(problem.Title("License not found")).
@@ -68,7 +67,7 @@ func (svc *ValidationService) Validate(ctx context.Context, data dto.LicenseVali
 	remaining := time.Until(license.ExpiresAt)
 
 	newToken, newClaims, err := svc.signingService.IssueAndSignLicenseToken(license,
-		fmt.Sprintf("%d", license.ProductID),
+		license.ProductID.String(),
 		license.Features,
 		claims.HWID,
 		tern(time.Now().Add(sevenDays).After(license.ExpiresAt),

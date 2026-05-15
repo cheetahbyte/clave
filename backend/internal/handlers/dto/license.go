@@ -1,8 +1,8 @@
 package dto
 
 type LicenseCreationRequest struct {
-	// ProductID is required and must be a positive number
-	ProductID int32 `json:"productId" validate:"required,gt=0"`
+	// ProductID must be a valid UUID
+	ProductID string `json:"productId" validate:"required,uuid"`
 	// MaxActivations must be at least 1
 	MaxActivations int32 `json:"maxActivations" validate:"required,gte=1"`
 }

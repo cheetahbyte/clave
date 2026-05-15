@@ -7,13 +7,15 @@ package db
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const getOneById = `-- name: GetOneById :one
 select id, name, version, created_at from products where id = $1
 `
 
-func (q *Queries) GetOneById(ctx context.Context, id int32) (Product, error) {
+func (q *Queries) GetOneById(ctx context.Context, id uuid.UUID) (Product, error) {
 	row := q.db.QueryRow(ctx, getOneById, id)
 	var i Product
 	err := row.Scan(

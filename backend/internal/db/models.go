@@ -12,24 +12,24 @@ import (
 )
 
 type Activation struct {
-	ID          int32              `json:"id"`
+	ID          uuid.UUID          `json:"id"`
 	DeviceID    uuid.UUID          `json:"device_id"`
-	LicenseID   int32              `json:"license_id"`
+	LicenseID   uuid.UUID          `json:"license_id"`
 	CheckedInAt pgtype.Timestamptz `json:"checked_in_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type Device struct {
 	ID        uuid.UUID          `json:"id"`
-	LicenseID int32              `json:"license_id"`
+	LicenseID uuid.UUID          `json:"license_id"`
 	HwidHash  []byte             `json:"hwid_hash"`
 	Hostname  *string            `json:"hostname"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type License struct {
-	ID             int32              `json:"id"`
-	ProductID      *int32             `json:"product_id"`
+	ID             uuid.UUID          `json:"id"`
+	ProductID      *uuid.UUID         `json:"product_id"`
 	LookupDigest   []byte             `json:"lookup_digest"`
 	KeyPhc         string             `json:"key_phc"`
 	CustomerEmail  string             `json:"customer_email"`
@@ -41,7 +41,7 @@ type License struct {
 }
 
 type Product struct {
-	ID        int32              `json:"id"`
+	ID        uuid.UUID          `json:"id"`
 	Name      string             `json:"name"`
 	Version   *string            `json:"version"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`

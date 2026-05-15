@@ -17,7 +17,7 @@ insert into activations (device_id, license_id) values($1, $2) returning id, dev
 
 type ActivateLicenseParams struct {
 	DeviceID  uuid.UUID `json:"device_id"`
-	LicenseID int32     `json:"license_id"`
+	LicenseID uuid.UUID `json:"license_id"`
 }
 
 func (q *Queries) ActivateLicense(ctx context.Context, arg ActivateLicenseParams) (Activation, error) {
@@ -37,7 +37,7 @@ const countActivations = `-- name: CountActivations :one
 select count(*) from activations where license_id = $1
 `
 
-func (q *Queries) CountActivations(ctx context.Context, licenseID int32) (int64, error) {
+func (q *Queries) CountActivations(ctx context.Context, licenseID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, countActivations, licenseID)
 	var count int64
 	err := row.Scan(&count)
@@ -49,7 +49,7 @@ select id, device_id, license_id, checked_in_at, created_at from activations whe
 `
 
 type GetActivationByLicenseAndDeviceParams struct {
-	LicenseID int32     `json:"license_id"`
+	LicenseID uuid.UUID `json:"license_id"`
 	DeviceID  uuid.UUID `json:"device_id"`
 }
 
@@ -70,7 +70,7 @@ const getActivationsForLicense = `-- name: GetActivationsForLicense :many
 select id, device_id, license_id, checked_in_at, created_at from activations where license_id = $1
 `
 
-func (q *Queries) GetActivationsForLicense(ctx context.Context, licenseID int32) ([]Activation, error) {
+func (q *Queries) GetActivationsForLicense(ctx context.Context, licenseID uuid.UUID) ([]Activation, error) {
 	rows, err := q.db.Query(ctx, getActivationsForLicense, licenseID)
 	if err != nil {
 		return nil, err

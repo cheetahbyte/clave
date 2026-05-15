@@ -1,10 +1,14 @@
 package domain
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type License struct {
-	ID             int32
-	ProductID      int32
+	ID             uuid.UUID
+	ProductID      uuid.UUID
 	LookupDigest   []byte
 	KeyPhc         string
 	CustomerEmail  string
@@ -17,5 +21,5 @@ type License struct {
 
 // this struct is a license that can be exposed via api (stripped of important fields)
 type ExposableLicense struct {
-	ID int32
+	ID uuid.UUID
 }

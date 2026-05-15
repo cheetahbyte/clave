@@ -7,6 +7,8 @@ package db
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const createDevice = `-- name: CreateDevice :one
@@ -14,7 +16,7 @@ insert into devices(license_id, hwid_hash, hostname) values($1, $2, $3) returnin
 `
 
 type CreateDeviceParams struct {
-	LicenseID int32   `json:"license_id"`
+	LicenseID uuid.UUID `json:"license_id"`
 	HwidHash  []byte  `json:"hwid_hash"`
 	Hostname  *string `json:"hostname"`
 }
@@ -37,7 +39,7 @@ select id, license_id, hwid_hash, hostname, created_at from devices where licens
 `
 
 type GetDeviceByLicenseAndHwidHashParams struct {
-	LicenseID int32  `json:"license_id"`
+	LicenseID uuid.UUID `json:"license_id"`
 	HwidHash  []byte `json:"hwid_hash"`
 }
 

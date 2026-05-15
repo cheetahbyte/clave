@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -96,7 +95,7 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 		if activation != nil {
 			slog.Info("activation already exists, reusing", "licenseId", license.ID, "activationId", activation.ID)
 
-			signed, claims, err := svc.signingService.IssueAndSignLicenseToken(license, fmt.Sprintf("%d", license.ProductID), license.Features, data.Device.HWID, 24*7*time.Hour)
+			signed, claims, err := svc.signingService.IssueAndSignLicenseToken(license, license.ProductID.String(), license.Features, data.Device.HWID, 24*7*time.Hour)
 			if err != nil {
 				slog.Error("failed to sign jwt", "licenseId", license.ID, "err", err)
 				p := problem.Of(500).
@@ -175,7 +174,7 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 		return dto.ActivateLicenseResponse{}, p
 	}
 
-	signed, claims, err := svc.signingService.IssueAndSignLicenseToken(license, fmt.Sprintf("%d", license.ProductID), license.Features, data.Device.HWID, 24*7*time.Hour)
+	signed, claims, err := svc.signingService.IssueAndSignLicenseToken(license, license.ProductID.String(), license.Features, data.Device.HWID, 24*7*time.Hour)
 	if err != nil {
 		slog.Error("failed to sign jwt", "licenseId", license.ID, "err", err)
 

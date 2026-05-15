@@ -6,21 +6,23 @@ package db
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 type Querier interface {
 	ActivateLicense(ctx context.Context, arg ActivateLicenseParams) (Activation, error)
 	ConsumeSelfServiceToken(ctx context.Context, tokenHash string) (string, error)
-	CountActivations(ctx context.Context, licenseID int32) (int64, error)
+	CountActivations(ctx context.Context, licenseID uuid.UUID) (int64, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
 	CreateLicense(ctx context.Context, arg CreateLicenseParams) (License, error)
 	CreateSelfServiceLink(ctx context.Context, arg CreateSelfServiceLinkParams) (SelfServiceToken, error)
 	GetActivationByLicenseAndDevice(ctx context.Context, arg GetActivationByLicenseAndDeviceParams) (Activation, error)
-	GetActivationsForLicense(ctx context.Context, licenseID int32) ([]Activation, error)
+	GetActivationsForLicense(ctx context.Context, licenseID uuid.UUID) ([]Activation, error)
 	GetDeviceByLicenseAndHwidHash(ctx context.Context, arg GetDeviceByLicenseAndHwidHashParams) (Device, error)
 	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error)
-	GetLicenseById(ctx context.Context, id int32) (License, error)
-	GetOneById(ctx context.Context, id int32) (Product, error)
+	GetLicenseById(ctx context.Context, id uuid.UUID) (License, error)
+	GetOneById(ctx context.Context, id uuid.UUID) (Product, error)
 	GetProducts(ctx context.Context) ([]Product, error)
 	ListByCustomerEmail(ctx context.Context, customerEmail string) ([]ListByCustomerEmailRow, error)
 }
