@@ -24,6 +24,7 @@ func Register(r *chi.Mux, h *handlers.Handlers) {
 				enc.Use(handlers.EncryptionMiddleware(h.Services.Encryption()))
 				enc.Post("/activate", h.ActivateLicense)
 				enc.Post("/validate", h.ValidateLicense)
+				enc.Post("/updates/check", h.CheckUpdate)
 			})
 		})
 	})

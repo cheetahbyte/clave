@@ -18,6 +18,7 @@ type ServiceStack struct {
 	signing     *SigningService
 	activation  *ActivationService
 	encryption  *EncryptionService
+	update      *UpdateService
 }
 
 func InitServices(q *db.Queries) ServiceStack {
@@ -76,6 +77,8 @@ func InitServices(q *db.Queries) ServiceStack {
 		signingService,
 	)
 
+	update := NewUpdateService(license, signingService)
+
 	return ServiceStack{
 		license:     license,
 		validation:  validation,
@@ -83,6 +86,7 @@ func InitServices(q *db.Queries) ServiceStack {
 		signing:     signingService,
 		activation:  activation,
 		encryption:  encryptionService,
+		update:      update,
 	}
 }
 
@@ -108,4 +112,8 @@ func (s ServiceStack) SigningService() *SigningService {
 
 func (s ServiceStack) Encryption() *EncryptionService {
 	return s.encryption
+}
+
+func (s ServiceStack) Update() *UpdateService {
+	return s.update
 }
