@@ -3,9 +3,13 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cheetahbyte/clave/internal/handlers/dto"
@@ -25,6 +29,8 @@ func NewUpdateService(licenseService *LicenseService, signingService *SigningSer
 		httpClient:     &http.Client{Timeout: 5 * time.Second},
 	}
 }
+
+var errNoLatestRelease = errors.New("no published latest release found")
 
 type githubRelease struct {
 	TagName string `json:"tag_name"`
@@ -64,10 +70,27 @@ func (svc *UpdateService) CheckUpdate(ctx context.Context, data dto.UpdateCheckR
 			Append(problem.Instance(instance))
 	}
 
-	release, err := svc.fetchLatestRelease(ctx, os.Getenv("GITHUB_REPO"))
+	repo := strings.TrimSpace(os.Getenv("GITHUB_REPO"))
+	if repo == "" {
+		slog.Error("github repo is not configured")
+		return dto.UpdateCheckResponse{}, problem.Of(500).
+			Append(problem.Title("Update repository not configured")).
+			Append(problem.Detail("GITHUB_REPO must be set to owner/repo")).
+			Append(problem.Instance(instance))
+	}
+
+	release, err := svc.fetchLatestRelease(ctx, repo)
 	if err != nil {
+		slog.Error("failed to fetch github release info", "repo", repo, "err", err)
+		if errors.Is(err, errNoLatestRelease) {
+			return dto.UpdateCheckResponse{}, problem.Of(404).
+				Append(problem.Title("No release found")).
+				Append(problem.Detail("No published GitHub release exists for the configured repository")).
+				Append(problem.Instance(instance))
+		}
 		return dto.UpdateCheckResponse{}, problem.Of(502).
 			Append(problem.Title("Failed to fetch release info")).
+			Append(problem.Detail("GitHub release information could not be fetched")).
 			Append(problem.Instance(instance))
 	}
 
@@ -91,6 +114,8 @@ func (svc *UpdateService) fetchLatestRelease(ctx context.Context, repo string) (
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "clave-update-service")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -102,7 +127,11 @@ func (svc *UpdateService) fetchLatestRelease(ctx context.Context, repo string) (
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("github api returned %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: github api returned %d: %s", errNoLatestRelease, resp.StatusCode, strings.TrimSpace(string(body)))
+		}
+		return nil, fmt.Errorf("github api returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var release githubRelease
