@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -30,7 +31,25 @@ func truthy(v string) bool {
 	return v == "true" || v == "1" || v == "yes"
 }
 
+func verboseLoggingEnabled() bool {
+	level := strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL")))
+	return truthy(os.Getenv("VERBOSE_LOGGING")) || level == "debug" || level == "verbose" || level == "trace"
+}
+
+func configureLogging(verbose bool) {
+	level := slog.LevelInfo
+	if verbose {
+		level = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: level,
+	})))
+}
+
 func main() {
+	verboseLogging := verboseLoggingEnabled()
+	configureLogging(verboseLogging)
+
 	databaseURL := getEnv("DATABASE_URL", "postgres://clave@localhost:54321/clave?sslmode=disable")
 
 	if truthy(os.Getenv("RUN_MIGRATIONS")) {
@@ -57,7 +76,7 @@ func main() {
 	h := handlers.New(svc)
 
 	r := chi.NewRouter()
-	api.Register(r, h)
+	api.Register(r, h, verboseLogging)
 
 	port := getEnv("PORT", "8000")
 	addr := "0.0.0.0:" + port
