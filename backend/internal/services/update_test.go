@@ -72,6 +72,16 @@ func TestFetchLatestReleaseNotFound(t *testing.T) {
 	if !errors.Is(err, errNoLatestRelease) {
 		t.Fatalf("expected errNoLatestRelease, got %v", err)
 	}
+	var githubErr *githubReleaseError
+	if !errors.As(err, &githubErr) {
+		t.Fatalf("expected githubReleaseError, got %v", err)
+	}
+	if githubErr.StatusCode != http.StatusNotFound {
+		t.Fatalf("unexpected github status: %d", githubErr.StatusCode)
+	}
+	if githubErr.Body != `{"message":"Not Found"}` {
+		t.Fatalf("unexpected github body: %q", githubErr.Body)
+	}
 }
 
 func TestFetchLatestReleaseContextDeadline(t *testing.T) {
@@ -90,5 +100,30 @@ func TestFetchLatestReleaseContextDeadline(t *testing.T) {
 	_, err := svc.fetchLatestRelease(ctx, "cheetahbyte/kepler-releases")
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected context deadline exceeded, got %v", err)
+	}
+}
+
+func TestFetchLatestReleaseGitHubError(t *testing.T) {
+	svc := &UpdateService{
+		httpClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusForbidden,
+					Body:       io.NopCloser(strings.NewReader(`{"message":"API rate limit exceeded"}`)),
+				}, nil
+			}),
+		},
+	}
+
+	_, err := svc.fetchLatestRelease(context.Background(), "cheetahbyte/kepler-releases")
+	var githubErr *githubReleaseError
+	if !errors.As(err, &githubErr) {
+		t.Fatalf("expected githubReleaseError, got %v", err)
+	}
+	if githubErr.StatusCode != http.StatusForbidden {
+		t.Fatalf("unexpected github status: %d", githubErr.StatusCode)
+	}
+	if githubErr.Body != `{"message":"API rate limit exceeded"}` {
+		t.Fatalf("unexpected github body: %q", githubErr.Body)
 	}
 }
