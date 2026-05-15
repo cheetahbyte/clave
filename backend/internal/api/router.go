@@ -51,7 +51,7 @@ func Register(r *chi.Mux, h *handlers.Handlers, verboseLogging bool) {
 			v1Router.Get("/pubkey", h.PubKey)
 			v1Router.With(h.RequireAdminBearerToken).Post("/", h.CreateLicense)
 			v1Router.Group(func(enc chi.Router) {
-				enc.Use(handlers.EncryptionMiddleware(h.Services.Encryption()))
+				enc.Use(handlers.OptionalEncryptionMiddleware(h.Services.Encryption(), h.Services.EncryptionDisabled()))
 				if verboseLogging {
 					enc.Use(verboseLogger)
 				}

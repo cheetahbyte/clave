@@ -5,11 +5,11 @@ import (
 	"encoding/base64"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/repositories"
 )
-
 
 type ServiceStack struct {
 	license     *LicenseService
@@ -18,7 +18,13 @@ type ServiceStack struct {
 	signing     *SigningService
 	activation  *ActivationService
 	encryption  *EncryptionService
+	encDisabled bool
 	update      *UpdateService
+}
+
+func envTruthy(key string) bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	return v == "true" || v == "1" || v == "yes"
 }
 
 func InitServices(q *db.Queries) ServiceStack {
@@ -53,14 +59,20 @@ func InitServices(q *db.Queries) ServiceStack {
 		slog.Error("LICENSE_HMAC_SECRET is not set")
 	}
 
-	x25519Key := os.Getenv("X25519_PRIVATE_KEY")
-	x25519Bytes, err := base64.RawURLEncoding.DecodeString(x25519Key)
-	if err != nil {
-		slog.Error("failed to decode X25519 private key", "err", err)
-	}
-	encryptionService, err := NewEncryptionService(x25519Bytes)
-	if err != nil {
-		slog.Error("failed to init encryption service", "err", err)
+	var encryptionService *EncryptionService
+	encryptionDisabled := envTruthy("DISABLE_ENCRYPTION")
+	if encryptionDisabled {
+		slog.Warn("request payload encryption is disabled")
+	} else {
+		x25519Key := os.Getenv("X25519_PRIVATE_KEY")
+		x25519Bytes, err := base64.RawURLEncoding.DecodeString(x25519Key)
+		if err != nil {
+			slog.Error("failed to decode X25519 private key", "err", err)
+		}
+		encryptionService, err = NewEncryptionService(x25519Bytes)
+		if err != nil {
+			slog.Error("failed to init encryption service", "err", err)
+		}
 	}
 
 	signingService := NewSigningService(pub, priv, hmacSecret)
@@ -86,6 +98,7 @@ func InitServices(q *db.Queries) ServiceStack {
 		signing:     signingService,
 		activation:  activation,
 		encryption:  encryptionService,
+		encDisabled: encryptionDisabled,
 		update:      update,
 	}
 }
@@ -112,6 +125,10 @@ func (s ServiceStack) SigningService() *SigningService {
 
 func (s ServiceStack) Encryption() *EncryptionService {
 	return s.encryption
+}
+
+func (s ServiceStack) EncryptionDisabled() bool {
+	return s.encDisabled
 }
 
 func (s ServiceStack) Update() *UpdateService {

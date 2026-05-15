@@ -26,6 +26,11 @@ func (w *encryptingResponseWriter) Write(b []byte) (int, error) {
 func EncryptionMiddleware(enc *services.EncryptionService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if enc == nil {
+				http.Error(w, `{"error":"encryption service unavailable"}`, http.StatusInternalServerError)
+				return
+			}
+
 			clientPubHeader := r.Header.Get("X-Client-Public-Key")
 			if clientPubHeader == "" {
 				http.Error(w, `{"error":"X-Client-Public-Key header required"}`, http.StatusBadRequest)
@@ -81,4 +86,13 @@ func EncryptionMiddleware(enc *services.EncryptionService) func(http.Handler) ht
 			w.Write([]byte(base64.RawURLEncoding.EncodeToString(encResponse)))
 		})
 	}
+}
+
+func OptionalEncryptionMiddleware(enc *services.EncryptionService, disabled bool) func(http.Handler) http.Handler {
+	if disabled {
+		return func(next http.Handler) http.Handler {
+			return next
+		}
+	}
+	return EncryptionMiddleware(enc)
 }
