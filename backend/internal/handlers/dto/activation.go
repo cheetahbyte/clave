@@ -11,7 +11,6 @@ type ActivateLicenseRequest struct {
 	LicenseKey    string `json:"licenseKey"`
 	ProductID     string `json:"productId"`
 	Device        Device `json:"deviceId"`
-	CustomerEmail string `json:"customerEmail" validate:"required,email"`
 }
 
 type ActivateLicenseResponse struct {
