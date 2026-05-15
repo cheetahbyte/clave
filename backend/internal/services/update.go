@@ -51,7 +51,7 @@ func (svc *UpdateService) CheckUpdate(ctx context.Context, data dto.UpdateCheckR
 			Append(problem.Instance(instance))
 	}
 
-	license, err := svc.licenseService.GetLicenseById(ctx, licenseID.Int32)
+	license, err := svc.licenseService.GetLicenseById(ctx, licenseID)
 	if err != nil || license == nil {
 		return dto.UpdateCheckResponse{}, problem.Of(404).
 			Append(problem.Title("License not found")).

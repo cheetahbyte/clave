@@ -11,6 +11,7 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/domain"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 const (
@@ -102,7 +103,7 @@ func (svc *SigningService) IssueAndSignLicenseToken(license *domain.License, aud
 		Features:   features,
 		LicenseExp: licenseExp,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   fmt.Sprintf("lic_%d", license.ID),
+			Subject:   "lic_" + license.ID.String(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			NotBefore: jwt.NewNumericDate(now.Add(-30 * time.Second)),
 			ExpiresAt: jwt.NewNumericDate(expires),
@@ -127,7 +128,7 @@ func (svc *SigningService) IssueAndSignSelfServiceToken(claims jwt.MapClaims) (s
 }
 
 type LicenseClaims struct {
-	ProductID  int32    `json:"product_id"`
+	ProductID  uuid.UUID `json:"product_id"`
 	HWID       string   `json:"hwid,omitempty"`
 	Features   []string `json:"features,omitempty"`
 	LicenseExp *int64   `json:"license_exp,omitempty"`

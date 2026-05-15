@@ -5,10 +5,11 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/domain"
+	"github.com/google/uuid"
 )
 
 type LicenseRepository interface {
-	GetLicenseByID(ctx context.Context, licenseId int32) (*domain.License, error)
+	GetLicenseByID(ctx context.Context, licenseId uuid.UUID) (*domain.License, error)
 	GetLicenseByDigest(ctx context.Context, lookUpDigest []byte) (*domain.License, error)
 	CreateLicense(ctx context.Context, params db.CreateLicenseParams) (*domain.License, error)
 	ListByCustomerEmail(ctx context.Context, email string) ([]db.ListByCustomerEmailRow, error)
@@ -22,7 +23,7 @@ func NewLicenseRepo(q *db.Queries) *LicenseRepo {
 	return &LicenseRepo{q: q}
 }
 
-func (repo *LicenseRepo) GetLicenseByID(ctx context.Context, licenseId int32) (*domain.License, error) {
+func (repo *LicenseRepo) GetLicenseByID(ctx context.Context, licenseId uuid.UUID) (*domain.License, error) {
 	return fetchAndMap(
 		ctx,
 		func(c context.Context) (db.License, error) {

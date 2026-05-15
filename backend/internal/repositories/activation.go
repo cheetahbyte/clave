@@ -12,12 +12,12 @@ import (
 )
 
 type ActivationRepository interface {
-	CountByLicense(ctx context.Context, licenseId int32) (int64, error)
-	GetActivations(ctx context.Context, licenseID int32) ([]*domain.Activation, error)
-	ActivateLicense(ctx context.Context, licenseId int32, deviceID uuid.UUID) (*domain.Activation, error)
+	CountByLicense(ctx context.Context, licenseId uuid.UUID) (int64, error)
+	GetActivations(ctx context.Context, licenseID uuid.UUID) ([]*domain.Activation, error)
+	ActivateLicense(ctx context.Context, licenseId uuid.UUID, deviceID uuid.UUID) (*domain.Activation, error)
 	CreateDevice(ctx context.Context, params db.CreateDeviceParams) (db.Device, error)
-	GetDeviceByLicenseAndHwidHash(ctx context.Context, licenseID int32, hwidHash []byte) (*db.Device, error)
-	GetActivationByLicenseAndDevice(ctx context.Context, licenseID int32, deviceID uuid.UUID) (*domain.Activation, error)
+	GetDeviceByLicenseAndHwidHash(ctx context.Context, licenseID uuid.UUID, hwidHash []byte) (*db.Device, error)
+	GetActivationByLicenseAndDevice(ctx context.Context, licenseID uuid.UUID, deviceID uuid.UUID) (*domain.Activation, error)
 }
 
 type ActivationRepo struct {
@@ -28,7 +28,7 @@ func NewActivationRepo(q *db.Queries) *ActivationRepo {
 	return &ActivationRepo{q: q}
 }
 
-func (repo *ActivationRepo) CountByLicense(ctx context.Context, licenseId int32) (int64, error) {
+func (repo *ActivationRepo) CountByLicense(ctx context.Context, licenseId uuid.UUID) (int64, error) {
 	val, err := repo.q.CountActivations(ctx, licenseId)
 	if err != nil {
 		return 0, fmt.Errorf("count activations: %w", err)
@@ -36,7 +36,7 @@ func (repo *ActivationRepo) CountByLicense(ctx context.Context, licenseId int32)
 	return val, nil
 }
 
-func (repo *ActivationRepo) GetActivations(ctx context.Context, licenseId int32) ([]*domain.Activation, error) {
+func (repo *ActivationRepo) GetActivations(ctx context.Context, licenseId uuid.UUID) ([]*domain.Activation, error) {
 	return fetchAndMapSlice(
 		ctx,
 		func(c context.Context) ([]db.Activation, error) {
@@ -46,7 +46,7 @@ func (repo *ActivationRepo) GetActivations(ctx context.Context, licenseId int32)
 	)
 }
 
-func (repo *ActivationRepo) ActivateLicense(ctx context.Context, licenseId int32, deviceID uuid.UUID) (*domain.Activation, error) {
+func (repo *ActivationRepo) ActivateLicense(ctx context.Context, licenseId uuid.UUID, deviceID uuid.UUID) (*domain.Activation, error) {
 	return fetchAndMap(
 		ctx,
 		func(c context.Context) (db.Activation, error) {
@@ -63,7 +63,7 @@ func (repo *ActivationRepo) CreateDevice(ctx context.Context, params db.CreateDe
 	return repo.q.CreateDevice(ctx, params)
 }
 
-func (repo *ActivationRepo) GetDeviceByLicenseAndHwidHash(ctx context.Context, licenseID int32, hwidHash []byte) (*db.Device, error) {
+func (repo *ActivationRepo) GetDeviceByLicenseAndHwidHash(ctx context.Context, licenseID uuid.UUID, hwidHash []byte) (*db.Device, error) {
 	device, err := repo.q.GetDeviceByLicenseAndHwidHash(ctx, db.GetDeviceByLicenseAndHwidHashParams{
 		LicenseID: licenseID,
 		HwidHash:  hwidHash,
@@ -77,7 +77,7 @@ func (repo *ActivationRepo) GetDeviceByLicenseAndHwidHash(ctx context.Context, l
 	return &device, nil
 }
 
-func (repo *ActivationRepo) GetActivationByLicenseAndDevice(ctx context.Context, licenseID int32, deviceID uuid.UUID) (*domain.Activation, error) {
+func (repo *ActivationRepo) GetActivationByLicenseAndDevice(ctx context.Context, licenseID uuid.UUID, deviceID uuid.UUID) (*domain.Activation, error) {
 	activation, err := repo.q.GetActivationByLicenseAndDevice(ctx, db.GetActivationByLicenseAndDeviceParams{
 		LicenseID: licenseID,
 		DeviceID:  deviceID,

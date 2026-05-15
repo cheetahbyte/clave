@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -16,7 +17,7 @@ INSERT INTO licenses(product_id, max_activations, lookup_digest, key_phc, custom
 `
 
 type CreateLicenseParams struct {
-	ProductID      *int32 `json:"product_id"`
+	ProductID      *uuid.UUID `json:"product_id"`
 	MaxActivations int32  `json:"max_activations"`
 	LookupDigest   []byte `json:"lookup_digest"`
 	KeyPhc         string `json:"key_phc"`
@@ -73,7 +74,7 @@ const getLicenseById = `-- name: GetLicenseById :one
 select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features from licenses where id = $1
 `
 
-func (q *Queries) GetLicenseById(ctx context.Context, id int32) (License, error) {
+func (q *Queries) GetLicenseById(ctx context.Context, id uuid.UUID) (License, error) {
 	row := q.db.QueryRow(ctx, getLicenseById, id)
 	var i License
 	err := row.Scan(
@@ -97,7 +98,7 @@ select lt.is_active, lt.id, lt.max_activations, lt.expires_at, p.name from licen
 
 type ListByCustomerEmailRow struct {
 	IsActive       bool               `json:"is_active"`
-	ID             int32              `json:"id"`
+	ID             uuid.UUID          `json:"id"`
 	MaxActivations int32              `json:"max_activations"`
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	Name           string             `json:"name"`

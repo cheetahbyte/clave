@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 
 	"github.com/alexedwards/argon2id"
@@ -15,11 +14,11 @@ import (
 	"github.com/cheetahbyte/clave/internal/domain"
 	"github.com/cheetahbyte/clave/internal/handlers/dto"
 	"github.com/cheetahbyte/clave/internal/repositories"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 type LicenseProvider interface {
-	GetLicenseById(ctx context.Context, licenseId int32) (*domain.License, error)
+	GetLicenseById(ctx context.Context, licenseId uuid.UUID) (*domain.License, error)
 	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (*domain.License, error)
 	NewLicense(ctx context.Context, data dto.LicenseCreationRequest) (dto.LicenseCreationResponse, error)
 	ListLicensesForCustomer(ctx context.Context, email string) ([]db.ListByCustomerEmailRow, error)
@@ -53,8 +52,13 @@ func (svc *LicenseService) NewLicense(ctx context.Context, data dto.LicenseCreat
 		return dto.LicenseCreationResponse{}, errors.New("failed to hash license key")
 	}
 
+	productID, err := uuid.Parse(data.ProductID)
+	if err != nil {
+		return dto.LicenseCreationResponse{}, errors.New("invalid product id")
+	}
+
 	_, err = svc.repo.CreateLicense(ctx, db.CreateLicenseParams{
-		ProductID:      &data.ProductID,
+		ProductID:      &productID,
 		MaxActivations: data.MaxActivations,
 		LookupDigest:   digest,
 		KeyPhc:         hash,
@@ -70,7 +74,7 @@ func (svc *LicenseService) NewLicense(ctx context.Context, data dto.LicenseCreat
 	}, nil
 }
 
-func (svc *LicenseService) GetLicenseById(ctx context.Context, licenseId int32) (*domain.License, error) {
+func (svc *LicenseService) GetLicenseById(ctx context.Context, licenseId uuid.UUID) (*domain.License, error) {
 	return svc.repo.GetLicenseByID(ctx, licenseId)
 }
 
@@ -112,22 +116,17 @@ func (svc *LicenseService) ListLicensesForCustomer(ctx context.Context, email st
 	return svc.repo.ListByCustomerEmail(ctx, email)
 }
 
-func licenseIDFromSubject(sub string) (pgtype.Int4, error) {
+func licenseIDFromSubject(sub string) (uuid.UUID, error) {
 	const prefix = "lic_"
 
 	if !strings.HasPrefix(sub, prefix) {
-		return pgtype.Int4{}, fmt.Errorf("invalid subject format: %q", sub)
+		return uuid.UUID{}, fmt.Errorf("invalid subject format: %q", sub)
 	}
 
-	idStr := strings.TrimPrefix(sub, prefix)
-
-	id, err := strconv.Atoi(idStr)
+	id, err := uuid.Parse(strings.TrimPrefix(sub, prefix))
 	if err != nil {
-		return pgtype.Int4{}, fmt.Errorf("invalid license id in subject: %w", err)
+		return uuid.UUID{}, fmt.Errorf("invalid license id in subject: %w", err)
 	}
 
-	return pgtype.Int4{
-		Int32: int32(id),
-		Valid: true,
-	}, nil
+	return id, nil
 }
