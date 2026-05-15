@@ -9,11 +9,11 @@ import (
 )
 
 type ValidationService struct {
-	licenseService *LicenseService
+	licenseService LicenseProvider
 	signingService *SigningService
 }
 
-func NewValidationService(signingService *SigningService, licenseService *LicenseService) *ValidationService {
+func NewValidationService(signingService *SigningService, licenseService LicenseProvider) *ValidationService {
 	return &ValidationService{
 		signingService: signingService,
 		licenseService: licenseService,
@@ -63,17 +63,19 @@ func (svc *ValidationService) Validate(ctx context.Context, data dto.LicenseVali
 			Append(problem.Instance(instance))
 	}
 
-	sevenDays := 7 * 24 * time.Hour
-	remaining := time.Until(license.ExpiresAt)
+	tokenTTL := 7 * 24 * time.Hour
+	if !license.ExpiresAt.IsZero() {
+		remaining := time.Until(license.ExpiresAt)
+		if remaining < tokenTTL {
+			tokenTTL = remaining
+		}
+	}
 
 	newToken, newClaims, err := svc.signingService.IssueAndSignLicenseToken(license,
 		license.ProductID.String(),
 		license.Features,
 		claims.HWID,
-		tern(time.Now().Add(sevenDays).After(license.ExpiresAt),
-			remaining,
-			sevenDays,
-		),
+		tokenTTL,
 	)
 
 	if err != nil {
@@ -86,12 +88,4 @@ func (svc *ValidationService) Validate(ctx context.Context, data dto.LicenseVali
 		Token:      newToken,
 		ValidUntil: newClaims.ExpiresAt.Unix(),
 	}, nil
-}
-
-func tern[T any](condition bool, a, b T) T {
-	if condition {
-		return a
-	} else {
-		return b
-	}
 }
