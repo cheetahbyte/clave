@@ -123,6 +123,38 @@ On 403/404, the license is genuinely invalid. Don't retry. On 5xx or network err
 
 ---
 
+## Update Checks
+
+`POST /api/v1/updates/check` (encrypted)
+
+Call this to check whether a newer version of your app is available. The endpoint validates your JWT before responding, so only active licensed clients can query it.
+
+```json
+{
+  "token": "<jwt from activation or last validation>",
+  "version": "1.2.3"
+}
+```
+
+**Response:**
+```json
+{
+  "currentVersion": "1.2.3",
+  "latestVersion": "1.3.0",
+  "updateAvailable": true,
+  "downloadUrl": "https://github.com/..."
+}
+```
+
+- `updateAvailable` is `true` when `latestVersion != currentVersion`
+- `downloadUrl` points to the latest release asset if one exists, otherwise the release page
+
+**When to call:** Once on launch, after validation succeeds. Don't call it before you have a valid token — you'll get a 401.
+
+**On failure:** Update checks are non-critical. If this endpoint returns an error or is unreachable, log it and proceed — don't block the app.
+
+---
+
 ## Security Notes
 
 - **Pin the server's X25519 public key** — fetch it once during distribution, bundle it with your app. Don't re-fetch at runtime.
