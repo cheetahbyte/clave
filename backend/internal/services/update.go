@@ -22,11 +22,13 @@ type UpdateService struct {
 	httpClient     *http.Client
 }
 
+const githubReleaseFetchTimeout = 2 * time.Second
+
 func NewUpdateService(licenseService *LicenseService, signingService *SigningService) *UpdateService {
 	return &UpdateService{
 		licenseService: licenseService,
 		signingService: signingService,
-		httpClient:     &http.Client{Timeout: 5 * time.Second},
+		httpClient:     &http.Client{Timeout: githubReleaseFetchTimeout},
 	}
 }
 
@@ -79,13 +81,22 @@ func (svc *UpdateService) CheckUpdate(ctx context.Context, data dto.UpdateCheckR
 			Append(problem.Instance(instance))
 	}
 
-	release, err := svc.fetchLatestRelease(ctx, repo)
+	githubCtx, cancel := context.WithTimeout(ctx, githubReleaseFetchTimeout)
+	defer cancel()
+
+	release, err := svc.fetchLatestRelease(githubCtx, repo)
 	if err != nil {
 		slog.Error("failed to fetch github release info", "repo", repo, "err", err)
 		if errors.Is(err, errNoLatestRelease) {
 			return dto.UpdateCheckResponse{}, problem.Of(404).
 				Append(problem.Title("No release found")).
 				Append(problem.Detail("No published GitHub release exists for the configured repository")).
+				Append(problem.Instance(instance))
+		}
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || os.IsTimeout(err) {
+			return dto.UpdateCheckResponse{}, problem.Of(504).
+				Append(problem.Title("Release lookup timed out")).
+				Append(problem.Detail("GitHub release information could not be fetched before the request deadline")).
 				Append(problem.Instance(instance))
 		}
 		return dto.UpdateCheckResponse{}, problem.Of(502).

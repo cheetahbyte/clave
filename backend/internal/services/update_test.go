@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -70,5 +71,24 @@ func TestFetchLatestReleaseNotFound(t *testing.T) {
 	_, err := svc.fetchLatestRelease(context.Background(), "cheetahbyte/kepler-releases")
 	if !errors.Is(err, errNoLatestRelease) {
 		t.Fatalf("expected errNoLatestRelease, got %v", err)
+	}
+}
+
+func TestFetchLatestReleaseContextDeadline(t *testing.T) {
+	svc := &UpdateService{
+		httpClient: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				<-req.Context().Done()
+				return nil, req.Context().Err()
+			}),
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	_, err := svc.fetchLatestRelease(ctx, "cheetahbyte/kepler-releases")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline exceeded, got %v", err)
 	}
 }
