@@ -22,6 +22,7 @@ type Querier interface {
 	GetDeviceByLicenseAndHwidHash(ctx context.Context, arg GetDeviceByLicenseAndHwidHashParams) (Device, error)
 	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error)
 	GetLicenseById(ctx context.Context, id uuid.UUID) (License, error)
+	GetLicenseByIdForUpdate(ctx context.Context, id uuid.UUID) (License, error)
 	GetOneById(ctx context.Context, id uuid.UUID) (Product, error)
 	GetProducts(ctx context.Context) ([]Product, error)
 	ListByCustomerEmail(ctx context.Context, customerEmail string) ([]ListByCustomerEmailRow, error)

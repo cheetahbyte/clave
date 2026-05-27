@@ -92,6 +92,28 @@ func (q *Queries) GetLicenseById(ctx context.Context, id uuid.UUID) (License, er
 	return i, err
 }
 
+const getLicenseByIdForUpdate = `-- name: GetLicenseByIdForUpdate :one
+select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features from licenses where id = $1 for update
+`
+
+func (q *Queries) GetLicenseByIdForUpdate(ctx context.Context, id uuid.UUID) (License, error) {
+	row := q.db.QueryRow(ctx, getLicenseByIdForUpdate, id)
+	var i License
+	err := row.Scan(
+		&i.ID,
+		&i.ProductID,
+		&i.LookupDigest,
+		&i.KeyPhc,
+		&i.CustomerEmail,
+		&i.MaxActivations,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.Features,
+	)
+	return i, err
+}
+
 const listByCustomerEmail = `-- name: ListByCustomerEmail :many
 select lt.is_active, lt.id, lt.max_activations, lt.expires_at, p.name from licenses lt join products p on lt.product_id = p.id where customer_email = $1
 `

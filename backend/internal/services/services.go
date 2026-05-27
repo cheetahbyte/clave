@@ -9,6 +9,7 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/repositories"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type ServiceStack struct {
@@ -27,7 +28,7 @@ func envTruthy(key string) bool {
 	return v == "true" || v == "1" || v == "yes"
 }
 
-func InitServices(q *db.Queries) ServiceStack {
+func InitServices(q *db.Queries, pool *pgxpool.Pool) ServiceStack {
 
 	publicKey := os.Getenv("LICENSE_JWT_PUBLIC_KEY")
 	pbBytes, err := base64.StdEncoding.DecodeString(publicKey)
@@ -81,7 +82,7 @@ func InitServices(q *db.Queries) ServiceStack {
 
 	validation := NewValidationService(signingService, license)
 
-	activation := NewActivationService(repositories.NewActivationRepo(q), signingService, license)
+	activation := NewActivationService(repositories.NewActivationRepo(q, pool), signingService, license)
 
 	selfservice := NewSelfServiceService(
 		q,

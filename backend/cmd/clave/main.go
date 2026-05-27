@@ -72,7 +72,7 @@ func main() {
 	defer pool.Close()
 
 	q := db.New(pool)
-	svc := services.InitServices(q)
+	svc := services.InitServices(q, pool)
 	h := handlers.New(svc)
 
 	r := chi.NewRouter()
