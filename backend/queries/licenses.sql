@@ -7,5 +7,8 @@ select * from licenses where lookup_digest = $1;
 -- name: CreateLicense :one
 INSERT INTO licenses(product_id, max_activations, lookup_digest, key_phc, customer_email) values($1, $2, $3, $4, $5) returning *;
 
+-- name: GetLicenseByIdForUpdate :one
+select * from licenses where id = $1 for update;
+
 -- name: ListByCustomerEmail :many
 select lt.is_active, lt.id, lt.max_activations, lt.expires_at, p.name from licenses lt join products p on lt.product_id = p.id where customer_email = $1;
