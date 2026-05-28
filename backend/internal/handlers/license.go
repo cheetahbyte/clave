@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -51,7 +50,6 @@ func (h *Handlers) ActivateLicense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := h.Services.Activation().Activate(r.Context(), data)
-	fmt.Println(result, err, data)
 	if err != nil {
 		h.writeError(w, r, err)
 		return

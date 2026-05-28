@@ -3,6 +3,7 @@ package services
 import (
 	"crypto/ed25519"
 	"encoding/base64"
+	"log"
 	"log/slog"
 	"os"
 	"strings"
@@ -33,31 +34,31 @@ func InitServices(q *db.Queries, pool *pgxpool.Pool) ServiceStack {
 	publicKey := os.Getenv("LICENSE_JWT_PUBLIC_KEY")
 	pbBytes, err := base64.StdEncoding.DecodeString(publicKey)
 	if err != nil {
-		slog.Error("failed to decode jwt public key", "err", err)
+		log.Fatalf("failed to decode jwt public key: %v", err)
 	}
 	pub := ed25519.PublicKey(pbBytes)
 	if len(pub) != ed25519.PublicKeySize {
-		slog.Error("invalid ed25519 public key size", "size", len(pub))
+		log.Fatalf("invalid ed25519 public key size: %d", len(pub))
 	}
 
 	privateKey := os.Getenv("LICENSE_JWT_PRIVATE_KEY")
 	pkBytes, err := base64.StdEncoding.DecodeString(privateKey)
 	if err != nil {
-		slog.Error("failed to decode jwt private key", "err", err)
+		log.Fatalf("failed to decode jwt private key: %v", err)
 	}
 	priv := ed25519.PrivateKey(pkBytes)
 	if len(priv) != ed25519.PrivateKeySize {
-		slog.Error("invalid ed25519 private key size", "size", len(priv))
+		log.Fatalf("invalid ed25519 private key size: %d", len(priv))
 	}
 
 	pepper := os.Getenv("SELF_SERVICE_TOKEN_PEPPER")
 	if pepper == "" {
-		slog.Error("SELF_SERVICE_TOKEN_PEPPER is not set")
+		log.Fatal("SELF_SERVICE_TOKEN_PEPPER is not set")
 	}
 
 	hmacSecret := os.Getenv("LICENSE_HMAC_SECRET")
-	if pepper == "" {
-		slog.Error("LICENSE_HMAC_SECRET is not set")
+	if hmacSecret == "" {
+		log.Fatal("LICENSE_HMAC_SECRET is not set")
 	}
 
 	var encryptionService *EncryptionService
@@ -68,11 +69,11 @@ func InitServices(q *db.Queries, pool *pgxpool.Pool) ServiceStack {
 		x25519Key := os.Getenv("X25519_PRIVATE_KEY")
 		x25519Bytes, err := base64.RawURLEncoding.DecodeString(x25519Key)
 		if err != nil {
-			slog.Error("failed to decode X25519 private key", "err", err)
+			log.Fatalf("failed to decode X25519 private key: %v", err)
 		}
 		encryptionService, err = NewEncryptionService(x25519Bytes)
 		if err != nil {
-			slog.Error("failed to init encryption service", "err", err)
+			log.Fatalf("failed to init encryption service: %v", err)
 		}
 	}
 

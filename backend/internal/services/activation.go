@@ -35,7 +35,7 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 
 	license, err := svc.licenseService.GetLicenseByDigest(ctx, lookupDigest)
 	if err != nil {
-		slog.Warn("license not found", "digest", lookupDigest, "err", err)
+		slog.Warn("license not found", "err", err)
 
 		p := problem.Of(404).
 			Append(problem.Type("https://api.yourapp.dev/problems/license-not-found")).

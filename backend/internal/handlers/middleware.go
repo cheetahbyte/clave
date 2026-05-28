@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"net/http"
 	"os"
@@ -94,7 +95,7 @@ func (h *Handlers) RequireAdminBearerToken(next http.Handler) http.Handler {
 			return
 		}
 		token := strings.TrimPrefix(auth, "Bearer ")
-		if token != raw {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(raw)) != 1 {
 			p := problem.Of(401).
 				Append(problem.Title("Unauthorized")).
 				Append(problem.Detail("Invalid authorization token"))
