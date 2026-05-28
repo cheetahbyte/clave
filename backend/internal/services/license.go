@@ -62,6 +62,7 @@ func (svc *LicenseService) NewLicense(ctx context.Context, data dto.LicenseCreat
 		MaxActivations: data.MaxActivations,
 		LookupDigest:   digest,
 		KeyPhc:         hash,
+		CustomerEmail:  strings.ToLower(strings.TrimSpace(data.CustomerEmail)),
 	})
 
 	if err != nil {
