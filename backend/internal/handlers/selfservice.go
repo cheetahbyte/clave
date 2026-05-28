@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"os"
 	"strings"
 	"time"
 
@@ -88,19 +89,26 @@ func (h *Handlers) ListSelfServiceLicenses(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, licenses)
 }
 
+func trustProxyHeaders() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("TRUST_PROXY_HEADERS")))
+	return v == "true" || v == "1" || v == "yes"
+}
+
 func clientIPAddr(r *http.Request) *netip.Addr {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		if len(parts) > 0 {
-			if a, ok := parseNetipAddr(strings.TrimSpace(parts[0])); ok {
-				return &a
+	if trustProxyHeaders() {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			if len(parts) > 0 {
+				if a, ok := parseNetipAddr(strings.TrimSpace(parts[0])); ok {
+					return &a
+				}
 			}
 		}
-	}
 
-	if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
-		if a, ok := parseNetipAddr(xrip); ok {
-			return &a
+		if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
+			if a, ok := parseNetipAddr(xrip); ok {
+				return &a
+			}
 		}
 	}
 

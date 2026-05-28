@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strings"
 	"time"
@@ -75,7 +76,7 @@ func (svc *SelfServiceService) ValidateToken(
 
 	email, err := svc.repo.ConsumeSelfServiceToken(ctx, tokenHash)
 	if err != nil {
-		fmt.Println(err.Error())
+		slog.Warn("self-service token consume failed", "err", err)
 		return dto.SelfServiceValidateTokenResponse{}, errors.New("problem with token")
 	}
 

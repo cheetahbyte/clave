@@ -97,37 +97,22 @@ func (svc *UpdateService) CheckUpdate(ctx context.Context, data dto.UpdateCheckR
 	release, err := svc.fetchLatestRelease(githubCtx, repo)
 	if err != nil {
 		slog.Error("failed to fetch github release info", "repo", repo, "err", err)
-		var githubErr *githubReleaseError
 		if errors.Is(err, errNoLatestRelease) {
-			p := problem.Of(404).
+			return dto.UpdateCheckResponse{}, problem.Of(404).
 				Append(problem.Title("No release found")).
-				Append(problem.Detail("GitHub returned 404 for the configured release repository. This usually means the repository has no published latest release, the repository name is wrong, the repository is private and GITHUB_TOKEN is missing or unauthorized, or the token cannot read releases.")).
-				Append(problem.Ext("repo", repo)).
+				Append(problem.Detail("No published latest release is available for the configured repository.")).
 				Append(problem.Instance(instance))
-			if errors.As(err, &githubErr) {
-				p.Append(githubProblemExtensions(githubErr)...)
-			}
-			return dto.UpdateCheckResponse{}, p
 		}
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || os.IsTimeout(err) {
 			return dto.UpdateCheckResponse{}, problem.Of(504).
 				Append(problem.Title("Release lookup timed out")).
 				Append(problem.Detail("GitHub release information could not be fetched before the request deadline")).
-				Append(problem.Ext("repo", repo)).
-				Append(problem.Ext("timeout", githubReleaseFetchTimeout.String())).
-				Append(problem.Ext("cause", err.Error())).
 				Append(problem.Instance(instance))
 		}
-		p := problem.Of(502).
+		return dto.UpdateCheckResponse{}, problem.Of(502).
 			Append(problem.Title("Failed to fetch release info")).
 			Append(problem.Detail("GitHub release information could not be fetched")).
-			Append(problem.Ext("repo", repo)).
-			Append(problem.Ext("cause", err.Error())).
 			Append(problem.Instance(instance))
-		if errors.As(err, &githubErr) {
-			p.Append(githubProblemExtensions(githubErr)...)
-		}
-		return dto.UpdateCheckResponse{}, p
 	}
 
 	downloadURL := release.HTMLURL
@@ -180,12 +165,4 @@ func (svc *UpdateService) fetchLatestRelease(ctx context.Context, repo string) (
 		return nil, err
 	}
 	return &release, nil
-}
-
-func githubProblemExtensions(err *githubReleaseError) []problem.Option {
-	return []problem.Option{
-		problem.Ext("githubStatus", err.StatusCode),
-		problem.Ext("githubBody", err.Body),
-		problem.Ext("githubURL", err.URL),
-	}
 }
