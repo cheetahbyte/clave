@@ -17,4 +17,5 @@ type ActivateLicenseResponse struct {
 	ActivationId uuid.UUID `json:"activationId"`
 	Token        string    `json:"token"`
 	ValidUntil   int64     `json:"validUntil"`
+	MaskedEmail  string    `json:"maskedEmail"`
 }

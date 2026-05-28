@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/alexedwards/argon2id"
@@ -103,5 +104,34 @@ func (svc *ActivationService) Activate(ctx context.Context, data dto.ActivateLic
 			Append(problem.Instance(instance))
 		return dto.ActivateLicenseResponse{}, p
 	}
-	return dto.ActivateLicenseResponse{ActivationId: activation.ID, Token: signed, ValidUntil: claims.ExpiresAt.Unix()}, nil
+	return dto.ActivateLicenseResponse{
+		ActivationId: activation.ID,
+		Token:        signed,
+		ValidUntil:   claims.ExpiresAt.Unix(),
+		MaskedEmail:  maskEmail(license.CustomerEmail),
+	}, nil
+}
+
+// maskEmail obscures a licensee email for display, e.g. "john@example.com" -> "j***@e***.com".
+func maskEmail(email string) string {
+	at := strings.LastIndex(email, "@")
+	if at <= 0 || at == len(email)-1 {
+		return ""
+	}
+	local, domain := email[:at], email[at+1:]
+
+	dot := strings.LastIndex(domain, ".")
+	if dot <= 0 {
+		return ""
+	}
+	host, tld := domain[:dot], domain[dot:]
+
+	return maskPart(local) + "@" + maskPart(host) + tld
+}
+
+func maskPart(s string) string {
+	if s == "" {
+		return ""
+	}
+	return s[:1] + "***"
 }
