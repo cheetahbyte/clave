@@ -5,15 +5,19 @@ meta {
 }
 
 post {
-  url: http://localhost:8000/api/{{version}}/
+  url: {{host}}/api/{{version}}/
   body: json
-  auth: inherit
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{ADMIN_BEARER_TOKEN}}
 }
 
 body:json {
   {
     "productId": 1,
-    "maxActivations": 2
+    "maxActivations": 500
   }
 }
 

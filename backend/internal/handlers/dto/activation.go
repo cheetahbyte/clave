@@ -1,12 +1,21 @@
 package dto
 
+import "github.com/google/uuid"
+
+type Device struct {
+	HWID     string  `json:"hwid"`
+	Hostname *string `json:"hostname"`
+}
+
 type ActivateLicenseRequest struct {
-	LicenseKey string `json:"licenseKey"`
-	DeviceID   string `json:"deviceId"`
-	ProductID  int32  `json:"productId"`
+	LicenseKey    string `json:"licenseKey"`
+	ProductID     string `json:"productId"`
+	Device        Device `json:"deviceId"`
 }
 
 type ActivateLicenseResponse struct {
-	ActivationId int32  `json:"activationId"`
-	Token        string `json:"token"`
+	ActivationId uuid.UUID `json:"activationId"`
+	Token        string    `json:"token"`
+	ValidUntil   int64     `json:"validUntil"`
+	MaskedEmail  string    `json:"maskedEmail"`
 }

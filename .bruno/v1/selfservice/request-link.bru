@@ -1,0 +1,22 @@
+meta {
+  name: request-link
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://localhost:8000/api/{{version}}/selfservice/auth/request-token
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "email": "laura@mail.de"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

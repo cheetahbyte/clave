@@ -6,4 +6,5 @@ POST http://localhost:8000/api/v1/activate
 HTTP 200
 
 [Asserts]
+header "Content-Type" contains "application/json"
 jsonpath "$.test" == 1

@@ -2,42 +2,44 @@ package services
 
 import (
 	"context"
-	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/base64"
+	"encoding/base32"
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/alexedwards/argon2id"
 	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/domain"
 	"github.com/cheetahbyte/clave/internal/handlers/dto"
-	"github.com/cheetahbyte/clave/internal/licensecrypto"
-	problem "github.com/cheetahbyte/problems"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/cheetahbyte/clave/internal/repositories"
+	"github.com/google/uuid"
 )
 
-type LicenseService struct {
-	repo *db.Queries
+type LicenseProvider interface {
+	GetLicenseById(ctx context.Context, licenseId uuid.UUID) (*domain.License, error)
+	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (*domain.License, error)
+	NewLicense(ctx context.Context, data dto.LicenseCreationRequest) (dto.LicenseCreationResponse, error)
+	ListLicensesForCustomer(ctx context.Context, email string) ([]db.ListByCustomerEmailRow, error)
 }
 
-func NewLicenseService(q *db.Queries) *LicenseService {
+type LicenseService struct {
+	repo           repositories.LicenseRepository
+	signingService SigningProvider
+}
+
+func NewLicenseService(q *db.Queries, signingService *SigningService) *LicenseService {
 	return &LicenseService{
-		repo: q,
+		repo:           repositories.NewLicenseRepo(q),
+		signingService: signingService,
 	}
 }
 
 func (svc *LicenseService) NewLicense(ctx context.Context, data dto.LicenseCreationRequest) (dto.LicenseCreationResponse, error) {
-	productId := pgtype.Int4{Int32: int32(data.ProductID), Valid: true}
-	maxActivations := pgtype.Int4{Int32: int32(data.MaxActivations), Valid: true}
 
-	key, _ := licensecrypto.GenerateLicenseKey()
-	digest := licensecrypto.LookupDigest([]byte(os.Getenv("LICENSE_HMAC_SECRET")), key)
+	key, _ := svc.generateKey()
+	digest := svc.signingService.HMACSign(key, NORMALIZE_KEY)
 	salt := make([]byte, 16)
 	_, err := rand.Read(salt)
 	if err != nil {
@@ -50,11 +52,17 @@ func (svc *LicenseService) NewLicense(ctx context.Context, data dto.LicenseCreat
 		return dto.LicenseCreationResponse{}, errors.New("failed to hash license key")
 	}
 
+	productID, err := uuid.Parse(data.ProductID)
+	if err != nil {
+		return dto.LicenseCreationResponse{}, errors.New("invalid product id")
+	}
+
 	_, err = svc.repo.CreateLicense(ctx, db.CreateLicenseParams{
-		ProductID:      productId,
-		MaxActivations: maxActivations,
+		ProductID:      &productID,
+		MaxActivations: data.MaxActivations,
 		LookupDigest:   digest,
 		KeyPhc:         hash,
+		CustomerEmail:  strings.ToLower(strings.TrimSpace(data.CustomerEmail)),
 	})
 
 	if err != nil {
@@ -67,210 +75,59 @@ func (svc *LicenseService) NewLicense(ctx context.Context, data dto.LicenseCreat
 	}, nil
 }
 
-func (svc *LicenseService) issueAndSignToken(license db.License, signingKey ed25519.PrivateKey, audience string, features []string, hwid string, tokenTTL time.Duration) (string, *LicenseClaims, error) {
-	if len(signingKey) != ed25519.PrivateKeySize {
-		return "", nil, errors.New("invalid ed25519 private key size")
+func (svc *LicenseService) GetLicenseById(ctx context.Context, licenseId uuid.UUID) (*domain.License, error) {
+	return svc.repo.GetLicenseByID(ctx, licenseId)
+}
+
+func (svc *LicenseService) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (*domain.License, error) {
+	return svc.repo.GetLicenseByDigest(ctx, lookupDigest)
+}
+
+func (svc *LicenseService) generateKey() (string, error) {
+	b := make([]byte, 15)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
 
-	if tokenTTL <= 0 {
-		return "", nil, errors.New("tokenTTL must be > 0")
-	}
+	enc := base32.StdEncoding.
+		WithPadding(base32.NoPadding)
 
-	now := time.Now().UTC()
-	expires := now.Add(tokenTTL)
+	raw := enc.EncodeToString(b)
 
-	var licenseExp *int64
-	if license.ExpiresAt.Valid {
-		v := license.ExpiresAt.Time.UTC().Unix()
-		licenseExp = &v
-		if license.ExpiresAt.Time.UTC().Before(expires) {
-			expires = license.ExpiresAt.Time.UTC()
+	return svc.formatKey("LIC", raw, 4), nil
+}
+
+func (svc *LicenseService) formatKey(prefix, raw string, groupSize int) string {
+	raw = strings.ToUpper(raw)
+
+	var parts []string
+	for i := 0; i < len(raw); i += groupSize {
+		end := i + groupSize
+		if end > len(raw) {
+			end = len(raw)
 		}
+		parts = append(parts, raw[i:end])
 	}
 
-	claims := &LicenseClaims{
-		ProductID:  license.ProductID.Int32,
-		HWID:       hwid,
-		Features:   features,
-		LicenseExp: licenseExp,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   fmt.Sprintf("lic_%d", license.ID),
-			IssuedAt:  jwt.NewNumericDate(now),
-			NotBefore: jwt.NewNumericDate(now.Add(-30 * time.Second)),
-			ExpiresAt: jwt.NewNumericDate(expires),
-		},
-	}
-
-	if audience != "" {
-		claims.Audience = jwt.ClaimStrings{audience}
-	}
-
-	tok := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
-	signed, err := tok.SignedString(signingKey)
-	if err != nil {
-		return "", nil, errors.New("failed to sign jwt")
-	}
-	return signed, claims, nil
+	return prefix + "-" + strings.Join(parts, "-")
 }
 
-func (svc *LicenseService) ActivateLicense(ctx context.Context, data dto.ActivateLicenseRequest) (dto.ActivateLicenseResponse, error) {
-	instance := "/licenses/activate"
-	lookupDigest := licensecrypto.LookupDigest([]byte(os.Getenv("LICENSE_HMAC_SECRET")), data.LicenseKey)
-
-	license, err := svc.repo.GetLicenseByDigest(ctx, lookupDigest)
-	if err != nil {
-		slog.Warn("license not found", "digest", lookupDigest, "err", err)
-
-		p := problem.Of(404).
-			Append(problem.Type("https://api.yourapp.dev/problems/license-not-found")).
-			Append(problem.Title("License not found")).
-			Append(problem.Detail("No license exists for the provided key")).
-			Append(problem.Instance(instance))
-		return dto.ActivateLicenseResponse{}, p
-	}
-
-	// validate argon2
-	match, verr := argon2id.ComparePasswordAndHash(data.LicenseKey, license.KeyPhc)
-	if verr != nil || !match {
-		slog.Warn("license verification failed", "licenseId", license.ID, "err", verr)
-
-		p := problem.Of(401).
-			Append(problem.Type("https://api.yourapp.dev/problems/invalid-license")).
-			Append(problem.Title("Invalid license")).
-			Append(problem.Detail("The provided license could not be verified")).
-			Append(problem.Instance(instance))
-		return dto.ActivateLicenseResponse{}, p
-	}
-
-	licenseId := pgtype.Int4{Int32: int32(license.ID), Valid: true}
-
-	count, err := svc.repo.CountActivations(ctx, licenseId)
-	if err != nil {
-		slog.Error("failed to count activations", "licenseId", license.ID, "err", err)
-
-		p := problem.Of(500).
-			Append(problem.Type("https://api.yourapp.dev/problems/internal")).
-			Append(problem.Title("Internal error")).
-			Append(problem.Detail("Failed to process activation request")).
-			Append(problem.Instance(instance))
-		return dto.ActivateLicenseResponse{}, p
-	}
-
-	if count >= int64(license.MaxActivations.Int32) {
-		slog.Info(
-			"activation limit exceeded",
-			"licenseId", license.ID,
-			"maxActivations", license.MaxActivations.Int32,
-			"activations", count,
-		)
-
-		p := problem.Of(409).
-			Append(problem.Type("https://api.yourapp.dev/problems/activation-limit")).
-			Append(problem.Title("Activation limit exceeded")).
-			Append(problem.Detail("No more activations are available for this license")).
-			Append(problem.Instance(instance))
-		return dto.ActivateLicenseResponse{}, p
-	}
-
-	activationId, err := svc.repo.ActivateLicense(ctx, db.ActivateLicenseParams{
-		LicenseID: licenseId,
-		Hwid:      data.DeviceID,
-	})
-	if err != nil {
-		slog.Error("failed to activate license", "licenseId", license.ID, "hwid", data.DeviceID, "err", err)
-
-		p := problem.Of(500).
-			Append(problem.Type("https://api.yourapp.dev/problems/internal")).
-			Append(problem.Title("Internal error")).
-			Append(problem.Detail("Failed to create activation")).
-			Append(problem.Instance(instance))
-		return dto.ActivateLicenseResponse{}, p
-	}
-
-	pkB64 := os.Getenv("LICENSE_JWT_PRIVATE_KEY")
-	pkBytes, err := base64.StdEncoding.DecodeString(pkB64)
-	if err != nil {
-		slog.Error("failed to decode jwt private key", "err", err)
-
-		p := problem.Of(500).
-			Append(problem.Type("https://api.yourapp.dev/problems/server-misconfigured")).
-			Append(problem.Title("Server misconfigured")).
-			Append(problem.Detail("Token signing is not available")).
-			Append(problem.Instance(instance))
-		return dto.ActivateLicenseResponse{}, p
-	}
-
-	priv := ed25519.PrivateKey(pkBytes)
-	if len(priv) != ed25519.PrivateKeySize {
-		slog.Error("invalid ed25519 private key size", "size", len(priv))
-
-		p := problem.Of(500).
-			Append(problem.Type("https://api.yourapp.dev/problems/server-misconfigured")).
-			Append(problem.Title("Server misconfigured")).
-			Append(problem.Detail("Token signing is not available")).
-			Append(problem.Instance(instance))
-		return dto.ActivateLicenseResponse{}, p
-	}
-
-	signed, _, err := svc.issueAndSignToken(license, priv, "test", []string{"test"}, data.DeviceID, 10*time.Minute)
-	if err != nil {
-		slog.Error("failed to sign jwt", "licenseId", license.ID, "err", err)
-
-		p := problem.Of(500).
-			Append(problem.Type("https://api.yourapp.dev/problems/token-signing-failed")).
-			Append(problem.Title("Token signing failed")).
-			Append(problem.Detail("Failed to issue activation token")).
-			Append(problem.Instance(instance))
-		return dto.ActivateLicenseResponse{}, p
-	}
-
-	return dto.ActivateLicenseResponse{ActivationId: activationId, Token: signed}, nil
+// TODO: better error handling
+func (svc *LicenseService) ListLicensesForCustomer(ctx context.Context, email string) ([]db.ListByCustomerEmailRow, error) {
+	return svc.repo.ListByCustomerEmail(ctx, email)
 }
 
-type LicenseClaims struct {
-	ProductID  int32    `json:"product_id"`
-	HWID       string   `json:"hwid,omitempty"`
-	Features   []string `json:"features,omitempty"`
-	LicenseExp *int64   `json:"license_exp,omitempty"`
-
-	jwt.RegisteredClaims
-}
-
-func parseJWT(tokenString string, pub ed25519.PublicKey) (*LicenseClaims, error) {
-	claims := &LicenseClaims{}
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
-		if t.Method != jwt.SigningMethodEdDSA {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return pub, nil
-	}, jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}))
-	if err != nil {
-		return nil, err
-	}
-
-	if !token.Valid {
-		return nil, errors.New("invalid token")
-	}
-
-	return claims, nil
-}
-
-func licenseIDFromSubject(sub string) (pgtype.Int4, error) {
+func licenseIDFromSubject(sub string) (uuid.UUID, error) {
 	const prefix = "lic_"
 
 	if !strings.HasPrefix(sub, prefix) {
-		return pgtype.Int4{}, fmt.Errorf("invalid subject format: %q", sub)
+		return uuid.UUID{}, fmt.Errorf("invalid subject format: %q", sub)
 	}
 
-	idStr := strings.TrimPrefix(sub, prefix)
-
-	id, err := strconv.Atoi(idStr)
+	id, err := uuid.Parse(strings.TrimPrefix(sub, prefix))
 	if err != nil {
-		return pgtype.Int4{}, fmt.Errorf("invalid license id in subject: %w", err)
+		return uuid.UUID{}, fmt.Errorf("invalid license id in subject: %w", err)
 	}
 
-	return pgtype.Int4{
-		Int32: int32(id),
-		Valid: true,
-	}, nil
+	return id, nil
 }

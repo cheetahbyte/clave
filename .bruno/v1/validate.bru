@@ -5,28 +5,16 @@ meta {
 }
 
 post {
-  url: http://localhost:8000/{{version}}/validate
-  body: none
+  url: {{host}}/api/{{version}}/validate
+  body: json
   auth: inherit
 }
 
-tests {
-  // Bruno Test Script
-  test("Validation successful", function() {
-    const data = res.getBody();
-    
-    expect(res.getStatus()).to.equal(200);
-    expect(data).to.have.property('valid', true);
-    
-    expect(data.hwid).to.equal(bru.getVar("machine_hwid"));
-  });
-  
-  test("Fails on expired or tampered token", function() {
-    if (res.getStatus() !== 200) {
-      expect(res.getStatus()).to.equal(401);
-      expect(data.error).to.contain("expired");
-    }
-  });
+body:json {
+  {
+    "deviceId": "apfelmus3",
+    "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJwcm9kdWN0X2lkIjoxLCJod2lkIjoiYXBmZWxtdXMzIiwiZmVhdHVyZXMiOlsidGVzdCJdLCJzdWIiOiJsaWNfNSIsImF1ZCI6WyJ0ZXN0Il0sImV4cCI6MTc2OTg0NTUzMiwibmJmIjoxNzY5ODQ0OTAyLCJpYXQiOjE3Njk4NDQ5MzJ9.mEG-d4YSVoY0SA0r_36qLMhe4eiBapsOLMkFIpWJX_f2d2Z_1HjHr4EUy_1yd4e0zAlR-XRURAbQDQNcJxGlCw"
+  }
 }
 
 settings {

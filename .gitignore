@@ -1,0 +1,6 @@
+.gopath/
+.direnv/
+.gocache/
+.idea/
+.envrc
+.env
