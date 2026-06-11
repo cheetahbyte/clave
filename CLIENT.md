@@ -15,7 +15,7 @@ The flow is: **activate once → validate periodically**. Activation binds a lic
 All request and response bodies on `/activate` and `/validate` are AES-256-GCM encrypted using a shared secret derived from X25519 ECDH.
 
 **One-time setup:**
-1. Fetch the server's static X25519 public key: `GET /api/v1/pubkey`
+1. Fetch the server's static X25519 public key: `GET /api/v1/public/pubkey`
    ```json
    { "publicKey": "<base64url>" }
    ```
@@ -40,7 +40,7 @@ All request and response bodies on `/activate` and `/validate` are AES-256-GCM e
 
 ## Activation
 
-`POST /api/v1/activate` (encrypted)
+`POST /api/v1/client/licenses/activate` (encrypted)
 
 ```json
 {
@@ -71,7 +71,7 @@ Store `token` and `validUntil` in an encrypted local cache. You'll need both for
 
 ## Validation
 
-`POST /api/v1/validate` (encrypted)
+`POST /api/v1/client/licenses/validate` (encrypted)
 
 Call this on every app launch and periodically while running (every few hours is fine).
 
@@ -125,7 +125,7 @@ On 403/404, the license is genuinely invalid. Don't retry. On 5xx or network err
 
 ## Update Checks
 
-`POST /api/v1/updates/check` (encrypted)
+`POST /api/v1/client/updates/check` (encrypted)
 
 Call this to check whether a newer version of your app is available. The endpoint validates your JWT before responding, so only active licensed clients can query it.
 

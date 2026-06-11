@@ -8,7 +8,7 @@ import SelfServiceSignIn from "@/components/selfservice/SignIn";
 
 export type License = {
   is_active: boolean;
-  id: number;
+  id: string;
   max_activations: number;
   name: string;
   expires_at?: Date;
@@ -32,15 +32,6 @@ function formatDate(d?: Date) {
   }).format(dd);
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
-function toInt(v: unknown) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
 export default async function SelfServicePage({
   searchParams,
 }: {
@@ -52,7 +43,7 @@ export default async function SelfServicePage({
   const licenses = (await getLicenses()) as License[];
 
   const sp = await searchParams;
-  const selectedId = sp?.licenseId ? Number(sp.licenseId) : null;
+  const selectedId = sp?.licenseId ?? null;
   const selected =
     selectedId != null ? licenses.find((l) => l.id === selectedId) ?? null : null;
 

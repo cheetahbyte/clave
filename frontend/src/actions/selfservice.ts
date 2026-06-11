@@ -10,7 +10,7 @@ export async function sendMagicSelfServiceLink(formData: FormData) {
     return { ok: true };
   }
 
-  const res = await fetch(`${process.env.BACKEND_URL}/selfservice/auth/request-token`, {method: "POST",
+  const res = await fetch(`${process.env.BACKEND_URL}/api/v1/self-service/auth/request-token`, {method: "POST",
     headers: {
       "Content-Type": "application/json",
       "Accept": "application/json",
@@ -19,6 +19,12 @@ export async function sendMagicSelfServiceLink(formData: FormData) {
     cache: "no-store",
     credentials: "include"
   })
+
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("Backend error:", res.status, text);
+    throw new Error(`Backend returned ${res.status}: ${text}`);
+  }
 
   const { token, ok } = await res.json()
   const url = `http://localhost:3000/selfservice/auth?token=${token}`
@@ -47,7 +53,7 @@ export async function checkTokenValidity(): Promise<boolean> {
 
   if (!session) return false;
 
-  const res = await fetch(`${process.env.BACKEND_URL}/selfservice/check`, {
+  const res = await fetch(`${process.env.BACKEND_URL}/api/v1/self-service/session`, {
     method: "GET",
     headers: {
       Cookie: `selfservice_session=${session}`,
@@ -61,7 +67,7 @@ export async function checkTokenValidity(): Promise<boolean> {
 
 
 export async function validateToken(token: string): Promise<string> {
-  const res = await fetch(`${process.env.BACKEND_URL}/selfservice/auth/validate`, {
+  const res = await fetch(`${process.env.BACKEND_URL}/api/v1/self-service/auth/validate`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -79,7 +85,7 @@ export async function validateToken(token: string): Promise<string> {
 
 export type License = {
   is_active: boolean
-  id: number
+  id: string
   max_activations: number
   name: string
   expires_at?: Date
@@ -90,7 +96,7 @@ export async function getLicenses(): Promise<License[]> {
   const session = cookieStore.get("selfservice_session")?.value;
 
   if (!session) return [];
-  const res = await fetch(`${process.env.BACKEND_URL}/selfservice/`, {
+  const res = await fetch(`${process.env.BACKEND_URL}/api/v1/self-service/licenses`, {
     headers: {
       "Content-Type": "application/json",
        Cookie: `selfservice_session=${session}`,

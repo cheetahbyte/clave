@@ -46,11 +46,41 @@ func Register(r *chi.Mux, h *handlers.Handlers, verboseLogging bool) {
 	r.Use(middleware.Logger)
 	r.Use(httprate.LimitByIP(10, 1*time.Minute))
 
-	r.Route("/api", func(apiRouter chi.Router) {
-		apiRouter.Route("/v1", func(v1Router chi.Router) {
-			v1Router.Get("/pubkey", h.PubKey)
-			v1Router.With(h.RequireAdminBearerToken).Post("/", h.CreateLicense)
-			v1Router.Group(func(enc chi.Router) {
+	r.Route("/api", func(api chi.Router) {
+		api.Route("/v1", func(v1 chi.Router) {
+			v1.Route("/public", func(pub chi.Router) {
+				pub.Get("/pubkey", h.PubKey)
+			})
+
+			v1.Route("/client", func(client chi.Router) {
+				client.Group(func(enc chi.Router) {
+					enc.Use(handlers.OptionalEncryptionMiddleware(h.Services.Encryption(), h.Services.EncryptionDisabled()))
+					if verboseLogging {
+						enc.Use(verboseLogger)
+					}
+					enc.Post("/licenses/activate", h.ActivateLicense)
+					enc.Post("/licenses/validate", h.ValidateLicense)
+					enc.Post("/updates/check", h.CheckUpdate)
+				})
+			})
+
+			v1.Route("/admin", func(admin chi.Router) {
+				admin.With(h.RequireAdminBearerToken).Post("/licenses", h.CreateLicense)
+			})
+
+			v1.Route("/self-service", func(ss chi.Router) {
+				ss.Route("/auth", func(auth chi.Router) {
+					auth.Post("/request-token", h.RequestSelfServiceLink)
+					auth.Post("/validate", h.ValidateSelfServiceToken)
+				})
+				ss.Get("/session", h.CheckSelfServiceToken)
+				ss.With(h.RequireSelfServiceAuth).Get("/licenses", h.ListSelfServiceLicenses)
+			})
+
+			// --- Legacy aliases (backwards compat) ---
+			v1.Get("/pubkey", h.PubKey)
+			v1.With(h.RequireAdminBearerToken).Post("/", h.CreateLicense)
+			v1.Group(func(enc chi.Router) {
 				enc.Use(handlers.OptionalEncryptionMiddleware(h.Services.Encryption(), h.Services.EncryptionDisabled()))
 				if verboseLogging {
 					enc.Use(verboseLogger)
@@ -59,6 +89,23 @@ func Register(r *chi.Mux, h *handlers.Handlers, verboseLogging bool) {
 				enc.Post("/validate", h.ValidateLicense)
 				enc.Post("/updates/check", h.CheckUpdate)
 			})
+			v1.Route("/selfservice", func(ss chi.Router) {
+				ss.Route("/auth", func(auth chi.Router) {
+					auth.Post("/request-token", h.RequestSelfServiceLink)
+					auth.Post("/validate", h.ValidateSelfServiceToken)
+				})
+				ss.Get("/check", h.CheckSelfServiceToken)
+				ss.With(h.RequireSelfServiceAuth).Get("/", h.ListSelfServiceLicenses)
+			})
+		})
+
+		api.Route("/selfservice", func(ss chi.Router) {
+			ss.Route("/auth", func(auth chi.Router) {
+				auth.Post("/request-token", h.RequestSelfServiceLink)
+				auth.Post("/validate", h.ValidateSelfServiceToken)
+			})
+			ss.Get("/check", h.CheckSelfServiceToken)
+			ss.With(h.RequireSelfServiceAuth).Get("/", h.ListSelfServiceLicenses)
 		})
 	})
 }
