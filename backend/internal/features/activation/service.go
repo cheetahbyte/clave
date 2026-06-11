@@ -1,0 +1,135 @@
+package activation
+
+import (
+	"context"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/alexedwards/argon2id"
+	problem "github.com/cheetahbyte/problems"
+
+	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/shared/signing"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type Service struct {
+	repo     *Repository
+	signer   signing.Provider
+	licenses *license.Service
+}
+
+func NewService(q *db.Queries, pool *pgxpool.Pool, signer signing.Provider, licenses *license.Service) *Service {
+	return &Service{
+		repo:     NewRepository(q, pool),
+		signer:   signer,
+		licenses: licenses,
+	}
+}
+
+func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (ActivateResponse, error) {
+	instance := "/licenses/activate"
+	lookupDigest := svc.signer.HMACSign(data.LicenseKey, signing.NormalizeKey)
+
+	lic, err := svc.licenses.GetByDigest(ctx, lookupDigest)
+	if err != nil {
+		slog.Warn("license not found", "err", err)
+
+		p := problem.Of(404).
+			Append(problem.Type("https://api.yourapp.dev/problems/license-not-found")).
+			Append(problem.Title("License not found")).
+			Append(problem.Detail("No license exists for the provided key")).
+			Append(problem.Instance(instance))
+		return ActivateResponse{}, p
+	}
+
+	match, verr := argon2id.ComparePasswordAndHash(data.LicenseKey, lic.KeyPhc)
+	if verr != nil || !match {
+		slog.Warn("license verification failed", "licenseId", lic.ID, "err", verr)
+		p := problem.Of(401).
+			Append(problem.Type("https://api.yourapp.dev/problems/invalid-license")).
+			Append(problem.Title("Invalid license")).
+			Append(problem.Detail("The provided license could not be verified")).
+			Append(problem.Instance(instance))
+		return ActivateResponse{}, p
+	}
+	if !lic.Active {
+		slog.Warn("license revoked", "licenseId", lic.ID)
+		p := problem.Of(403).
+			Append(problem.Type("https://api.yourapp.dev/problems/license-revoked")).
+			Append(problem.Title("License revoked")).
+			Append(problem.Detail("This license has been revoked")).
+			Append(problem.Instance(instance))
+		return ActivateResponse{}, p
+	}
+
+	hwidHash := svc.signer.HMACSign(data.Device.HWID, signing.DontNormalizeKey)
+
+	act, err := svc.repo.ActivateAtomic(ctx, lic.ID, hwidHash, data.Device.Hostname, lic.MaxActivations)
+	if err != nil {
+		slog.Error("failed to activate license", "licenseId", lic.ID, "hwid", data.Device.HWID, "err", err)
+		p := problem.Of(500).
+			Append(problem.Type("https://api.yourapp.dev/problems/internal")).
+			Append(problem.Title("Internal error")).
+			Append(problem.Detail("Failed to process activation request")).
+			Append(problem.Instance(instance))
+		return ActivateResponse{}, p
+	}
+
+	if act == nil {
+		slog.Info(
+			"activation limit exceeded",
+			"licenseId", lic.ID,
+			"maxActivations", lic.MaxActivations,
+		)
+		p := problem.Of(409).
+			Append(problem.Type("https://api.yourapp.dev/problems/activation-limit")).
+			Append(problem.Title("Activation limit exceeded")).
+			Append(problem.Detail("No more activations are available for this license")).
+			Append(problem.Instance(instance))
+		return ActivateResponse{}, p
+	}
+
+	signed, claims, err := svc.signer.IssueAndSignLicenseToken(lic, lic.ProductID.String(), lic.Features, data.Device.HWID, 24*7*time.Hour)
+	if err != nil {
+		slog.Error("failed to sign jwt", "licenseId", lic.ID, "err", err)
+
+		p := problem.Of(500).
+			Append(problem.Type("https://api.yourapp.dev/problems/token-signing-failed")).
+			Append(problem.Title("Token signing failed")).
+			Append(problem.Detail("Failed to issue activation token")).
+			Append(problem.Instance(instance))
+		return ActivateResponse{}, p
+	}
+	return ActivateResponse{
+		ActivationID: act.ID,
+		Token:        signed,
+		ValidUntil:   claims.ExpiresAt.Unix(),
+		MaskedEmail:  maskEmail(lic.CustomerEmail),
+	}, nil
+}
+
+func maskEmail(email string) string {
+	at := strings.LastIndex(email, "@")
+	if at <= 0 || at == len(email)-1 {
+		return ""
+	}
+	local, domain := email[:at], email[at+1:]
+
+	dot := strings.LastIndex(domain, ".")
+	if dot <= 0 {
+		return ""
+	}
+	host, tld := domain[:dot], domain[dot:]
+
+	return maskPart(local) + "@" + maskPart(host) + tld
+}
+
+func maskPart(s string) string {
+	if s == "" {
+		return ""
+	}
+	return s[:1] + "***"
+}

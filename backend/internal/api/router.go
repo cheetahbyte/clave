@@ -5,11 +5,28 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cheetahbyte/clave/internal/handlers"
+	"github.com/cheetahbyte/clave/internal/shared/encryption"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
 )
+
+type Config struct {
+	Public      http.HandlerFunc
+	Activate    http.HandlerFunc
+	Validate    http.HandlerFunc
+	CheckUpdate http.HandlerFunc
+	Create      http.HandlerFunc
+	RequestLink http.HandlerFunc
+	ValidateSS  http.HandlerFunc
+	CheckSS     http.HandlerFunc
+	ListSS      http.HandlerFunc
+	SSAuth      func(http.Handler) http.Handler
+	AdminAuth   func(http.Handler) http.Handler
+	EncSvc      *encryption.Service
+	EncDisabled bool
+	Verbose     bool
+}
 
 func verboseLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -39,7 +56,7 @@ func verboseLogger(next http.Handler) http.Handler {
 	})
 }
 
-func Register(r *chi.Mux, h *handlers.Handlers, verboseLogging bool) {
+func Register(r *chi.Mux, cfg Config) {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(3 * time.Second))
@@ -49,63 +66,63 @@ func Register(r *chi.Mux, h *handlers.Handlers, verboseLogging bool) {
 	r.Route("/api", func(api chi.Router) {
 		api.Route("/v1", func(v1 chi.Router) {
 			v1.Route("/public", func(pub chi.Router) {
-				pub.Get("/pubkey", h.PubKey)
+				pub.Get("/pubkey", cfg.Public)
 			})
 
 			v1.Route("/client", func(client chi.Router) {
 				client.Group(func(enc chi.Router) {
-					enc.Use(handlers.OptionalEncryptionMiddleware(h.Services.Encryption(), h.Services.EncryptionDisabled()))
-					if verboseLogging {
+					enc.Use(encryption.OptionalMiddleware(cfg.EncSvc, cfg.EncDisabled))
+					if cfg.Verbose {
 						enc.Use(verboseLogger)
 					}
-					enc.Post("/licenses/activate", h.ActivateLicense)
-					enc.Post("/licenses/validate", h.ValidateLicense)
-					enc.Post("/updates/check", h.CheckUpdate)
+					enc.Post("/licenses/activate", cfg.Activate)
+					enc.Post("/licenses/validate", cfg.Validate)
+					enc.Post("/updates/check", cfg.CheckUpdate)
 				})
 			})
 
 			v1.Route("/admin", func(admin chi.Router) {
-				admin.With(h.RequireAdminBearerToken).Post("/licenses", h.CreateLicense)
+				admin.With(cfg.AdminAuth).Post("/licenses", cfg.Create)
 			})
 
 			v1.Route("/self-service", func(ss chi.Router) {
 				ss.Route("/auth", func(auth chi.Router) {
-					auth.Post("/request-token", h.RequestSelfServiceLink)
-					auth.Post("/validate", h.ValidateSelfServiceToken)
+					auth.Post("/request-token", cfg.RequestLink)
+					auth.Post("/validate", cfg.ValidateSS)
 				})
-				ss.Get("/session", h.CheckSelfServiceToken)
-				ss.With(h.RequireSelfServiceAuth).Get("/licenses", h.ListSelfServiceLicenses)
+				ss.Get("/session", cfg.CheckSS)
+				ss.With(cfg.SSAuth).Get("/licenses", cfg.ListSS)
 			})
 
-			// --- Legacy aliases (backwards compat) ---
-			v1.Get("/pubkey", h.PubKey)
-			v1.With(h.RequireAdminBearerToken).Post("/", h.CreateLicense)
+			// --- Legacy aliases ---
+			v1.Get("/pubkey", cfg.Public)
+			v1.With(cfg.AdminAuth).Post("/", cfg.Create)
 			v1.Group(func(enc chi.Router) {
-				enc.Use(handlers.OptionalEncryptionMiddleware(h.Services.Encryption(), h.Services.EncryptionDisabled()))
-				if verboseLogging {
+				enc.Use(encryption.OptionalMiddleware(cfg.EncSvc, cfg.EncDisabled))
+				if cfg.Verbose {
 					enc.Use(verboseLogger)
 				}
-				enc.Post("/activate", h.ActivateLicense)
-				enc.Post("/validate", h.ValidateLicense)
-				enc.Post("/updates/check", h.CheckUpdate)
+				enc.Post("/activate", cfg.Activate)
+				enc.Post("/validate", cfg.Validate)
+				enc.Post("/updates/check", cfg.CheckUpdate)
 			})
 			v1.Route("/selfservice", func(ss chi.Router) {
 				ss.Route("/auth", func(auth chi.Router) {
-					auth.Post("/request-token", h.RequestSelfServiceLink)
-					auth.Post("/validate", h.ValidateSelfServiceToken)
+					auth.Post("/request-token", cfg.RequestLink)
+					auth.Post("/validate", cfg.ValidateSS)
 				})
-				ss.Get("/check", h.CheckSelfServiceToken)
-				ss.With(h.RequireSelfServiceAuth).Get("/", h.ListSelfServiceLicenses)
+				ss.Get("/check", cfg.CheckSS)
+				ss.With(cfg.SSAuth).Get("/", cfg.ListSS)
 			})
 		})
 
 		api.Route("/selfservice", func(ss chi.Router) {
 			ss.Route("/auth", func(auth chi.Router) {
-				auth.Post("/request-token", h.RequestSelfServiceLink)
-				auth.Post("/validate", h.ValidateSelfServiceToken)
+				auth.Post("/request-token", cfg.RequestLink)
+				auth.Post("/validate", cfg.ValidateSS)
 			})
-			ss.Get("/check", h.CheckSelfServiceToken)
-			ss.With(h.RequireSelfServiceAuth).Get("/", h.ListSelfServiceLicenses)
+			ss.Get("/check", cfg.CheckSS)
+			ss.With(cfg.SSAuth).Get("/", cfg.ListSS)
 		})
 	})
 }

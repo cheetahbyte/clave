@@ -1,0 +1,27 @@
+meta {
+  name: update
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{host}}/api/{{version}}/updates/check
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "version": "0.1",
+    "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJwcm9kdWN0X2lkIjoiMzIyZjI0NWEtODU5Ni00NzRmLWJlMmItODIyYTg2ZThkZjQyIiwiaHdpZCI6ImIxMThlNDVkNTViZWQ1N2JkYTJlY2UyODc2ZjQ2NzJkNTU0ZDk5ZjRhZjIyYjAxMzQzZDdhM2NhOWVkMTY0MWUiLCJzdWIiOiJsaWNfZjhiZjY5NTItZDczMS00NDE3LTlkZTctMTNmNGRmZGM2YTkyIiwiYXVkIjpbIjMyMmYyNDVhLTg1OTYtNDc0Zi1iZTJiLTgyMmE4NmU4ZGY0MiJdLCJleHAiOjE3Nzk0NzIxNjQsIm5iZiI6MTc3ODg2NzMzNCwiaWF0IjoxNzc4ODY3MzY0fQ.NtsqryW6_jnKiDI6r6fPyRWorelBoYQsRTAPm2vNQj_uvcZDRmQeLKiRi08xfQihuGQhpPJruvcNltDocw4KCw"
+  }
+}
+
+vars:pre-request {
+  host: http://localhost:8000
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
