@@ -35,7 +35,9 @@ type Querier interface {
 	DeleteOrganizationMember(ctx context.Context, arg DeleteOrganizationMemberParams) error
 	DeletePendingInvitesByEmail(ctx context.Context, arg DeletePendingInvitesByEmailParams) error
 	DeleteProduct(ctx context.Context, arg DeleteProductParams) (uuid.UUID, error)
+	DeleteProductUpdateConfig(ctx context.Context, arg DeleteProductUpdateConfigParams) (ProductUpdateConfig, error)
 	DeleteSelfServiceDevice(ctx context.Context, arg DeleteSelfServiceDeviceParams) (uuid.UUID, error)
+	DeleteUpdateRelease(ctx context.Context, id uuid.UUID) (UpdateRelease, error)
 	DisableTOTP(ctx context.Context, id uuid.UUID) error
 	EnableTOTP(ctx context.Context, arg EnableTOTPParams) error
 	GetActivationByLicenseAndDevice(ctx context.Context, arg GetActivationByLicenseAndDeviceParams) (Activation, error)
@@ -47,6 +49,9 @@ type Querier interface {
 	GetAdminOrganizations(ctx context.Context, adminUserID uuid.UUID) ([]GetAdminOrganizationsRow, error)
 	GetAdminOverviewStatsByOrganization(ctx context.Context, organizationID uuid.UUID) (GetAdminOverviewStatsByOrganizationRow, error)
 	GetAdminTimeseriesByOrganization(ctx context.Context, arg GetAdminTimeseriesByOrganizationParams) ([]GetAdminTimeseriesByOrganizationRow, error)
+	GetChannelByProductAndName(ctx context.Context, arg GetChannelByProductAndNameParams) (UpdateChannel, error)
+	GetChannelsForProduct(ctx context.Context, productID uuid.UUID) ([]UpdateChannel, error)
+	GetDefaultChannelForProduct(ctx context.Context, productID uuid.UUID) (UpdateChannel, error)
 	GetDeviceByLicenseAndHwidHash(ctx context.Context, arg GetDeviceByLicenseAndHwidHashParams) (Device, error)
 	GetInviteByTokenHash(ctx context.Context, tokenHash string) (GetInviteByTokenHashRow, error)
 	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error)
@@ -57,25 +62,45 @@ type Querier interface {
 	GetOrganizationBySlug(ctx context.Context, slug string) (Organization, error)
 	GetOrganizationMembership(ctx context.Context, arg GetOrganizationMembershipParams) (OrganizationMember, error)
 	GetProductById(ctx context.Context, id uuid.UUID) (Product, error)
+	GetProductStorageConfig(ctx context.Context, productID uuid.UUID) (ProductStorageConfig, error)
+	GetProductUpdateConfig(ctx context.Context, arg GetProductUpdateConfigParams) (ProductUpdateConfig, error)
+	GetProductUpdateConfigs(ctx context.Context, productID uuid.UUID) ([]GetProductUpdateConfigsRow, error)
 	GetProductsByOrganization(ctx context.Context, organizationID uuid.UUID) ([]Product, error)
+	GetReleasePolicy(ctx context.Context, releaseID uuid.UUID) (UpdateReleasePolicy, error)
+	GetUpdateArtifact(ctx context.Context, id uuid.UUID) (UpdateArtifact, error)
+	GetUpdateRelease(ctx context.Context, id uuid.UUID) (UpdateRelease, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
 	InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCodeParams) error
+	InsertUpdateArtifact(ctx context.Context, arg InsertUpdateArtifactParams) (UpdateArtifact, error)
+	InsertUpdateCheck(ctx context.Context, arg InsertUpdateCheckParams) (UpdateCheck, error)
+	InsertUpdateRelease(ctx context.Context, arg InsertUpdateReleaseParams) (UpdateRelease, error)
 	InvalidateRecoveryCodes(ctx context.Context, adminUserID uuid.UUID) error
+	LatestPublishedUpdateRelease(ctx context.Context, arg LatestPublishedUpdateReleaseParams) (UpdateRelease, error)
 	ListAdminLicenseActivationsByOrganization(ctx context.Context, arg ListAdminLicenseActivationsByOrganizationParams) ([]ListAdminLicenseActivationsByOrganizationRow, error)
 	ListAdminLicensesByOrganization(ctx context.Context, arg ListAdminLicensesByOrganizationParams) ([]ListAdminLicensesByOrganizationRow, error)
 	ListAdminRecentLicensesByOrganization(ctx context.Context, arg ListAdminRecentLicensesByOrganizationParams) ([]ListAdminRecentLicensesByOrganizationRow, error)
 	ListAdminTrialsByOrganization(ctx context.Context, arg ListAdminTrialsByOrganizationParams) ([]ListAdminTrialsByOrganizationRow, error)
+	ListArtifactsForRelease(ctx context.Context, releaseID uuid.UUID) ([]UpdateArtifact, error)
 	ListAuditLogsByOrganization(ctx context.Context, arg ListAuditLogsByOrganizationParams) ([]ListAuditLogsByOrganizationRow, error)
 	ListByCustomerEmail(ctx context.Context, customerEmail string) ([]ListByCustomerEmailRow, error)
 	ListByCustomerEmailAndOrganization(ctx context.Context, arg ListByCustomerEmailAndOrganizationParams) ([]ListByCustomerEmailAndOrganizationRow, error)
 	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]ListOrganizationMembersRow, error)
 	ListPendingInvites(ctx context.Context, organizationID uuid.UUID) ([]ListPendingInvitesRow, error)
+	ListPublishedReleasesForAppcast(ctx context.Context, arg ListPublishedReleasesForAppcastParams) ([]UpdateRelease, error)
+	ListReleasesForOrganization(ctx context.Context, arg ListReleasesForOrganizationParams) ([]ListReleasesForOrganizationRow, error)
+	ListReleasesForProductChannel(ctx context.Context, arg ListReleasesForProductChannelParams) ([]UpdateRelease, error)
 	ListSelfServiceDevices(ctx context.Context, arg ListSelfServiceDevicesParams) ([]ListSelfServiceDevicesRow, error)
+	PublishUpdateRelease(ctx context.Context, id uuid.UUID) (UpdateRelease, error)
 	RevokeSelfServiceLicense(ctx context.Context, arg RevokeSelfServiceLicenseParams) (uuid.UUID, error)
 	TransferActiveTrialActivationsByEmailProduct(ctx context.Context, arg TransferActiveTrialActivationsByEmailProductParams) error
 	UpdateAdminLicense(ctx context.Context, arg UpdateAdminLicenseParams) (License, error)
 	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
+	UpsertProductStorageConfig(ctx context.Context, arg UpsertProductStorageConfigParams) (ProductStorageConfig, error)
+	UpsertProductUpdateConfig(ctx context.Context, arg UpsertProductUpdateConfigParams) (ProductUpdateConfig, error)
+	UpsertReleasePolicy(ctx context.Context, arg UpsertReleasePolicyParams) (UpdateReleasePolicy, error)
+	UpsertUpdateChannel(ctx context.Context, arg UpsertUpdateChannelParams) (UpdateChannel, error)
+	YankUpdateRelease(ctx context.Context, id uuid.UUID) (UpdateRelease, error)
 }
 
 var _ Querier = (*Queries)(nil)

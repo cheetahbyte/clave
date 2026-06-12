@@ -1,12 +1,13 @@
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const isFormData = init?.body instanceof FormData;
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     credentials: "include",
     headers: {
       "Accept": "application/json",
-      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...(init?.body && !isFormData ? { "Content-Type": "application/json" } : {}),
       ...init?.headers,
     },
   });

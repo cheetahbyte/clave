@@ -2,60 +2,78 @@ package update
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
-	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
 	problem "github.com/cheetahbyte/problems"
 
+	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
+	"github.com/cheetahbyte/clave/internal/shared/storage"
+	"github.com/google/uuid"
 )
 
-const githubReleaseFetchTimeout = 2 * time.Second
-
-var errNoLatestRelease = errors.New("no published latest release found")
-
-type githubRelease struct {
-	TagName string `json:"tag_name"`
-	Assets  []struct {
-		BrowserDownloadURL string `json:"browser_download_url"`
-	} `json:"assets"`
-	HTMLURL string `json:"html_url"`
-}
-
-type githubReleaseError struct {
-	StatusCode int
-	Body       string
-	URL        string
-}
-
-func (err *githubReleaseError) Error() string {
-	return fmt.Sprintf("github api returned %d for %s: %s", err.StatusCode, err.URL, err.Body)
-}
+const defaultChannel = "stable"
+const defaultPlatform = "macos"
 
 type Service struct {
-	licenses    *license.Service
-	signer      *signing.Service
-	client      *http.Client
-	githubRepo  string
-	githubToken string
+	licenses       *license.Service
+	signer         *signing.Service
+	repo           *Repository
+	registry       *ProviderRegistry
+	publicAppURL   string
+	storagePath    string
+	defaultStorage storage.Backend
 }
 
-func NewService(licenses *license.Service, signer *signing.Service, githubRepo, githubToken string) *Service {
+func NewService(
+	licenses *license.Service,
+	signer *signing.Service,
+	repo *Repository,
+	registry *ProviderRegistry,
+	publicAppURL string,
+	storagePath string,
+) *Service {
 	return &Service{
-		licenses:    licenses,
-		signer:      signer,
-		client:      &http.Client{Timeout: githubReleaseFetchTimeout},
-		githubRepo:  githubRepo,
-		githubToken: githubToken,
+		licenses:       licenses,
+		signer:         signer,
+		repo:           repo,
+		registry:       registry,
+		publicAppURL:   publicAppURL,
+		storagePath:    storagePath,
+		defaultStorage: storage.NewLocal(storagePath),
 	}
+}
+
+// storageForProduct resolves the storage backend for a product. Products
+// without an explicit storage config fall back to the server's default local
+// backend. The returned Kind identifies which backend was selected so it can
+// be recorded on uploaded artifacts.
+func (svc *Service) storageForProduct(ctx context.Context, productID uuid.UUID) (storage.Backend, storage.Kind, error) {
+	cfg, err := svc.repo.GetProductStorageConfig(ctx, productID)
+	if err != nil {
+		// No per-product config: use the default local backend.
+		return svc.defaultStorage, storage.KindLocal, nil
+	}
+
+	kind := storage.Kind(cfg.Backend)
+	if kind == storage.KindLocal && len(cfg.Config) <= 2 {
+		// Local backend without an explicit base_path: use the server default.
+		return svc.defaultStorage, storage.KindLocal, nil
+	}
+
+	backend, err := storage.New(kind, cfg.Config)
+	if err != nil {
+		return nil, "", fmt.Errorf("build storage backend %q: %w", kind, err)
+	}
+	return backend, kind, nil
 }
 
 func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse, error) {
@@ -88,88 +106,557 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 			Append(problem.Instance(instance))
 	}
 
-	repo := strings.TrimSpace(svc.githubRepo)
-	if repo == "" {
-		slog.Error("github repo is not configured")
+	platform := strings.TrimSpace(data.Platform)
+	if platform == "" {
+		platform = defaultPlatform
+	}
+	channel := strings.TrimSpace(data.Channel)
+	if channel == "" {
+		channel = defaultChannel
+	}
+
+	updateReq := UpdateRequest{
+		LicenseID:      licenseID.String(),
+		ProductID:      claims.ProductID,
+		Platform:       Platform(platform),
+		Channel:        channel,
+		CurrentVersion: data.Version,
+		CurrentBuild:   data.Build,
+		Arch:           data.Arch,
+		OSVersion:      data.OSVersion,
+		ClientID:       data.ClientID,
+	}
+
+	dbConfig, dbErr := svc.repo.GetProductUpdateConfig(ctx, claims.ProductID, platform, channel)
+	if dbErr != nil {
 		return CheckResponse{}, problem.Of(500).
-			Append(problem.Title("Update repository not configured")).
-			Append(problem.Detail("GITHUB_REPO must be set to owner/repo")).
+			Append(problem.Title("Update engine not configured")).
+			Append(problem.Detail("No update configuration found for this product, platform, and channel.")).
 			Append(problem.Instance(instance))
 	}
 
-	githubCtx, cancel := context.WithTimeout(ctx, githubReleaseFetchTimeout)
-	defer cancel()
+	provider, ok := svc.registry.Get(ProviderKey(dbConfig.ProviderKey))
+	if !ok {
+		slog.Error("update provider is not registered", "provider", dbConfig.ProviderKey, "product", claims.ProductID)
+		return CheckResponse{}, problem.Of(500).
+			Append(problem.Title("Update engine not configured")).
+			Append(problem.Detail("The configured update provider is not registered.")).
+			Append(problem.Instance(instance))
+	}
 
-	release, err := svc.fetchLatestRelease(githubCtx, repo)
+	providerConfig := ProviderConfig{
+		OrganizationID: dbConfig.OrganizationID,
+		ProductID:      dbConfig.ProductID,
+		Platform:       Platform(platform),
+		Channel:        channel,
+		Raw:            dbConfig.Config,
+	}
+
+	decision, err := provider.CheckForUpdate(ctx, updateReq, providerConfig)
 	if err != nil {
-		slog.Error("failed to fetch github release info", "repo", repo, "err", err)
-		if errors.Is(err, errNoLatestRelease) {
-			return CheckResponse{}, problem.Of(404).
-				Append(problem.Title("No release found")).
-				Append(problem.Detail("No published latest release is available for the configured repository.")).
-				Append(problem.Instance(instance))
-		}
-		var netErr net.Error
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || (errors.As(err, &netErr) && netErr.Timeout()) {
-			return CheckResponse{}, problem.Of(504).
-				Append(problem.Title("Release lookup timed out")).
-				Append(problem.Detail("GitHub release information could not be fetched before the request deadline")).
-				Append(problem.Instance(instance))
-		}
-		return CheckResponse{}, problem.Of(502).
-			Append(problem.Title("Failed to fetch release info")).
-			Append(problem.Detail("GitHub release information could not be fetched")).
+		slog.Error("update provider check failed", "provider", provider.Key(), "err", err)
+		return CheckResponse{}, problem.Of(500).
+			Append(problem.Title("Update check failed")).
 			Append(problem.Instance(instance))
 	}
 
-	downloadURL := release.HTMLURL
-	if len(release.Assets) > 0 {
-		downloadURL = release.Assets[0].BrowserDownloadURL
+	var releaseID *uuid.UUID
+	if decision.Metadata != nil {
+		if rid, ok := decision.Metadata["release_id"].(string); ok {
+			if parsed, parseErr := uuid.Parse(rid); parseErr == nil {
+				releaseID = &parsed
+			}
+		}
 	}
+
+	_ = svc.repo.InsertUpdateCheck(ctx, dbConfig.OrganizationID, claims.ProductID, licenseID,
+		platform, channel, string(provider.Key()),
+		data.Version, data.Build, data.Arch, data.OSVersion,
+		string(decision.Kind), releaseID,
+	)
 
 	return CheckResponse{
-		CurrentVersion:  data.Version,
-		LatestVersion:   release.TagName,
-		UpdateAvailable: release.TagName != data.Version,
-		DownloadURL:     downloadURL,
+		CurrentVersion:  decision.CurrentVersion,
+		LatestVersion:   decision.LatestVersion,
+		UpdateAvailable: decision.UpdateAvailable,
+		DownloadURL:     decision.DownloadURL,
+		Kind:            string(decision.Kind),
+		ReleaseNotes:    decision.ReleaseNotes,
+		Artifacts:       decision.Artifacts,
+		Metadata:        decision.Metadata,
 	}, nil
 }
 
-func (svc *Service) fetchLatestRelease(ctx context.Context, repo string) (*githubRelease, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", repo)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func (svc *Service) VerifyProductOwnership(ctx context.Context, orgID, productID uuid.UUID) error {
+	_, err := svc.repo.GetProductByIDAndOrganization(ctx, orgID, productID)
+	return err
+}
+
+func (svc *Service) ListProviders(ctx context.Context) []ProviderInfo {
+	return svc.registry.List(ctx)
+}
+
+func (svc *Service) GetProductUpdateConfigs(ctx context.Context, productID uuid.UUID) ([]ProductUpdateConfigDTO, error) {
+	rows, err := svc.repo.GetProductUpdateConfigs(ctx, productID)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "clave-update-service")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	if svc.githubToken != "" {
-		req.Header.Set("Authorization", "Bearer "+svc.githubToken)
+
+	result := make([]ProductUpdateConfigDTO, len(rows))
+	for i, r := range rows {
+		result[i] = ProductUpdateConfigDTO{
+			ID:          r.ID.String(),
+			ProductID:   r.ProductID.String(),
+			Platform:    r.Platform,
+			Channel:     r.ChannelName,
+			ChannelID:   r.ChannelID.String(),
+			ProviderKey: r.ProviderKey,
+			Enabled:     r.Enabled,
+			Config:      MustParseProviderConfig(r.Config),
+			AppcastURL:  svc.AppcastURL(r.ProductID, r.Platform, r.ChannelName),
+		}
+	}
+	return result, nil
+}
+
+func (svc *Service) SaveProductUpdateConfig(ctx context.Context, orgID, productID uuid.UUID, req SaveProductUpdateConfigRequest) (*ProductUpdateConfigDTO, error) {
+	if req.ProviderKey != string(ProviderSparkle) && req.ProviderKey != string(ProviderClaveNative) {
+		return nil, fmt.Errorf("unsupported provider key: %s", req.ProviderKey)
 	}
 
-	resp, err := svc.client.Do(req)
+	req.Platform = strings.ToLower(strings.TrimSpace(req.Platform))
+	req.Channel = strings.ToLower(strings.TrimSpace(req.Channel))
+
+	ch, err := svc.repo.UpsertUpdateChannel(ctx, db.UpsertUpdateChannelParams{
+		OrganizationID: orgID,
+		ProductID:      productID,
+		Name:           req.Channel,
+		IsDefault:      false,
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		githubErr := &githubReleaseError{
-			StatusCode: resp.StatusCode,
-			Body:       strings.TrimSpace(string(body)),
-			URL:        url,
-		}
-		if resp.StatusCode == http.StatusNotFound {
-			return nil, fmt.Errorf("%w: %w", errNoLatestRelease, githubErr)
-		}
-		return nil, githubErr
+	// Normalize config for Clave-managed providers
+	normalizedConfig := map[string]any{}
+	switch ProviderKey(req.ProviderKey) {
+	case ProviderSparkle:
+		normalizedConfig = map[string]any{"delivery": "sparkle"}
+	case ProviderClaveNative:
+		normalizedConfig = map[string]any{"delivery": "clave_native"}
 	}
 
-	var release githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	raw, _ := json.Marshal(normalizedConfig)
+
+	cfg, err := svc.repo.UpsertProductUpdateConfig(ctx, db.UpsertProductUpdateConfigParams{
+		OrganizationID: orgID,
+		ProductID:      productID,
+		Platform:       req.Platform,
+		ChannelID:      ch.ID,
+		ProviderKey:    req.ProviderKey,
+		Config:         raw,
+		Enabled:        req.Enabled,
+	})
+	if err != nil {
 		return nil, err
 	}
-	return &release, nil
+
+	return &ProductUpdateConfigDTO{
+		ID:          cfg.ID.String(),
+		ProductID:   cfg.ProductID.String(),
+		Platform:    cfg.Platform,
+		Channel:     ch.Name,
+		ChannelID:   ch.ID.String(),
+		ProviderKey: cfg.ProviderKey,
+		Enabled:     cfg.Enabled,
+		Config:      MustParseProviderConfig(cfg.Config),
+		AppcastURL:  svc.AppcastURL(cfg.ProductID, cfg.Platform, ch.Name),
+	}, nil
+}
+
+func (svc *Service) DeleteProductUpdateConfig(ctx context.Context, orgID, configID uuid.UUID) error {
+	_, err := svc.repo.DeleteProductUpdateConfig(ctx, configID, orgID)
+	return err
+}
+
+func (svc *Service) AppcastURL(productID uuid.UUID, platform, channel string) string {
+	if svc.publicAppURL == "" {
+		return fmt.Sprintf("/api/v1/updates/products/%s/%s/%s/appcast.xml", productID, platform, channel)
+	}
+	return fmt.Sprintf("%s/api/v1/updates/products/%s/%s/%s/appcast.xml", strings.TrimRight(svc.publicAppURL, "/"), productID, platform, channel)
+}
+
+func (svc *Service) NativeUpdateURL() string {
+	if svc.publicAppURL == "" {
+		return "/api/v1/client/updates/check"
+	}
+	return fmt.Sprintf("%s/api/v1/client/updates/check", strings.TrimRight(svc.publicAppURL, "/"))
+}
+
+func (svc *Service) GenerateAppcast(ctx context.Context, productID uuid.UUID, platform, channel string) ([]byte, error) {
+	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
+		ProductID: productID,
+		Name:      channel,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	releases, err := svc.repo.ListPublishedReleasesForAppcast(ctx, productID, platform, ch.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.Debug("generating appcast",
+		"product", productID,
+		"platform", platform,
+		"channel", channel,
+		"channelID", ch.ID,
+		"numReleases", len(releases),
+	)
+	for _, r := range releases {
+		slog.Debug("appcast release", "id", r.ID, "version", r.Version, "status", r.Status, "publishedAt", r.PublishedAt)
+	}
+
+	appcastReleases := make([]AppcastRelease, len(releases))
+	for i, rel := range releases {
+		artifacts, _ := svc.repo.ListArtifactsForRelease(ctx, rel.ID)
+		appcastReleases[i] = AppcastRelease{Release: rel, Artifacts: artifacts}
+	}
+
+	product, err := svc.licenses.GetProductByID(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+
+	return GenerateAppcastXML(product, platform, channel, appcastReleases, svc.AppcastURL(productID, platform, channel))
+}
+
+func (svc *Service) ListReleases(ctx context.Context, orgID uuid.UUID, limit, offset int32) ([]ReleaseDTO, error) {
+	rows, err := svc.repo.ListReleasesForOrganization(ctx, orgID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]ReleaseDTO, len(rows))
+	for i, r := range rows {
+		artifacts, _ := svc.repo.ListArtifactsForRelease(ctx, r.ID)
+		artifactDTOs := make([]ArtifactDTO, len(artifacts))
+		for j, a := range artifacts {
+			var sig string
+			if a.Signature != nil {
+				sig = *a.Signature
+			}
+			artifactDTOs[j] = ArtifactDTO{
+				Type:      a.ArtifactType,
+				URL:       a.Url,
+				Arch:      a.Arch,
+				Signature: sig,
+			}
+			if a.SizeBytes != nil {
+				artifactDTOs[j].SizeBytes = *a.SizeBytes
+			}
+			if a.ChecksumSha256 != nil {
+				artifactDTOs[j].SHA256 = *a.ChecksumSha256
+			}
+			if a.Filename != nil {
+				artifactDTOs[j].Filename = *a.Filename
+			}
+			if a.MimeType != nil {
+				artifactDTOs[j].MimeType = *a.MimeType
+			}
+		}
+
+		var (
+			notes        string
+			pubAt        *string
+			createdAtStr *string
+		)
+		if r.ReleaseNotes != nil {
+			notes = *r.ReleaseNotes
+		}
+		if r.PublishedAt.Valid {
+			s := r.PublishedAt.Time.Format(time.RFC3339)
+			pubAt = &s
+		}
+		if r.CreatedAt.Valid {
+			s := r.CreatedAt.Time.Format(time.RFC3339)
+			createdAtStr = &s
+		}
+
+		var buildNum string
+		if r.BuildNumber != nil {
+			buildNum = *r.BuildNumber
+		}
+
+		result[i] = ReleaseDTO{
+			ID:           r.ID.String(),
+			ProductID:    r.ProductID.String(),
+			ProductName:  r.ProductName,
+			Channel:      r.ChannelName,
+			ChannelID:    r.ChannelID.String(),
+			Platform:     r.Platform,
+			Version:      r.Version,
+			BuildNumber:  buildNum,
+			Status:       r.Status,
+			ReleaseNotes: notes,
+			PublishedAt:  pubAt,
+			CreatedAt:    createdAtStr,
+			Artifacts:    artifactDTOs,
+		}
+	}
+	return result, nil
+}
+
+func (svc *Service) CreateRelease(ctx context.Context, orgID uuid.UUID, req CreateReleaseRequest) (*ReleaseDTO, error) {
+	productID, err := uuid.Parse(req.ProductID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid product id")
+	}
+
+	if _, err := svc.repo.GetProductByIDAndOrganization(ctx, orgID, productID); err != nil {
+		return nil, fmt.Errorf("product not found in organization")
+	}
+
+	req.Platform = strings.ToLower(strings.TrimSpace(req.Platform))
+	req.Channel = strings.ToLower(strings.TrimSpace(req.Channel))
+
+	ch, err := svc.repo.UpsertUpdateChannel(ctx, db.UpsertUpdateChannelParams{
+		OrganizationID: orgID,
+		ProductID:      productID,
+		Name:           req.Channel,
+		IsDefault:      false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create channel: %w", err)
+	}
+
+	var buildNum *string
+	if req.BuildNumber != "" {
+		buildNum = &req.BuildNumber
+	}
+	var notes *string
+	if req.ReleaseNotes != "" {
+		notes = &req.ReleaseNotes
+	}
+
+	release, err := svc.repo.InsertUpdateRelease(ctx, db.InsertUpdateReleaseParams{
+		OrganizationID: orgID,
+		ProductID:      productID,
+		ChannelID:      ch.ID,
+		Platform:       req.Platform,
+		Version:        req.Version,
+		BuildNumber:    buildNum,
+		Status:         "draft",
+		ReleaseNotes:   notes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("insert release: %w", err)
+	}
+
+	dto := &ReleaseDTO{
+		ID:           release.ID.String(),
+		ProductID:    release.ProductID.String(),
+		Channel:      req.Channel,
+		ChannelID:    ch.ID.String(),
+		Platform:     release.Platform,
+		Version:      release.Version,
+		Status:       release.Status,
+		BuildNumber:  req.BuildNumber,
+		ReleaseNotes: req.ReleaseNotes,
+	}
+	return dto, nil
+}
+
+func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, reader io.Reader, artifactType, osName, arch string, originalFilename string) (*ArtifactDTOFull, error) {
+	release, err := svc.repo.GetUpdateRelease(ctx, releaseID)
+	if err != nil {
+		return nil, fmt.Errorf("release not found: %w", err)
+	}
+
+	backend, kind, err := svc.storageForProduct(ctx, release.ProductID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve storage backend: %w", err)
+	}
+
+	artifactID := uuid.New()
+	ext := filepath.Ext(originalFilename)
+	storedFilename := artifactID.String() + ext
+	storageKey := artifactID.String() + "/" + storedFilename
+
+	// Hash the stream as it is written to the backend.
+	hasher := sha256.New()
+	tee := io.TeeReader(reader, hasher)
+
+	sizeBytes, err := backend.Put(ctx, storageKey, tee)
+	if err != nil {
+		return nil, fmt.Errorf("store artifact: %w", err)
+	}
+	checksum := fmt.Sprintf("%x", hasher.Sum(nil))
+
+	downloadURL := svc.artifactDownloadURL(artifactID)
+	mimeType := mimeTypeForArtifact(artifactType)
+	backendName := string(kind)
+	artifact, err := svc.repo.InsertUpdateArtifact(ctx, db.InsertUpdateArtifactParams{
+		ReleaseID:            releaseID,
+		ArtifactType:         artifactType,
+		Os:                   osName,
+		Arch:                 arch,
+		Url:                  downloadURL,
+		SizeBytes:            &sizeBytes,
+		ChecksumSha256:       &checksum,
+		Metadata:             []byte(`{}`),
+		Filename:             &storedFilename,
+		MimeType:             &mimeType,
+		MinimumSystemVersion: nil,
+		SparkleEdSignature:   nil,
+		StorageBackend:       &backendName,
+		StorageKey:           &storageKey,
+	})
+	if err != nil {
+		_ = backend.Delete(ctx, storageKey)
+		return nil, fmt.Errorf("insert artifact: %w", err)
+	}
+
+	return &ArtifactDTOFull{
+		ID:             artifact.ID.String(),
+		ReleaseID:      artifact.ReleaseID.String(),
+		ArtifactType:   artifact.ArtifactType,
+		OS:             artifact.Os,
+		Arch:           artifact.Arch,
+		URL:            artifact.Url,
+		SizeBytes:      artifact.SizeBytes,
+		ChecksumSHA256: artifact.ChecksumSha256,
+		Signature:      artifact.Signature,
+	}, nil
+}
+
+func (svc *Service) PublishRelease(ctx context.Context, releaseID uuid.UUID) (*ReleaseDTO, error) {
+	artifacts, err := svc.repo.ListArtifactsForRelease(ctx, releaseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check artifacts: %w", err)
+	}
+	if len(artifacts) == 0 {
+		return nil, fmt.Errorf("cannot publish a release with no artifacts")
+	}
+
+	release, err := svc.repo.PublishUpdateRelease(ctx, releaseID)
+	if err != nil {
+		return nil, err
+	}
+
+	var notes string
+	if release.ReleaseNotes != nil {
+		notes = *release.ReleaseNotes
+	}
+	var buildNum string
+	if release.BuildNumber != nil {
+		buildNum = *release.BuildNumber
+	}
+
+	return &ReleaseDTO{
+		ID:           release.ID.String(),
+		ProductID:    release.ProductID.String(),
+		Platform:     release.Platform,
+		Version:      release.Version,
+		BuildNumber:  buildNum,
+		Status:       release.Status,
+		ReleaseNotes: notes,
+	}, nil
+}
+
+func (svc *Service) YankRelease(ctx context.Context, releaseID uuid.UUID) (*ReleaseDTO, error) {
+	release, err := svc.repo.YankUpdateRelease(ctx, releaseID)
+	if err != nil {
+		return nil, err
+	}
+
+	var notes string
+	if release.ReleaseNotes != nil {
+		notes = *release.ReleaseNotes
+	}
+	var buildNum string
+	if release.BuildNumber != nil {
+		buildNum = *release.BuildNumber
+	}
+
+	return &ReleaseDTO{
+		ID:           release.ID.String(),
+		ProductID:    release.ProductID.String(),
+		Platform:     release.Platform,
+		Version:      release.Version,
+		BuildNumber:  buildNum,
+		Status:       release.Status,
+		ReleaseNotes: notes,
+	}, nil
+}
+
+func (svc *Service) GetArtifact(ctx context.Context, artifactID uuid.UUID) (db.UpdateArtifact, error) {
+	return svc.repo.GetArtifact(ctx, artifactID)
+}
+
+// OpenArtifactDownload resolves the storage backend for an artifact and
+// returns a reader for its bytes along with size and mime type for response
+// headers. Caller must close the reader.
+func (svc *Service) OpenArtifactDownload(ctx context.Context, artifactID uuid.UUID) (io.ReadCloser, int64, string, error) {
+	artifact, err := svc.repo.GetArtifact(ctx, artifactID)
+	if err != nil {
+		return nil, 0, "", err
+	}
+
+	release, err := svc.repo.GetUpdateRelease(ctx, artifact.ReleaseID)
+	if err != nil {
+		return nil, 0, "", err
+	}
+
+	backend, _, err := svc.storageForProduct(ctx, release.ProductID)
+	if err != nil {
+		return nil, 0, "", err
+	}
+
+	key := svc.artifactStorageKey(artifact)
+	rc, err := backend.Open(ctx, key)
+	if err != nil {
+		return nil, 0, "", err
+	}
+
+	var size int64
+	if artifact.SizeBytes != nil {
+		size = *artifact.SizeBytes
+	}
+	mimeType := "application/octet-stream"
+	if artifact.MimeType != nil && *artifact.MimeType != "" {
+		mimeType = *artifact.MimeType
+	}
+	return rc, size, mimeType, nil
+}
+
+// artifactStorageKey returns the storage key for an artifact, deriving the
+// legacy layout for older artifacts uploaded before storage keys were tracked.
+func (svc *Service) artifactStorageKey(artifact db.UpdateArtifact) string {
+	if artifact.StorageKey != nil && *artifact.StorageKey != "" {
+		return *artifact.StorageKey
+	}
+	filename := artifact.ID.String()
+	if artifact.Filename != nil && *artifact.Filename != "" {
+		filename = *artifact.Filename
+	}
+	return artifact.ID.String() + "/" + filename
+}
+
+func (svc *Service) DeleteRelease(ctx context.Context, releaseID uuid.UUID) error {
+	_, err := svc.repo.DeleteUpdateRelease(ctx, releaseID)
+	return err
+}
+
+func (svc *Service) artifactDownloadURL(artifactID uuid.UUID) string {
+	base := svc.publicAppURL
+	if base == "" {
+		base = ""
+	}
+	base = strings.TrimRight(base, "/")
+	if base == "" {
+		return fmt.Sprintf("/api/v1/updates/artifacts/%s/download", artifactID)
+	}
+	return fmt.Sprintf("%s/api/v1/updates/artifacts/%s/download", base, artifactID)
 }

@@ -19,6 +19,7 @@ import { Route as DashDashboardRouteImport } from './routes/_dash/dashboard'
 import { Route as DashAccountRouteImport } from './routes/_dash/account'
 import { Route as R2faSetupRouteImport } from './routes/2fa/setup'
 import { Route as SelfserviceOrgSlugIndexRouteImport } from './routes/selfservice/$orgSlug/index'
+import { Route as DashUpdatesIndexRouteImport } from './routes/_dash/updates/index'
 import { Route as DashTrialsIndexRouteImport } from './routes/_dash/trials/index'
 import { Route as DashSettingsIndexRouteImport } from './routes/_dash/settings/index'
 import { Route as DashProductsIndexRouteImport } from './routes/_dash/products/index'
@@ -26,6 +27,9 @@ import { Route as DashOrganizationIndexRouteImport } from './routes/_dash/organi
 import { Route as DashLicensesIndexRouteImport } from './routes/_dash/licenses/index'
 import { Route as DashAuditIndexRouteImport } from './routes/_dash/audit/index'
 import { Route as SelfserviceOrgSlugAuthRouteImport } from './routes/selfservice/$orgSlug/auth'
+import { Route as DashUpdatesSourcesRouteImport } from './routes/_dash/updates/sources'
+import { Route as DashUpdatesReleasesRouteImport } from './routes/_dash/updates/releases'
+import { Route as DashProductsProductIdRouteImport } from './routes/_dash/products/$productId'
 import { Route as DashLicensesLicenseIdRouteImport } from './routes/_dash/licenses/$licenseId'
 
 const SelfserviceRoute = SelfserviceRouteImport.update({
@@ -77,6 +81,11 @@ const SelfserviceOrgSlugIndexRoute = SelfserviceOrgSlugIndexRouteImport.update({
   path: '/$orgSlug/',
   getParentRoute: () => SelfserviceRoute,
 } as any)
+const DashUpdatesIndexRoute = DashUpdatesIndexRouteImport.update({
+  id: '/updates/',
+  path: '/updates/',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashTrialsIndexRoute = DashTrialsIndexRouteImport.update({
   id: '/trials/',
   path: '/trials/',
@@ -112,6 +121,21 @@ const SelfserviceOrgSlugAuthRoute = SelfserviceOrgSlugAuthRouteImport.update({
   path: '/$orgSlug/auth',
   getParentRoute: () => SelfserviceRoute,
 } as any)
+const DashUpdatesSourcesRoute = DashUpdatesSourcesRouteImport.update({
+  id: '/updates/sources',
+  path: '/updates/sources',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashUpdatesReleasesRoute = DashUpdatesReleasesRouteImport.update({
+  id: '/updates/releases',
+  path: '/updates/releases',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashProductsProductIdRoute = DashProductsProductIdRouteImport.update({
+  id: '/products/$productId',
+  path: '/products/$productId',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashLicensesLicenseIdRoute = DashLicensesLicenseIdRouteImport.update({
   id: '/licenses/$licenseId',
   path: '/licenses/$licenseId',
@@ -128,6 +152,9 @@ export interface FileRoutesByFullPath {
   '/invite/$token': typeof InviteTokenRoute
   '/2fa/': typeof R2faIndexRoute
   '/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
+  '/products/$productId': typeof DashProductsProductIdRoute
+  '/updates/releases': typeof DashUpdatesReleasesRoute
+  '/updates/sources': typeof DashUpdatesSourcesRoute
   '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
   '/audit/': typeof DashAuditIndexRoute
   '/licenses/': typeof DashLicensesIndexRoute
@@ -135,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/products/': typeof DashProductsIndexRoute
   '/settings/': typeof DashSettingsIndexRoute
   '/trials/': typeof DashTrialsIndexRoute
+  '/updates/': typeof DashUpdatesIndexRoute
   '/selfservice/$orgSlug/': typeof SelfserviceOrgSlugIndexRoute
 }
 export interface FileRoutesByTo {
@@ -147,6 +175,9 @@ export interface FileRoutesByTo {
   '/invite/$token': typeof InviteTokenRoute
   '/2fa': typeof R2faIndexRoute
   '/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
+  '/products/$productId': typeof DashProductsProductIdRoute
+  '/updates/releases': typeof DashUpdatesReleasesRoute
+  '/updates/sources': typeof DashUpdatesSourcesRoute
   '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
   '/audit': typeof DashAuditIndexRoute
   '/licenses': typeof DashLicensesIndexRoute
@@ -154,6 +185,7 @@ export interface FileRoutesByTo {
   '/products': typeof DashProductsIndexRoute
   '/settings': typeof DashSettingsIndexRoute
   '/trials': typeof DashTrialsIndexRoute
+  '/updates': typeof DashUpdatesIndexRoute
   '/selfservice/$orgSlug': typeof SelfserviceOrgSlugIndexRoute
 }
 export interface FileRoutesById {
@@ -168,6 +200,9 @@ export interface FileRoutesById {
   '/invite/$token': typeof InviteTokenRoute
   '/2fa/': typeof R2faIndexRoute
   '/_dash/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
+  '/_dash/products/$productId': typeof DashProductsProductIdRoute
+  '/_dash/updates/releases': typeof DashUpdatesReleasesRoute
+  '/_dash/updates/sources': typeof DashUpdatesSourcesRoute
   '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
   '/_dash/audit/': typeof DashAuditIndexRoute
   '/_dash/licenses/': typeof DashLicensesIndexRoute
@@ -175,6 +210,7 @@ export interface FileRoutesById {
   '/_dash/products/': typeof DashProductsIndexRoute
   '/_dash/settings/': typeof DashSettingsIndexRoute
   '/_dash/trials/': typeof DashTrialsIndexRoute
+  '/_dash/updates/': typeof DashUpdatesIndexRoute
   '/selfservice/$orgSlug/': typeof SelfserviceOrgSlugIndexRoute
 }
 export interface FileRouteTypes {
@@ -189,6 +225,9 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/2fa/'
     | '/licenses/$licenseId'
+    | '/products/$productId'
+    | '/updates/releases'
+    | '/updates/sources'
     | '/selfservice/$orgSlug/auth'
     | '/audit/'
     | '/licenses/'
@@ -196,6 +235,7 @@ export interface FileRouteTypes {
     | '/products/'
     | '/settings/'
     | '/trials/'
+    | '/updates/'
     | '/selfservice/$orgSlug/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -208,6 +248,9 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/2fa'
     | '/licenses/$licenseId'
+    | '/products/$productId'
+    | '/updates/releases'
+    | '/updates/sources'
     | '/selfservice/$orgSlug/auth'
     | '/audit'
     | '/licenses'
@@ -215,6 +258,7 @@ export interface FileRouteTypes {
     | '/products'
     | '/settings'
     | '/trials'
+    | '/updates'
     | '/selfservice/$orgSlug'
   id:
     | '__root__'
@@ -228,6 +272,9 @@ export interface FileRouteTypes {
     | '/invite/$token'
     | '/2fa/'
     | '/_dash/licenses/$licenseId'
+    | '/_dash/products/$productId'
+    | '/_dash/updates/releases'
+    | '/_dash/updates/sources'
     | '/selfservice/$orgSlug/auth'
     | '/_dash/audit/'
     | '/_dash/licenses/'
@@ -235,6 +282,7 @@ export interface FileRouteTypes {
     | '/_dash/products/'
     | '/_dash/settings/'
     | '/_dash/trials/'
+    | '/_dash/updates/'
     | '/selfservice/$orgSlug/'
   fileRoutesById: FileRoutesById
 }
@@ -320,6 +368,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SelfserviceOrgSlugIndexRouteImport
       parentRoute: typeof SelfserviceRoute
     }
+    '/_dash/updates/': {
+      id: '/_dash/updates/'
+      path: '/updates'
+      fullPath: '/updates/'
+      preLoaderRoute: typeof DashUpdatesIndexRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/trials/': {
       id: '/_dash/trials/'
       path: '/trials'
@@ -369,6 +424,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SelfserviceOrgSlugAuthRouteImport
       parentRoute: typeof SelfserviceRoute
     }
+    '/_dash/updates/sources': {
+      id: '/_dash/updates/sources'
+      path: '/updates/sources'
+      fullPath: '/updates/sources'
+      preLoaderRoute: typeof DashUpdatesSourcesRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/updates/releases': {
+      id: '/_dash/updates/releases'
+      path: '/updates/releases'
+      fullPath: '/updates/releases'
+      preLoaderRoute: typeof DashUpdatesReleasesRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/products/$productId': {
+      id: '/_dash/products/$productId'
+      path: '/products/$productId'
+      fullPath: '/products/$productId'
+      preLoaderRoute: typeof DashProductsProductIdRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/licenses/$licenseId': {
       id: '/_dash/licenses/$licenseId'
       path: '/licenses/$licenseId'
@@ -383,24 +459,32 @@ interface DashRouteChildren {
   DashAccountRoute: typeof DashAccountRoute
   DashDashboardRoute: typeof DashDashboardRoute
   DashLicensesLicenseIdRoute: typeof DashLicensesLicenseIdRoute
+  DashProductsProductIdRoute: typeof DashProductsProductIdRoute
+  DashUpdatesReleasesRoute: typeof DashUpdatesReleasesRoute
+  DashUpdatesSourcesRoute: typeof DashUpdatesSourcesRoute
   DashAuditIndexRoute: typeof DashAuditIndexRoute
   DashLicensesIndexRoute: typeof DashLicensesIndexRoute
   DashOrganizationIndexRoute: typeof DashOrganizationIndexRoute
   DashProductsIndexRoute: typeof DashProductsIndexRoute
   DashSettingsIndexRoute: typeof DashSettingsIndexRoute
   DashTrialsIndexRoute: typeof DashTrialsIndexRoute
+  DashUpdatesIndexRoute: typeof DashUpdatesIndexRoute
 }
 
 const DashRouteChildren: DashRouteChildren = {
   DashAccountRoute: DashAccountRoute,
   DashDashboardRoute: DashDashboardRoute,
   DashLicensesLicenseIdRoute: DashLicensesLicenseIdRoute,
+  DashProductsProductIdRoute: DashProductsProductIdRoute,
+  DashUpdatesReleasesRoute: DashUpdatesReleasesRoute,
+  DashUpdatesSourcesRoute: DashUpdatesSourcesRoute,
   DashAuditIndexRoute: DashAuditIndexRoute,
   DashLicensesIndexRoute: DashLicensesIndexRoute,
   DashOrganizationIndexRoute: DashOrganizationIndexRoute,
   DashProductsIndexRoute: DashProductsIndexRoute,
   DashSettingsIndexRoute: DashSettingsIndexRoute,
   DashTrialsIndexRoute: DashTrialsIndexRoute,
+  DashUpdatesIndexRoute: DashUpdatesIndexRoute,
 }
 
 const DashRouteWithChildren = DashRoute._addFileChildren(DashRouteChildren)

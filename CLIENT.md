@@ -174,3 +174,54 @@ A 403 or 404 means the license is genuinely no good, so don't retry those. For 5
 - **Always check `X-Client-Key-Echo`.** If it doesn't match the ephemeral pubkey you sent, someone's replaying an old response.
 - **Encrypt your local cache.** Use the OS keychain or whatever secure storage your platform offers. Don't leave the JWT sitting in plaintext.
 - **Keep the HWID stable.** If it changes between calls, validation will start failing with a 403.
+
+---
+
+## Checking for Updates
+
+`POST /api/v1/client/updates/check` (encrypted)
+
+Use your license JWT to check if a newer version is available. The server resolves which update backend to use based on the product's configuration.
+
+```json
+{
+  "version": "1.0.0",
+  "token": "<jwt from activation or validation>",
+  "platform": "macos",
+  "channel": "stable",
+  "build": "42",
+  "arch": "arm64",
+  "osVersion": "15.0",
+  "clientId": "<stable device identifier>"
+}
+```
+
+Only `version` and `token` are required. Defaults when omitted:
+- `platform`: `"macos"`
+- `channel`: `"stable"`
+
+**You'll get back:**
+```json
+{
+  "currentVersion": "1.0.0",
+  "latestVersion": "1.1.0",
+  "updateAvailable": true,
+  "downloadUrl": "https://releases.example.com/myapp-1.1.0.dmg",
+  "kind": "update_available",
+  "releaseNotes": "Bug fixes and performance improvements.",
+  "artifacts": [
+    {
+      "type": "full",
+      "url": "https://releases.example.com/myapp-1.1.0-arm64.dmg",
+      "arch": "arm64",
+      "sizeBytes": 52428800,
+      "sha256": "abc123..."
+    }
+  ],
+  "metadata": {}
+}
+```
+
+`kind` can be `"no_update"`, `"update_available"`, `"mandatory_update"`, or `"error"`. Use this to decide whether to show a dismissible update prompt or a mandatory upgrade screen.
+
+The `clientId` field enables deterministic staged rollouts. Send a stable, unique value (e.g. a hash of the machine ID) so the server can consistently bucket your client for percentage-based releases.

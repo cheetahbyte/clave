@@ -41,6 +41,14 @@ func productItem(p db.Product) *AdminProductItem {
 	}
 }
 
+func (svc *Service) AdminGetProduct(ctx context.Context, orgID, id uuid.UUID) (*AdminProductItem, error) {
+	p, err := svc.repo.GetProductByIDAndOrganization(ctx, orgID, id)
+	if err != nil {
+		return nil, err
+	}
+	return productItem(p), nil
+}
+
 func (svc *Service) AdminCreateProduct(ctx context.Context, orgID uuid.UUID, name string, version *string, logoURL *string) (*AdminProductItem, error) {
 	p, err := svc.repo.CreateProduct(ctx, orgID, strings.TrimSpace(name), version, logoURL)
 	if err != nil {

@@ -1,5 +1,5 @@
 import * as React from "react"
-import { FlaskConical, Key, LayoutDashboard, Package, ScrollText, Settings, Users } from "lucide-react"
+import { FlaskConical, Key, LayoutDashboard, Package, Radio, Rocket, ScrollText, Settings, Users } from "lucide-react"
 import { Link, useLocation, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { useQuery } from "@tanstack/react-query"
@@ -20,16 +20,6 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
-const items = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Licenses", url: "/licenses", icon: Key },
-  { title: "Trials", url: "/trials", icon: FlaskConical },
-  { title: "Products", url: "/products", icon: Package },
-  { title: "Organization", url: "/organization", icon: Users },
-  { title: "Audit Log", url: "/audit", icon: ScrollText },
-  { title: "Settings", url: "/settings", icon: Settings },
-] as const
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -49,6 +39,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
   }
 
+  function isActive(url: string) {
+    return pathname === url || pathname.startsWith(`${url}/`)
+  }
+
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
@@ -59,20 +53,67 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarGroupLabel>Platform</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => {
-                const isActive =
-                  pathname === item.url || pathname.startsWith(`${item.url}/`)
-                return (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-                      <Link to={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/dashboard")} tooltip="Dashboard">
+                  <Link to="/dashboard"><LayoutDashboard /><span>Dashboard</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/licenses")} tooltip="Licenses">
+                  <Link to="/licenses"><Key /><span>Licenses</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/trials")} tooltip="Trials">
+                  <Link to="/trials"><FlaskConical /><span>Trials</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/products")} tooltip="Products">
+                  <Link to="/products"><Package /><span>Products</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Updates</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/updates/releases")} tooltip="Releases">
+                  <Link to="/updates/releases"><Rocket /><span>Releases</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/updates/sources")} tooltip="Sources">
+                  <Link to="/updates/sources"><Radio /><span>Sources</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Administration</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/organization")} tooltip="Organization">
+                  <Link to="/organization"><Users /><span>Organization</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/audit")} tooltip="Audit Log">
+                  <Link to="/audit"><ScrollText /><span>Audit Log</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/settings")} tooltip="Settings">
+                  <Link to="/settings"><Settings /><span>Settings</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

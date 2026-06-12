@@ -56,11 +56,29 @@ type LicenseAdminHandlers struct {
 	GetLicense    http.HandlerFunc
 	ListLicenses  http.HandlerFunc
 	ListProducts  http.HandlerFunc
+	GetProduct    http.HandlerFunc
 	CreateProduct http.HandlerFunc
 	UpdateProduct http.HandlerFunc
 	DeleteProduct http.HandlerFunc
 	UpdateLicense http.HandlerFunc
 	DeleteLicense http.HandlerFunc
+}
+
+type UpdateAdminHandlers struct {
+	ListProviders       http.HandlerFunc
+	ListConfigs         http.HandlerFunc
+	SaveConfig          http.HandlerFunc
+	DeleteConfig        http.HandlerFunc
+	Appcast             http.HandlerFunc
+	ListReleases        http.HandlerFunc
+	CreateRelease       http.HandlerFunc
+	UploadArtifact      http.HandlerFunc
+	PublishRelease      http.HandlerFunc
+	YankRelease         http.HandlerFunc
+	DeleteRelease       http.HandlerFunc
+	DownloadArtifact    http.HandlerFunc
+	GetStorageConfig    http.HandlerFunc
+	SaveStorageConfig   http.HandlerFunc
 }
 
 type OrganizationHandlers struct {
@@ -93,6 +111,7 @@ type Config struct {
 	SelfService    SelfServiceHandlers
 	AdminAuth      AdminAuthHandlers
 	LicenseAdmin   LicenseAdminHandlers
+	UpdateAdmin    UpdateAdminHandlers
 	Organization   OrganizationHandlers
 	AdminAuditLogs http.HandlerFunc
 	Middleware     MiddlewareConfig
@@ -131,6 +150,7 @@ func Register(r *chi.Mux, cfg Config) {
 	sv := cfg.SelfService
 	aa := cfg.AdminAuth
 	la := cfg.LicenseAdmin
+	ua := cfg.UpdateAdmin
 	org := cfg.Organization
 	mw := cfg.Middleware
 
@@ -192,8 +212,21 @@ func Register(r *chi.Mux, cfg Config) {
 					protected.Delete("/licenses/{id}", la.DeleteLicense)
 					protected.Get("/products", la.ListProducts)
 					protected.Post("/products", la.CreateProduct)
+					protected.Get("/products/{id}/update-configs", ua.ListConfigs)
+					protected.Post("/products/{id}/update-configs", ua.SaveConfig)
+					protected.Delete("/update-configs/{configId}", ua.DeleteConfig)
+					protected.Get("/products/{id}/storage-config", ua.GetStorageConfig)
+					protected.Put("/products/{id}/storage-config", ua.SaveStorageConfig)
+					protected.Get("/products/{id}", la.GetProduct)
 					protected.Patch("/products/{id}", la.UpdateProduct)
 					protected.Delete("/products/{id}", la.DeleteProduct)
+					protected.Get("/update-providers", ua.ListProviders)
+					protected.Get("/update-releases", ua.ListReleases)
+					protected.Post("/update-releases", ua.CreateRelease)
+					protected.Post("/update-releases/{id}/artifacts", ua.UploadArtifact)
+					protected.Post("/update-releases/{id}/publish", ua.PublishRelease)
+					protected.Post("/update-releases/{id}/yank", ua.YankRelease)
+					protected.Delete("/update-releases/{id}", ua.DeleteRelease)
 					protected.Get("/audit-logs", cfg.AdminAuditLogs)
 
 					protected.Get("/organizations", org.List)
@@ -225,6 +258,11 @@ func Register(r *chi.Mux, cfg Config) {
 			})
 
 			v1.Get("/pubkey", cfg.Public)
+
+			v1.Get("/updates/products/{productId}/{platform}/{channel}/appcast.xml", ua.Appcast)
+
+			v1.Get("/updates/artifacts/{artifactId}/download", ua.DownloadArtifact)
+
 			v1.With(mw.VerifiedAuth).Post("/", la.Create)
 			v1.Group(func(enc chi.Router) {
 				enc.Use(encryption.OptionalMiddleware(mw.EncSvc, mw.EncDisabled))

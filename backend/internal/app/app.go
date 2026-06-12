@@ -20,6 +20,8 @@ import (
 	publicfeature "github.com/cheetahbyte/clave/internal/features/public"
 	"github.com/cheetahbyte/clave/internal/features/selfservice"
 	"github.com/cheetahbyte/clave/internal/features/update"
+	"github.com/cheetahbyte/clave/internal/features/update/providers/native"
+	"github.com/cheetahbyte/clave/internal/features/update/providers/sparkle"
 	"github.com/cheetahbyte/clave/internal/features/validation"
 	"github.com/cheetahbyte/clave/internal/shared/email"
 	"github.com/cheetahbyte/clave/internal/shared/encryption"
@@ -71,7 +73,15 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	licenseSvc := license.NewService(q, pool, signer)
 	activationSvc := activation.NewService(q, pool, signer, licenseSvc)
 	validationSvc := validation.NewService(signer, licenseSvc)
-	updateSvc := update.NewService(licenseSvc, signer, cfg.GitHubRepo, cfg.GitHubToken)
+
+	updateRepo := update.NewRepository(q, pool)
+
+	updateRegistry := update.NewProviderRegistry(
+		sparkle.New(updateRepo),
+		native.New(updateRepo),
+	)
+
+	updateSvc := update.NewService(licenseSvc, signer, updateRepo, updateRegistry, cfg.PublicAppURL, cfg.UpdateArtifactStoragePath)
 	selfServiceRepo := selfservice.NewRepository(q)
 	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer)
 
@@ -186,11 +196,28 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 			GetLicense:    licenseH.AdminGetLicense,
 			ListLicenses:  licenseH.AdminListLicenses,
 			ListProducts:  licenseH.AdminListProducts,
+			GetProduct:    licenseH.AdminGetProduct,
 			CreateProduct: licenseH.AdminCreateProduct,
 			UpdateProduct: licenseH.AdminUpdateProduct,
 			DeleteProduct: licenseH.AdminDeleteProduct,
 			UpdateLicense: licenseH.AdminUpdateLicense,
 			DeleteLicense: licenseH.AdminDeleteLicense,
+		},
+		UpdateAdmin: api.UpdateAdminHandlers{
+			ListProviders:    updateH.AdminListProviders,
+			ListConfigs:      updateH.AdminListProductUpdateConfigs,
+			SaveConfig:       updateH.AdminSaveProductUpdateConfig,
+			DeleteConfig:     updateH.AdminDeleteProductUpdateConfig,
+			Appcast:          updateH.Appcast,
+			ListReleases:     updateH.AdminListReleases,
+			CreateRelease:    updateH.AdminCreateRelease,
+			UploadArtifact:   updateH.AdminUploadArtifact,
+			PublishRelease:   updateH.AdminPublishRelease,
+			YankRelease:      updateH.AdminYankRelease,
+			DeleteRelease:     updateH.AdminDeleteRelease,
+			DownloadArtifact:  updateH.DownloadArtifact,
+			GetStorageConfig:  updateH.AdminGetStorageConfig,
+			SaveStorageConfig: updateH.AdminSaveStorageConfig,
 		},
 		Organization: api.OrganizationHandlers{
 			List:          orgH.List,

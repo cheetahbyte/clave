@@ -214,6 +214,28 @@ func (h *Handler) AdminListProducts(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, products)
 }
 
+func (h *Handler) AdminGetProduct(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+
+	product, err := h.svc.AdminGetProduct(r.Context(), orgID, id)
+	if err != nil {
+		slog.Error("admin get product failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, product)
+}
+
 func (h *Handler) AdminCreateProduct(w http.ResponseWriter, r *http.Request) {
 	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
 	if !ok {

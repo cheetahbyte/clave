@@ -381,6 +381,10 @@ export function listAdminProducts(): Promise<AdminProductItem[]> {
   return adminFetch<AdminProductItem[]>("/api/v1/admin/products");
 }
 
+export function getAdminProduct(id: string): Promise<AdminProductItem> {
+  return adminFetch<AdminProductItem>(`/api/v1/admin/products/${encodeURIComponent(id)}`);
+}
+
 export interface StartTrialRequest {
   productId: string;
   device: {
@@ -401,4 +405,196 @@ export function startTrial(data: StartTrialRequest): Promise<StartTrialResponse>
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+export interface UpdateProviderInfo {
+  key: string;
+  name: string;
+  capabilities: {
+    deltaUpdates: string;
+    codeSigning: string;
+    stagedRollouts: string;
+    mandatoryUpdates: string;
+    releaseNotes: string;
+    channels: string;
+    serverSideChecks: string;
+  };
+}
+
+export interface ProductUpdateConfigDTO {
+  id: string;
+  productId: string;
+  platform: string;
+  channel: string;
+  channelId: string;
+  providerKey: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  appcastUrl?: string;
+}
+
+export function listUpdateProviders(): Promise<UpdateProviderInfo[]> {
+  return adminFetch<UpdateProviderInfo[]>("/api/v1/admin/update-providers");
+}
+
+export function listProductUpdateConfigs(productId: string): Promise<ProductUpdateConfigDTO[]> {
+  return adminFetch<ProductUpdateConfigDTO[]>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/update-configs`,
+  );
+}
+
+export function saveProductUpdateConfig(
+  productId: string,
+  data: { platform: string; channel: string; providerKey: string; enabled: boolean; config: Record<string, unknown> },
+): Promise<ProductUpdateConfigDTO> {
+  return adminFetch<ProductUpdateConfigDTO>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/update-configs`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export function deleteProductUpdateConfig(configId: string): Promise<{ ok: string }> {
+  return adminFetch<{ ok: string }>(
+    `/api/v1/admin/update-configs/${encodeURIComponent(configId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export interface StorageConfigDTO {
+  productId: string;
+  backend: string;
+  config: Record<string, unknown>;
+}
+
+export function getProductStorageConfig(productId: string): Promise<StorageConfigDTO> {
+  return adminFetch<StorageConfigDTO>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/storage-config`,
+  );
+}
+
+export function saveProductStorageConfig(
+  productId: string,
+  data: { backend: string; config: Record<string, unknown> },
+): Promise<StorageConfigDTO> {
+  return adminFetch<StorageConfigDTO>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/storage-config`,
+    {
+      method: "PUT",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export interface ReleaseArtifactDTO {
+  type: string;
+  url: string;
+  arch: string;
+  sizeBytes?: number;
+  sha256?: string;
+  signature: string;
+  filename?: string;
+  mimeType?: string;
+}
+
+export interface ReleaseDTO {
+  id: string;
+  productId: string;
+  productName: string;
+  channel: string;
+  channelId: string;
+  platform: string;
+  version: string;
+  buildNumber?: string;
+  status: string;
+  releaseNotes?: string;
+  publishedAt?: string;
+  createdAt?: string;
+  artifacts: ReleaseArtifactDTO[];
+}
+
+export interface ArtifactFullDTO {
+  id: string;
+  releaseId: string;
+  artifactType: string;
+  os: string;
+  arch: string;
+  url: string;
+  sizeBytes?: number;
+  checksumSha256?: string;
+  signature?: string;
+  filename?: string;
+  mimeType?: string;
+  minimumSystemVersion?: string;
+  sparkleEdSignature?: string;
+}
+
+export function listReleases(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<ReleaseDTO[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
+  const qs = searchParams.toString();
+  return adminFetch<ReleaseDTO[]>(`/api/v1/admin/update-releases${qs ? `?${qs}` : ""}`);
+}
+
+export function createRelease(data: {
+  productId: string;
+  platform: string;
+  channel: string;
+  version: string;
+  buildNumber?: string;
+  releaseNotes?: string;
+}): Promise<ReleaseDTO> {
+  return adminFetch<ReleaseDTO>("/api/v1/admin/update-releases", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function uploadArtifact(
+  releaseId: string,
+  file: File,
+  artifactType: string,
+  os: string,
+  arch: string,
+): Promise<ArtifactFullDTO> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("artifactType", artifactType);
+  formData.append("os", os);
+  formData.append("arch", arch);
+
+  return adminFetch<ArtifactFullDTO>(
+    `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}/artifacts`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+}
+
+export function publishRelease(releaseId: string): Promise<ReleaseDTO> {
+  return adminFetch<ReleaseDTO>(
+    `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}/publish`,
+    { method: "POST" },
+  );
+}
+
+export function yankRelease(releaseId: string): Promise<ReleaseDTO> {
+  return adminFetch<ReleaseDTO>(
+    `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}/yank`,
+    { method: "POST" },
+  );
+}
+
+export function deleteRelease(releaseId: string): Promise<{ ok: string }> {
+  return adminFetch<{ ok: string }>(
+    `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}`,
+    { method: "DELETE" },
+  );
 }

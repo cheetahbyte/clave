@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -32,7 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Pencil, Plus, Trash2, Image as ImageIcon } from "lucide-react";
+import { Pencil, Plus, Trash2, Image as ImageIcon, ExternalLink } from "lucide-react";
 
 export const Route = createFileRoute("/_dash/products/")({
   beforeLoad: async () => {
@@ -57,7 +57,6 @@ function ProductsPage() {
     queryFn: listAdminProducts,
   });
 
-  // null = closed, "new" = create, product = edit
   const [editing, setEditing] = useState<AdminProductItem | "new" | null>(null);
   const [deleting, setDeleting] = useState<AdminProductItem | null>(null);
 
@@ -102,8 +101,8 @@ function ProductsPage() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <TableRow key={i}>
+              [{ id: "sk1" }, { id: "sk2" }, { id: "sk3" }].map((s) => (
+                <TableRow key={s.id}>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-48" /></TableCell>
@@ -120,7 +119,16 @@ function ProductsPage() {
             ) : (
               products.map((p) => (
                 <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link
+                      to="/products/$productId"
+                      params={{ productId: p.id }}
+                      className="text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      {p.name}
+                      <ExternalLink className="size-3" />
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-sm">{p.version ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground font-mono text-xs">{p.id}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">

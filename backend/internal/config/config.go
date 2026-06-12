@@ -44,8 +44,7 @@ type Config struct {
 
 	TrustProxyHeaders bool
 
-	GitHubRepo  string
-	GitHubToken string
+	UpdateArtifactStoragePath string
 }
 
 func truthy(v string) bool {
@@ -79,8 +78,7 @@ func Load() (*Config, error) {
 		PublicAppURL:    os.Getenv("PUBLIC_APP_URL"),
 		Port:            getEnv("PORT", "8000"),
 		TrustProxyHeaders: truthy(os.Getenv("TRUST_PROXY_HEADERS")),
-		GitHubRepo:      os.Getenv("GITHUB_REPO"),
-		GitHubToken:     os.Getenv("GITHUB_TOKEN"),
+		UpdateArtifactStoragePath: getEnv("UPDATE_ARTIFACT_STORAGE_PATH", "./data/update-artifacts"),
 	}
 
 	if cfg.LicenseHMACSecret == "" {

@@ -114,6 +114,29 @@ type Product struct {
 	LogoUrl        *string            `json:"logo_url"`
 }
 
+type ProductStorageConfig struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	ProductID      uuid.UUID          `json:"product_id"`
+	Backend        string             `json:"backend"`
+	Config         []byte             `json:"config"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ProductUpdateConfig struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	ProductID      uuid.UUID          `json:"product_id"`
+	Platform       string             `json:"platform"`
+	ChannelID      uuid.UUID          `json:"channel_id"`
+	ProviderKey    string             `json:"provider_key"`
+	Config         []byte             `json:"config"`
+	Enabled        bool               `json:"enabled"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type SelfServiceToken struct {
 	ID        uuid.UUID          `json:"id"`
 	Email     string             `json:"email"`
@@ -130,4 +153,78 @@ type Session struct {
 	Token  string             `json:"token"`
 	Data   []byte             `json:"data"`
 	Expiry pgtype.Timestamptz `json:"expiry"`
+}
+
+type UpdateArtifact struct {
+	ID                   uuid.UUID          `json:"id"`
+	ReleaseID            uuid.UUID          `json:"release_id"`
+	ArtifactType         string             `json:"artifact_type"`
+	Os                   string             `json:"os"`
+	Arch                 string             `json:"arch"`
+	Url                  string             `json:"url"`
+	SizeBytes            *int64             `json:"size_bytes"`
+	ChecksumSha256       *string            `json:"checksum_sha256"`
+	Signature            *string            `json:"signature"`
+	Metadata             []byte             `json:"metadata"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	Filename             *string            `json:"filename"`
+	MimeType             *string            `json:"mime_type"`
+	MinimumSystemVersion *string            `json:"minimum_system_version"`
+	SparkleEdSignature   *string            `json:"sparkle_ed_signature"`
+	StorageBackend       *string            `json:"storage_backend"`
+	StorageKey           *string            `json:"storage_key"`
+}
+
+type UpdateChannel struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	ProductID      uuid.UUID          `json:"product_id"`
+	Name           string             `json:"name"`
+	IsDefault      bool               `json:"is_default"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type UpdateCheck struct {
+	ID                uuid.UUID          `json:"id"`
+	OrganizationID    pgtype.UUID        `json:"organization_id"`
+	ProductID         pgtype.UUID        `json:"product_id"`
+	LicenseID         pgtype.UUID        `json:"license_id"`
+	Platform          string             `json:"platform"`
+	Channel           string             `json:"channel"`
+	ProviderKey       string             `json:"provider_key"`
+	CurrentVersion    *string            `json:"current_version"`
+	CurrentBuild      *string            `json:"current_build"`
+	Arch              *string            `json:"arch"`
+	OsVersion         *string            `json:"os_version"`
+	Decision          string             `json:"decision"`
+	SelectedReleaseID pgtype.UUID        `json:"selected_release_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type UpdateRelease struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	ProductID      uuid.UUID          `json:"product_id"`
+	ChannelID      uuid.UUID          `json:"channel_id"`
+	Platform       string             `json:"platform"`
+	Version        string             `json:"version"`
+	BuildNumber    *string            `json:"build_number"`
+	Status         string             `json:"status"`
+	ReleaseNotes   *string            `json:"release_notes"`
+	PublishedAt    pgtype.Timestamptz `json:"published_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type UpdateReleasePolicy struct {
+	ID                  uuid.UUID          `json:"id"`
+	ReleaseID           uuid.UUID          `json:"release_id"`
+	Mandatory           bool               `json:"mandatory"`
+	MinSupportedVersion *string            `json:"min_supported_version"`
+	RolloutPercentage   int32              `json:"rollout_percentage"`
+	StartsAt            pgtype.Timestamptz `json:"starts_at"`
+	EndsAt              pgtype.Timestamptz `json:"ends_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
