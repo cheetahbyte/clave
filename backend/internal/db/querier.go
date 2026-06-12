@@ -29,6 +29,7 @@ type Querier interface {
 	CreateOrganizationMember(ctx context.Context, arg CreateOrganizationMemberParams) error
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateSelfServiceLink(ctx context.Context, arg CreateSelfServiceLinkParams) (SelfServiceToken, error)
+	DeactivateActiveTrialsByEmailProduct(ctx context.Context, arg DeactivateActiveTrialsByEmailProductParams) error
 	DeleteAdminLicense(ctx context.Context, arg DeleteAdminLicenseParams) (uuid.UUID, error)
 	DeleteInvite(ctx context.Context, arg DeleteInviteParams) error
 	DeleteOrganizationMember(ctx context.Context, arg DeleteOrganizationMemberParams) error
@@ -45,6 +46,7 @@ type Querier interface {
 	GetAdminLicenseDetailByOrganization(ctx context.Context, arg GetAdminLicenseDetailByOrganizationParams) (GetAdminLicenseDetailByOrganizationRow, error)
 	GetAdminOrganizations(ctx context.Context, adminUserID uuid.UUID) ([]GetAdminOrganizationsRow, error)
 	GetAdminOverviewStatsByOrganization(ctx context.Context, organizationID uuid.UUID) (GetAdminOverviewStatsByOrganizationRow, error)
+	GetAdminTimeseriesByOrganization(ctx context.Context, arg GetAdminTimeseriesByOrganizationParams) ([]GetAdminTimeseriesByOrganizationRow, error)
 	GetDeviceByLicenseAndHwidHash(ctx context.Context, arg GetDeviceByLicenseAndHwidHashParams) (Device, error)
 	GetInviteByTokenHash(ctx context.Context, tokenHash string) (GetInviteByTokenHashRow, error)
 	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error)
@@ -62,6 +64,7 @@ type Querier interface {
 	ListAdminLicenseActivationsByOrganization(ctx context.Context, arg ListAdminLicenseActivationsByOrganizationParams) ([]ListAdminLicenseActivationsByOrganizationRow, error)
 	ListAdminLicensesByOrganization(ctx context.Context, arg ListAdminLicensesByOrganizationParams) ([]ListAdminLicensesByOrganizationRow, error)
 	ListAdminRecentLicensesByOrganization(ctx context.Context, arg ListAdminRecentLicensesByOrganizationParams) ([]ListAdminRecentLicensesByOrganizationRow, error)
+	ListAdminTrialsByOrganization(ctx context.Context, arg ListAdminTrialsByOrganizationParams) ([]ListAdminTrialsByOrganizationRow, error)
 	ListAuditLogsByOrganization(ctx context.Context, arg ListAuditLogsByOrganizationParams) ([]ListAuditLogsByOrganizationRow, error)
 	ListByCustomerEmail(ctx context.Context, customerEmail string) ([]ListByCustomerEmailRow, error)
 	ListByCustomerEmailAndOrganization(ctx context.Context, arg ListByCustomerEmailAndOrganizationParams) ([]ListByCustomerEmailAndOrganizationRow, error)
@@ -69,6 +72,7 @@ type Querier interface {
 	ListPendingInvites(ctx context.Context, organizationID uuid.UUID) ([]ListPendingInvitesRow, error)
 	ListSelfServiceDevices(ctx context.Context, arg ListSelfServiceDevicesParams) ([]ListSelfServiceDevicesRow, error)
 	RevokeSelfServiceLicense(ctx context.Context, arg RevokeSelfServiceLicenseParams) (uuid.UUID, error)
+	TransferActiveTrialActivationsByEmailProduct(ctx context.Context, arg TransferActiveTrialActivationsByEmailProductParams) error
 	UpdateAdminLicense(ctx context.Context, arg UpdateAdminLicenseParams) (License, error)
 	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)

@@ -79,8 +79,9 @@ export function LicenseDetails({ license }: LicenseDetailsProps) {
 
   const status = licenseStatus(license);
   const maxActivations = clamp(license.max_activations || 1, 1, 999);
-  const used = clamp(devices.length, 0, maxActivations);
-  const pct = (used / maxActivations) * 100;
+  const used = devices.length;
+  const overLimit = used > maxActivations;
+  const pct = Math.min((used / maxActivations) * 100, 100);
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-8">
@@ -142,6 +143,12 @@ export function LicenseDetails({ license }: LicenseDetailsProps) {
             style={{ width: `${pct}%` }}
           />
         </div>
+
+        {overLimit && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+            {used - maxActivations} device{used - maxActivations !== 1 ? "s" : ""} above the limit of {maxActivations}. Existing devices continue to work, but no new devices can be added.
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-400">

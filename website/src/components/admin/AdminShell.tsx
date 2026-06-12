@@ -1,6 +1,5 @@
-import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
-import { AppSidebar } from "@/components/app-sidebar";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -26,8 +25,6 @@ export function AdminShell({
   children: ReactNode;
 }) {
   return (
-    <SidebarProvider>
-      <AppSidebar />
       <SidebarInset>
         <header className="bg-background/95 supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b backdrop-blur">
           <div className="flex w-full items-center gap-2 px-4">
@@ -59,6 +56,5 @@ export function AdminShell({
         </header>
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">{children}</div>
       </SidebarInset>
-    </SidebarProvider>
   );
 }

@@ -11,20 +11,22 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SelfserviceRouteImport } from './routes/selfservice'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as AccountRouteImport } from './routes/account'
+import { Route as DashRouteImport } from './routes/_dash'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as SettingsIndexRouteImport } from './routes/settings/index'
-import { Route as ProductsIndexRouteImport } from './routes/products/index'
-import { Route as OrganizationIndexRouteImport } from './routes/organization/index'
-import { Route as LicensesIndexRouteImport } from './routes/licenses/index'
-import { Route as AuditIndexRouteImport } from './routes/audit/index'
 import { Route as R2faIndexRouteImport } from './routes/2fa/index'
-import { Route as LicensesLicenseIdRouteImport } from './routes/licenses/$licenseId'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
+import { Route as DashDashboardRouteImport } from './routes/_dash/dashboard'
+import { Route as DashAccountRouteImport } from './routes/_dash/account'
 import { Route as R2faSetupRouteImport } from './routes/2fa/setup'
 import { Route as SelfserviceOrgSlugIndexRouteImport } from './routes/selfservice/$orgSlug/index'
+import { Route as DashTrialsIndexRouteImport } from './routes/_dash/trials/index'
+import { Route as DashSettingsIndexRouteImport } from './routes/_dash/settings/index'
+import { Route as DashProductsIndexRouteImport } from './routes/_dash/products/index'
+import { Route as DashOrganizationIndexRouteImport } from './routes/_dash/organization/index'
+import { Route as DashLicensesIndexRouteImport } from './routes/_dash/licenses/index'
+import { Route as DashAuditIndexRouteImport } from './routes/_dash/audit/index'
 import { Route as SelfserviceOrgSlugAuthRouteImport } from './routes/selfservice/$orgSlug/auth'
+import { Route as DashLicensesLicenseIdRouteImport } from './routes/_dash/licenses/$licenseId'
 
 const SelfserviceRoute = SelfserviceRouteImport.update({
   id: '/selfservice',
@@ -36,14 +38,8 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AccountRoute = AccountRouteImport.update({
-  id: '/account',
-  path: '/account',
+const DashRoute = DashRouteImport.update({
+  id: '/_dash',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -51,45 +47,25 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsIndexRoute = SettingsIndexRouteImport.update({
-  id: '/settings/',
-  path: '/settings/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProductsIndexRoute = ProductsIndexRouteImport.update({
-  id: '/products/',
-  path: '/products/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OrganizationIndexRoute = OrganizationIndexRouteImport.update({
-  id: '/organization/',
-  path: '/organization/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LicensesIndexRoute = LicensesIndexRouteImport.update({
-  id: '/licenses/',
-  path: '/licenses/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuditIndexRoute = AuditIndexRouteImport.update({
-  id: '/audit/',
-  path: '/audit/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const R2faIndexRoute = R2faIndexRouteImport.update({
   id: '/2fa/',
   path: '/2fa/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LicensesLicenseIdRoute = LicensesLicenseIdRouteImport.update({
-  id: '/licenses/$licenseId',
-  path: '/licenses/$licenseId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DashDashboardRoute = DashDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashAccountRoute = DashAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => DashRoute,
 } as any)
 const R2faSetupRoute = R2faSetupRouteImport.update({
   id: '/2fa/setup',
@@ -101,139 +77,175 @@ const SelfserviceOrgSlugIndexRoute = SelfserviceOrgSlugIndexRouteImport.update({
   path: '/$orgSlug/',
   getParentRoute: () => SelfserviceRoute,
 } as any)
+const DashTrialsIndexRoute = DashTrialsIndexRouteImport.update({
+  id: '/trials/',
+  path: '/trials/',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashSettingsIndexRoute = DashSettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashProductsIndexRoute = DashProductsIndexRouteImport.update({
+  id: '/products/',
+  path: '/products/',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashOrganizationIndexRoute = DashOrganizationIndexRouteImport.update({
+  id: '/organization/',
+  path: '/organization/',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashLicensesIndexRoute = DashLicensesIndexRouteImport.update({
+  id: '/licenses/',
+  path: '/licenses/',
+  getParentRoute: () => DashRoute,
+} as any)
+const DashAuditIndexRoute = DashAuditIndexRouteImport.update({
+  id: '/audit/',
+  path: '/audit/',
+  getParentRoute: () => DashRoute,
+} as any)
 const SelfserviceOrgSlugAuthRoute = SelfserviceOrgSlugAuthRouteImport.update({
   id: '/$orgSlug/auth',
   path: '/$orgSlug/auth',
   getParentRoute: () => SelfserviceRoute,
 } as any)
+const DashLicensesLicenseIdRoute = DashLicensesLicenseIdRouteImport.update({
+  id: '/licenses/$licenseId',
+  path: '/licenses/$licenseId',
+  getParentRoute: () => DashRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/account': typeof AccountRoute
-  '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/selfservice': typeof SelfserviceRouteWithChildren
   '/2fa/setup': typeof R2faSetupRoute
+  '/account': typeof DashAccountRoute
+  '/dashboard': typeof DashDashboardRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/licenses/$licenseId': typeof LicensesLicenseIdRoute
   '/2fa/': typeof R2faIndexRoute
-  '/audit/': typeof AuditIndexRoute
-  '/licenses/': typeof LicensesIndexRoute
-  '/organization/': typeof OrganizationIndexRoute
-  '/products/': typeof ProductsIndexRoute
-  '/settings/': typeof SettingsIndexRoute
+  '/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
   '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
+  '/audit/': typeof DashAuditIndexRoute
+  '/licenses/': typeof DashLicensesIndexRoute
+  '/organization/': typeof DashOrganizationIndexRoute
+  '/products/': typeof DashProductsIndexRoute
+  '/settings/': typeof DashSettingsIndexRoute
+  '/trials/': typeof DashTrialsIndexRoute
   '/selfservice/$orgSlug/': typeof SelfserviceOrgSlugIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/account': typeof AccountRoute
-  '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/selfservice': typeof SelfserviceRouteWithChildren
   '/2fa/setup': typeof R2faSetupRoute
+  '/account': typeof DashAccountRoute
+  '/dashboard': typeof DashDashboardRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/licenses/$licenseId': typeof LicensesLicenseIdRoute
   '/2fa': typeof R2faIndexRoute
-  '/audit': typeof AuditIndexRoute
-  '/licenses': typeof LicensesIndexRoute
-  '/organization': typeof OrganizationIndexRoute
-  '/products': typeof ProductsIndexRoute
-  '/settings': typeof SettingsIndexRoute
+  '/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
   '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
+  '/audit': typeof DashAuditIndexRoute
+  '/licenses': typeof DashLicensesIndexRoute
+  '/organization': typeof DashOrganizationIndexRoute
+  '/products': typeof DashProductsIndexRoute
+  '/settings': typeof DashSettingsIndexRoute
+  '/trials': typeof DashTrialsIndexRoute
   '/selfservice/$orgSlug': typeof SelfserviceOrgSlugIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/account': typeof AccountRoute
-  '/dashboard': typeof DashboardRoute
+  '/_dash': typeof DashRouteWithChildren
   '/login': typeof LoginRoute
   '/selfservice': typeof SelfserviceRouteWithChildren
   '/2fa/setup': typeof R2faSetupRoute
+  '/_dash/account': typeof DashAccountRoute
+  '/_dash/dashboard': typeof DashDashboardRoute
   '/invite/$token': typeof InviteTokenRoute
-  '/licenses/$licenseId': typeof LicensesLicenseIdRoute
   '/2fa/': typeof R2faIndexRoute
-  '/audit/': typeof AuditIndexRoute
-  '/licenses/': typeof LicensesIndexRoute
-  '/organization/': typeof OrganizationIndexRoute
-  '/products/': typeof ProductsIndexRoute
-  '/settings/': typeof SettingsIndexRoute
+  '/_dash/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
   '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
+  '/_dash/audit/': typeof DashAuditIndexRoute
+  '/_dash/licenses/': typeof DashLicensesIndexRoute
+  '/_dash/organization/': typeof DashOrganizationIndexRoute
+  '/_dash/products/': typeof DashProductsIndexRoute
+  '/_dash/settings/': typeof DashSettingsIndexRoute
+  '/_dash/trials/': typeof DashTrialsIndexRoute
   '/selfservice/$orgSlug/': typeof SelfserviceOrgSlugIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/account'
-    | '/dashboard'
     | '/login'
     | '/selfservice'
     | '/2fa/setup'
+    | '/account'
+    | '/dashboard'
     | '/invite/$token'
-    | '/licenses/$licenseId'
     | '/2fa/'
+    | '/licenses/$licenseId'
+    | '/selfservice/$orgSlug/auth'
     | '/audit/'
     | '/licenses/'
     | '/organization/'
     | '/products/'
     | '/settings/'
-    | '/selfservice/$orgSlug/auth'
+    | '/trials/'
     | '/selfservice/$orgSlug/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/account'
-    | '/dashboard'
     | '/login'
     | '/selfservice'
     | '/2fa/setup'
+    | '/account'
+    | '/dashboard'
     | '/invite/$token'
-    | '/licenses/$licenseId'
     | '/2fa'
+    | '/licenses/$licenseId'
+    | '/selfservice/$orgSlug/auth'
     | '/audit'
     | '/licenses'
     | '/organization'
     | '/products'
     | '/settings'
-    | '/selfservice/$orgSlug/auth'
+    | '/trials'
     | '/selfservice/$orgSlug'
   id:
     | '__root__'
     | '/'
-    | '/account'
-    | '/dashboard'
+    | '/_dash'
     | '/login'
     | '/selfservice'
     | '/2fa/setup'
+    | '/_dash/account'
+    | '/_dash/dashboard'
     | '/invite/$token'
-    | '/licenses/$licenseId'
     | '/2fa/'
-    | '/audit/'
-    | '/licenses/'
-    | '/organization/'
-    | '/products/'
-    | '/settings/'
+    | '/_dash/licenses/$licenseId'
     | '/selfservice/$orgSlug/auth'
+    | '/_dash/audit/'
+    | '/_dash/licenses/'
+    | '/_dash/organization/'
+    | '/_dash/products/'
+    | '/_dash/settings/'
+    | '/_dash/trials/'
     | '/selfservice/$orgSlug/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AccountRoute: typeof AccountRoute
-  DashboardRoute: typeof DashboardRoute
+  DashRoute: typeof DashRouteWithChildren
   LoginRoute: typeof LoginRoute
   SelfserviceRoute: typeof SelfserviceRouteWithChildren
   R2faSetupRoute: typeof R2faSetupRoute
   InviteTokenRoute: typeof InviteTokenRoute
-  LicensesLicenseIdRoute: typeof LicensesLicenseIdRoute
   R2faIndexRoute: typeof R2faIndexRoute
-  AuditIndexRoute: typeof AuditIndexRoute
-  LicensesIndexRoute: typeof LicensesIndexRoute
-  OrganizationIndexRoute: typeof OrganizationIndexRoute
-  ProductsIndexRoute: typeof ProductsIndexRoute
-  SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -252,18 +264,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/account': {
-      id: '/account'
-      path: '/account'
-      fullPath: '/account'
-      preLoaderRoute: typeof AccountRouteImport
+    '/_dash': {
+      id: '/_dash'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof DashRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -273,53 +278,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings/': {
-      id: '/settings/'
-      path: '/settings'
-      fullPath: '/settings/'
-      preLoaderRoute: typeof SettingsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/products/': {
-      id: '/products/'
-      path: '/products'
-      fullPath: '/products/'
-      preLoaderRoute: typeof ProductsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/organization/': {
-      id: '/organization/'
-      path: '/organization'
-      fullPath: '/organization/'
-      preLoaderRoute: typeof OrganizationIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/licenses/': {
-      id: '/licenses/'
-      path: '/licenses'
-      fullPath: '/licenses/'
-      preLoaderRoute: typeof LicensesIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/audit/': {
-      id: '/audit/'
-      path: '/audit'
-      fullPath: '/audit/'
-      preLoaderRoute: typeof AuditIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/2fa/': {
       id: '/2fa/'
       path: '/2fa'
       fullPath: '/2fa/'
       preLoaderRoute: typeof R2faIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/licenses/$licenseId': {
-      id: '/licenses/$licenseId'
-      path: '/licenses/$licenseId'
-      fullPath: '/licenses/$licenseId'
-      preLoaderRoute: typeof LicensesLicenseIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/invite/$token': {
@@ -328,6 +291,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/invite/$token'
       preLoaderRoute: typeof InviteTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_dash/dashboard': {
+      id: '/_dash/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashDashboardRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/account': {
+      id: '/_dash/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof DashAccountRouteImport
+      parentRoute: typeof DashRoute
     }
     '/2fa/setup': {
       id: '/2fa/setup'
@@ -343,6 +320,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SelfserviceOrgSlugIndexRouteImport
       parentRoute: typeof SelfserviceRoute
     }
+    '/_dash/trials/': {
+      id: '/_dash/trials/'
+      path: '/trials'
+      fullPath: '/trials/'
+      preLoaderRoute: typeof DashTrialsIndexRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/settings/': {
+      id: '/_dash/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof DashSettingsIndexRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/products/': {
+      id: '/_dash/products/'
+      path: '/products'
+      fullPath: '/products/'
+      preLoaderRoute: typeof DashProductsIndexRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/organization/': {
+      id: '/_dash/organization/'
+      path: '/organization'
+      fullPath: '/organization/'
+      preLoaderRoute: typeof DashOrganizationIndexRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/licenses/': {
+      id: '/_dash/licenses/'
+      path: '/licenses'
+      fullPath: '/licenses/'
+      preLoaderRoute: typeof DashLicensesIndexRouteImport
+      parentRoute: typeof DashRoute
+    }
+    '/_dash/audit/': {
+      id: '/_dash/audit/'
+      path: '/audit'
+      fullPath: '/audit/'
+      preLoaderRoute: typeof DashAuditIndexRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/selfservice/$orgSlug/auth': {
       id: '/selfservice/$orgSlug/auth'
       path: '/$orgSlug/auth'
@@ -350,8 +369,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SelfserviceOrgSlugAuthRouteImport
       parentRoute: typeof SelfserviceRoute
     }
+    '/_dash/licenses/$licenseId': {
+      id: '/_dash/licenses/$licenseId'
+      path: '/licenses/$licenseId'
+      fullPath: '/licenses/$licenseId'
+      preLoaderRoute: typeof DashLicensesLicenseIdRouteImport
+      parentRoute: typeof DashRoute
+    }
   }
 }
+
+interface DashRouteChildren {
+  DashAccountRoute: typeof DashAccountRoute
+  DashDashboardRoute: typeof DashDashboardRoute
+  DashLicensesLicenseIdRoute: typeof DashLicensesLicenseIdRoute
+  DashAuditIndexRoute: typeof DashAuditIndexRoute
+  DashLicensesIndexRoute: typeof DashLicensesIndexRoute
+  DashOrganizationIndexRoute: typeof DashOrganizationIndexRoute
+  DashProductsIndexRoute: typeof DashProductsIndexRoute
+  DashSettingsIndexRoute: typeof DashSettingsIndexRoute
+  DashTrialsIndexRoute: typeof DashTrialsIndexRoute
+}
+
+const DashRouteChildren: DashRouteChildren = {
+  DashAccountRoute: DashAccountRoute,
+  DashDashboardRoute: DashDashboardRoute,
+  DashLicensesLicenseIdRoute: DashLicensesLicenseIdRoute,
+  DashAuditIndexRoute: DashAuditIndexRoute,
+  DashLicensesIndexRoute: DashLicensesIndexRoute,
+  DashOrganizationIndexRoute: DashOrganizationIndexRoute,
+  DashProductsIndexRoute: DashProductsIndexRoute,
+  DashSettingsIndexRoute: DashSettingsIndexRoute,
+  DashTrialsIndexRoute: DashTrialsIndexRoute,
+}
+
+const DashRouteWithChildren = DashRoute._addFileChildren(DashRouteChildren)
 
 interface SelfserviceRouteChildren {
   SelfserviceOrgSlugAuthRoute: typeof SelfserviceOrgSlugAuthRoute
@@ -369,19 +421,12 @@ const SelfserviceRouteWithChildren = SelfserviceRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AccountRoute: AccountRoute,
-  DashboardRoute: DashboardRoute,
+  DashRoute: DashRouteWithChildren,
   LoginRoute: LoginRoute,
   SelfserviceRoute: SelfserviceRouteWithChildren,
   R2faSetupRoute: R2faSetupRoute,
   InviteTokenRoute: InviteTokenRoute,
-  LicensesLicenseIdRoute: LicensesLicenseIdRoute,
   R2faIndexRoute: R2faIndexRoute,
-  AuditIndexRoute: AuditIndexRoute,
-  LicensesIndexRoute: LicensesIndexRoute,
-  OrganizationIndexRoute: OrganizationIndexRoute,
-  ProductsIndexRoute: ProductsIndexRoute,
-  SettingsIndexRoute: SettingsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

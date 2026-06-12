@@ -38,6 +38,8 @@ type Config struct {
 	Admin2FAVerify     http.HandlerFunc
 	Admin2FACheck      http.HandlerFunc
 	AdminOverview      http.HandlerFunc
+	AdminTimeseries    http.HandlerFunc
+	AdminListTrials    http.HandlerFunc
 	AdminGetLicense    http.HandlerFunc
 	AdminListLicenses  http.HandlerFunc
 	AdminListProducts  http.HandlerFunc
@@ -112,10 +114,10 @@ func Register(r *chi.Mux, cfg Config) {
 					if cfg.Verbose {
 						enc.Use(verboseLogger)
 					}
-				enc.Post("/licenses/activate", cfg.Activate)
-				enc.Post("/licenses/validate", cfg.Validate)
-				enc.Post("/trials/start", cfg.TrialStart)
-				enc.Post("/updates/check", cfg.CheckUpdate)
+					enc.Post("/licenses/activate", cfg.Activate)
+					enc.Post("/licenses/validate", cfg.Validate)
+					enc.Post("/trials/start", cfg.TrialStart)
+					enc.Post("/updates/check", cfg.CheckUpdate)
 				})
 			})
 
@@ -149,6 +151,8 @@ func Register(r *chi.Mux, cfg Config) {
 					protected.Use(cfg.CSRFAuth)
 
 					protected.Get("/overview", cfg.AdminOverview)
+					protected.Get("/stats/timeseries", cfg.AdminTimeseries)
+					protected.Get("/trials", cfg.AdminListTrials)
 					protected.Get("/licenses", cfg.AdminListLicenses)
 					protected.Get("/licenses/{id}", cfg.AdminGetLicense)
 					protected.Post("/licenses", cfg.Create)

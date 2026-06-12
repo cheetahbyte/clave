@@ -8,6 +8,7 @@ type CreationRequest struct {
 	CustomerEmail  string `json:"customerEmail" validate:"required,email"`
 	IsTrial        bool   `json:"isTrial"`
 	TrialDays      int    `json:"trialDays" validate:"omitempty,gte=1,lte=365"`
+	SendEmail      bool   `json:"sendEmail"`
 }
 
 type CreationResponse struct {
@@ -17,12 +18,21 @@ type CreationResponse struct {
 }
 
 type AdminOverview struct {
-	TotalLicenses   int64 `json:"totalLicenses"`
-	ActiveLicenses  int64 `json:"activeLicenses"`
-	ExpiredLicenses int64 `json:"expiredLicenses"`
-	TotalProducts   int64 `json:"totalProducts"`
-	TotalActivations int64 `json:"totalActivations"`
-	RecentLicenses  []AdminLicenseItem `json:"recentLicenses"`
+	TotalLicenses    int64              `json:"totalLicenses"`
+	ActiveLicenses   int64              `json:"activeLicenses"`
+	ExpiredLicenses  int64              `json:"expiredLicenses"`
+	TotalProducts    int64              `json:"totalProducts"`
+	TotalActivations int64              `json:"totalActivations"`
+	TotalTrials      int64              `json:"totalTrials"`
+	ActiveTrials     int64              `json:"activeTrials"`
+	RecentLicenses   []AdminLicenseItem `json:"recentLicenses"`
+}
+
+type AdminTimeseriesPoint struct {
+	Date        string `json:"date"`
+	Licenses    int64  `json:"licenses"`
+	Trials      int64  `json:"trials"`
+	Activations int64  `json:"activations"`
 }
 
 type AdminLicenseItem struct {
@@ -45,17 +55,17 @@ type AdminLicenseListResponse struct {
 }
 
 type AdminLicenseDetailResponse struct {
-	ID              string              `json:"id"`
-	CustomerEmail   string              `json:"customerEmail"`
-	ProductName     string              `json:"productName"`
-	ProductID       string              `json:"productId"`
-	IsActive        bool                `json:"isActive"`
-	IsTrial         bool                `json:"isTrial"`
-	MaxActivations  int32               `json:"maxActivations"`
-	ActivationCount int64               `json:"activationCount"`
-	Features        []string            `json:"features"`
-	CreatedAt       *time.Time          `json:"createdAt"`
-	ExpiresAt       *time.Time          `json:"expiresAt"`
+	ID              string                `json:"id"`
+	CustomerEmail   string                `json:"customerEmail"`
+	ProductName     string                `json:"productName"`
+	ProductID       string                `json:"productId"`
+	IsActive        bool                  `json:"isActive"`
+	IsTrial         bool                  `json:"isTrial"`
+	MaxActivations  int32                 `json:"maxActivations"`
+	ActivationCount int64                 `json:"activationCount"`
+	Features        []string              `json:"features"`
+	CreatedAt       *time.Time            `json:"createdAt"`
+	ExpiresAt       *time.Time            `json:"expiresAt"`
 	Activations     []AdminActivationItem `json:"activations"`
 }
 

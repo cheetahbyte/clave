@@ -84,3 +84,48 @@ where id = sqlc.arg('license_id')
   and customer_email = sqlc.arg('customer_email')
   and organization_id = sqlc.arg('organization_id')
 returning id;
+
+-- name: DeactivateActiveTrialsByEmailProduct :exec
+UPDATE licenses
+SET
+  is_active = false,
+  expires_at = CASE
+    WHEN expires_at IS NULL OR expires_at > now() THEN now()
+    ELSE expires_at
+  END
+WHERE organization_id = sqlc.arg('organization_id')::uuid
+  AND product_id = sqlc.arg('product_id')
+  AND lower(customer_email) = lower(sqlc.arg('customer_email'))
+  AND is_trial = true
+  AND is_active = true
+  AND (expires_at IS NULL OR expires_at > now());
+
+-- name: TransferActiveTrialActivationsByEmailProduct :exec
+WITH trial_activations AS (
+    SELECT DISTINCT ON (d.hwid_hash)
+        d.hwid_hash,
+        d.hostname
+    FROM licenses l
+    JOIN devices d ON d.license_id = l.id
+    JOIN activations a ON a.license_id = l.id AND a.device_id = d.id
+    WHERE l.organization_id = sqlc.arg('organization_id')::uuid
+      AND l.product_id = sqlc.arg('product_id')
+      AND lower(l.customer_email) = lower(sqlc.arg('customer_email'))
+      AND l.is_trial = true
+      AND l.is_active = true
+      AND (l.expires_at IS NULL OR l.expires_at > now())
+    ORDER BY d.hwid_hash, a.checked_in_at DESC NULLS LAST
+),
+limited AS (
+    SELECT * FROM trial_activations
+    LIMIT sqlc.arg('max_activations')
+),
+new_devices AS (
+    INSERT INTO devices (license_id, hwid_hash, hostname)
+    SELECT sqlc.arg('paid_license_id')::uuid, tr.hwid_hash, tr.hostname
+    FROM limited tr
+    RETURNING id, hwid_hash
+)
+INSERT INTO activations (device_id, license_id)
+SELECT nd.id, sqlc.arg('paid_license_id')::uuid
+FROM new_devices nd;

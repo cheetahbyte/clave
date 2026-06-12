@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Key, LayoutDashboard, Package, ScrollText, Settings, Users } from "lucide-react"
+import { FlaskConical, Key, LayoutDashboard, Package, ScrollText, Settings, Users } from "lucide-react"
 import { Link, useLocation, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { useQuery } from "@tanstack/react-query"
@@ -23,6 +23,7 @@ import {
 const items = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Licenses", url: "/licenses", icon: Key },
+  { title: "Trials", url: "/trials", icon: FlaskConical },
   { title: "Products", url: "/products", icon: Package },
   { title: "Organization", url: "/organization", icon: Users },
   { title: "Audit Log", url: "/audit", icon: ScrollText },

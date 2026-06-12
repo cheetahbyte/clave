@@ -174,6 +174,8 @@ export interface AdminOverview {
   expiredLicenses: number;
   totalProducts: number;
   totalActivations: number;
+  totalTrials: number;
+  activeTrials: number;
   recentLicenses: AdminLicenseItem[];
 }
 
@@ -306,6 +308,7 @@ export interface CreateLicenseRequest {
   customerEmail: string;
   isTrial?: boolean;
   trialDays?: number;
+  sendEmail?: boolean;
 }
 
 export interface CreateLicenseResponse {
@@ -318,9 +321,34 @@ export function getAdminOverview(): Promise<AdminOverview> {
   return adminFetch<AdminOverview>("/api/v1/admin/overview");
 }
 
+export interface TimeseriesPoint {
+  date: string;
+  licenses: number;
+  trials: number;
+  activations: number;
+}
+
+export function getAdminTimeseries(days = 30): Promise<TimeseriesPoint[]> {
+  return adminFetch<TimeseriesPoint[]>(`/api/v1/admin/stats/timeseries?days=${days}`);
+}
+
+export interface ListTrialsParams {
+  q?: string;
+  status?: string;
+}
+
+export function listAdminTrials(params?: ListTrialsParams): Promise<AdminLicenseItem[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.q) searchParams.set("q", params.q);
+  if (params?.status) searchParams.set("status", params.status);
+  const qs = searchParams.toString();
+  return adminFetch<AdminLicenseItem[]>(`/api/v1/admin/trials${qs ? `?${qs}` : ""}`);
+}
+
 export interface ListLicensesParams {
   q?: string;
   status?: string;
+  type?: string;
   productId?: string;
   page?: number;
   pageSize?: number;
@@ -330,6 +358,7 @@ export function listAdminLicenses(params?: ListLicensesParams): Promise<AdminLic
   const searchParams = new URLSearchParams();
   if (params?.q) searchParams.set("q", params.q);
   if (params?.status) searchParams.set("status", params.status);
+  if (params?.type) searchParams.set("type", params.type);
   if (params?.productId) searchParams.set("productId", params.productId);
   if (params?.page) searchParams.set("page", String(params.page));
   if (params?.pageSize) searchParams.set("pageSize", String(params.pageSize));

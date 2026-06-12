@@ -25,6 +25,11 @@ WHERE lt.organization_id = $1::uuid
         OR ($3::text = 'expired' AND lt.expires_at IS NOT NULL AND lt.expires_at <= now())
     )
     AND ($4::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR lt.product_id = $4::uuid)
+    AND (
+        $5::text = 'all'
+        OR ($5::text = 'trial' AND lt.is_trial = true)
+        OR ($5::text = 'standard' AND lt.is_trial = false)
+    )
 `
 
 type CountAdminLicensesByOrganizationParams struct {
@@ -32,6 +37,7 @@ type CountAdminLicensesByOrganizationParams struct {
 	Q              string    `json:"q"`
 	Status         string    `json:"status"`
 	ProductID      uuid.UUID `json:"product_id"`
+	Type           string    `json:"type"`
 }
 
 func (q *Queries) CountAdminLicensesByOrganization(ctx context.Context, arg CountAdminLicensesByOrganizationParams) (int64, error) {
@@ -40,6 +46,7 @@ func (q *Queries) CountAdminLicensesByOrganization(ctx context.Context, arg Coun
 		arg.Q,
 		arg.Status,
 		arg.ProductID,
+		arg.Type,
 	)
 	var count int64
 	err := row.Scan(&count)
@@ -108,7 +115,9 @@ SELECT
     (SELECT count(*) FROM licenses WHERE organization_id = $1::uuid AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_licenses,
     (SELECT count(*) FROM licenses WHERE organization_id = $1::uuid AND expires_at IS NOT NULL AND expires_at <= now()) AS expired_licenses,
     (SELECT count(*) FROM products WHERE organization_id = $1::uuid) AS total_products,
-    (SELECT count(*) FROM activations a JOIN licenses l ON a.license_id = l.id WHERE l.organization_id = $1::uuid) AS total_activations
+    (SELECT count(*) FROM activations a JOIN licenses l ON a.license_id = l.id WHERE l.organization_id = $1::uuid) AS total_activations,
+    (SELECT count(*) FROM licenses WHERE organization_id = $1::uuid AND is_trial = true) AS total_trials,
+    (SELECT count(*) FROM licenses WHERE organization_id = $1::uuid AND is_trial = true AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_trials
 `
 
 type GetAdminOverviewStatsByOrganizationRow struct {
@@ -117,6 +126,8 @@ type GetAdminOverviewStatsByOrganizationRow struct {
 	ExpiredLicenses  int64 `json:"expired_licenses"`
 	TotalProducts    int64 `json:"total_products"`
 	TotalActivations int64 `json:"total_activations"`
+	TotalTrials      int64 `json:"total_trials"`
+	ActiveTrials     int64 `json:"active_trials"`
 }
 
 func (q *Queries) GetAdminOverviewStatsByOrganization(ctx context.Context, organizationID uuid.UUID) (GetAdminOverviewStatsByOrganizationRow, error) {
@@ -128,8 +139,69 @@ func (q *Queries) GetAdminOverviewStatsByOrganization(ctx context.Context, organ
 		&i.ExpiredLicenses,
 		&i.TotalProducts,
 		&i.TotalActivations,
+		&i.TotalTrials,
+		&i.ActiveTrials,
 	)
 	return i, err
+}
+
+const getAdminTimeseriesByOrganization = `-- name: GetAdminTimeseriesByOrganization :many
+SELECT
+    d::date AS day,
+    (SELECT count(*) FROM licenses l
+        WHERE l.organization_id = $1::uuid
+          AND l.created_at::date = d::date) AS licenses,
+    (SELECT count(*) FROM licenses l
+        WHERE l.organization_id = $1::uuid
+          AND l.is_trial = true
+          AND l.created_at::date = d::date) AS trials,
+    (SELECT count(*) FROM activations a
+        JOIN licenses l ON a.license_id = l.id
+        WHERE l.organization_id = $1::uuid
+          AND a.created_at::date = d::date) AS activations
+FROM generate_series(
+    (now() - make_interval(days => $2::int - 1))::date,
+    now()::date,
+    interval '1 day'
+) d
+ORDER BY day ASC
+`
+
+type GetAdminTimeseriesByOrganizationParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	Days           int32     `json:"days"`
+}
+
+type GetAdminTimeseriesByOrganizationRow struct {
+	Day         pgtype.Date `json:"day"`
+	Licenses    int64       `json:"licenses"`
+	Trials      int64       `json:"trials"`
+	Activations int64       `json:"activations"`
+}
+
+func (q *Queries) GetAdminTimeseriesByOrganization(ctx context.Context, arg GetAdminTimeseriesByOrganizationParams) ([]GetAdminTimeseriesByOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, getAdminTimeseriesByOrganization, arg.OrganizationID, arg.Days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetAdminTimeseriesByOrganizationRow{}
+	for rows.Next() {
+		var i GetAdminTimeseriesByOrganizationRow
+		if err := rows.Scan(
+			&i.Day,
+			&i.Licenses,
+			&i.Trials,
+			&i.Activations,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAdminLicenseActivationsByOrganization = `-- name: ListAdminLicenseActivationsByOrganization :many
@@ -216,9 +288,14 @@ WHERE lt.organization_id = $1::uuid
         OR ($3::text = 'expired' AND lt.expires_at IS NOT NULL AND lt.expires_at <= now())
     )
     AND ($4::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR lt.product_id = $4::uuid)
+    AND (
+        $5::text = 'all'
+        OR ($5::text = 'trial' AND lt.is_trial = true)
+        OR ($5::text = 'standard' AND lt.is_trial = false)
+    )
 ORDER BY lt.created_at DESC
-LIMIT $6
-OFFSET $5
+LIMIT $7
+OFFSET $6
 `
 
 type ListAdminLicensesByOrganizationParams struct {
@@ -226,6 +303,7 @@ type ListAdminLicensesByOrganizationParams struct {
 	Q              string    `json:"q"`
 	Status         string    `json:"status"`
 	ProductID      uuid.UUID `json:"product_id"`
+	Type           string    `json:"type"`
 	Offset         int32     `json:"offset"`
 	Limit          int32     `json:"limit"`
 }
@@ -248,6 +326,7 @@ func (q *Queries) ListAdminLicensesByOrganization(ctx context.Context, arg ListA
 		arg.Q,
 		arg.Status,
 		arg.ProductID,
+		arg.Type,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -323,6 +402,79 @@ func (q *Queries) ListAdminRecentLicensesByOrganization(ctx context.Context, arg
 	items := []ListAdminRecentLicensesByOrganizationRow{}
 	for rows.Next() {
 		var i ListAdminRecentLicensesByOrganizationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CustomerEmail,
+			&i.IsActive,
+			&i.MaxActivations,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.IsTrial,
+			&i.ProductName,
+			&i.ActivationCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAdminTrialsByOrganization = `-- name: ListAdminTrialsByOrganization :many
+SELECT
+    lt.id,
+    lt.customer_email,
+    lt.is_active,
+    lt.max_activations,
+    lt.created_at,
+    lt.expires_at,
+    lt.is_trial,
+    p.name AS product_name,
+    (SELECT count(*) FROM activations WHERE license_id = lt.id) AS activation_count
+FROM licenses lt
+JOIN products p ON lt.product_id = p.id
+WHERE lt.organization_id = $1::uuid
+    AND lt.is_trial = true
+    AND ($2::text = '' OR lt.customer_email ILIKE '%' || $2::text || '%' OR p.name ILIKE '%' || $2::text || '%')
+    AND (
+        $3::text = 'all'
+        OR ($3::text = 'active' AND lt.is_active = true AND (lt.expires_at IS NULL OR lt.expires_at > now()))
+        OR ($3::text = 'expired' AND lt.expires_at IS NOT NULL AND lt.expires_at <= now())
+    )
+ORDER BY lt.created_at DESC
+LIMIT 500
+`
+
+type ListAdminTrialsByOrganizationParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	Q              string    `json:"q"`
+	Status         string    `json:"status"`
+}
+
+type ListAdminTrialsByOrganizationRow struct {
+	ID              uuid.UUID          `json:"id"`
+	CustomerEmail   string             `json:"customer_email"`
+	IsActive        bool               `json:"is_active"`
+	MaxActivations  int32              `json:"max_activations"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	IsTrial         bool               `json:"is_trial"`
+	ProductName     string             `json:"product_name"`
+	ActivationCount int64              `json:"activation_count"`
+}
+
+func (q *Queries) ListAdminTrialsByOrganization(ctx context.Context, arg ListAdminTrialsByOrganizationParams) ([]ListAdminTrialsByOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listAdminTrialsByOrganization, arg.OrganizationID, arg.Q, arg.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAdminTrialsByOrganizationRow{}
+	for rows.Next() {
+		var i ListAdminTrialsByOrganizationRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.CustomerEmail,

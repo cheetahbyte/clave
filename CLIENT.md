@@ -1,40 +1,44 @@
 # Client Implementation Guide
 
-This doc covers everything your client needs to do to work with the license server.
+This is everything your client needs to talk to the license server. If you're building an integration in any language, start here.
 
 ---
 
 ## Overview
 
-The flow is: **activate once → validate periodically**. Activation binds a license key to a device and returns a signed JWT. Validation refreshes that JWT. Both endpoints use payload encryption — plain JSON over the wire is not accepted.
+The basic idea is simple: **activate once, then validate every so often**. Activation ties a license key to a specific device and hands you back a signed JWT. Validation just refreshes that JWT so you know the license is still good.
+
+A trial is really just activation without a key. Instead of sending a license key, your client asks the server to spin up a time-limited trial for the device. You get back the exact same token you'd get from a normal activation, so everything that happens afterwards (validation, grace periods, all of it) works the same way.
+
+One thing to know up front: `/activate`, `/validate`, and `/trials/start` all expect encrypted payloads. Plain JSON won't get you anywhere.
 
 ---
 
 ## Payload Encryption (required for /activate and /validate)
 
-All request and response bodies on `/activate` and `/validate` are AES-256-GCM encrypted using a shared secret derived from X25519 ECDH.
+Every request and response body on `/activate` and `/validate` is encrypted with AES-256-GCM. The key comes from an X25519 ECDH handshake, so you and the server end up with a shared secret without ever sending it over the wire.
 
-**One-time setup:**
-1. Fetch the server's static X25519 public key: `GET /api/v1/public/pubkey`
+**Do this once:**
+1. Grab the server's static X25519 public key from `GET /api/v1/public/pubkey`
    ```json
    { "publicKey": "<base64url>" }
    ```
-   Pin this key — don't fetch it fresh every time.
+   Pin it. There's no reason to fetch it on every call.
 
-**Per request:**
-1. Generate an ephemeral X25519 keypair
-2. Compute shared secret: `ECDH(your_ephemeral_privkey, server_static_pubkey)`
-3. Derive AES key: `HKDF-SHA256(shared_secret, salt=nil, info="clave-v1")` → 32 bytes
+**Do this on every request:**
+1. Generate a fresh, throwaway X25519 keypair.
+2. Work out the shared secret: `ECDH(your_ephemeral_privkey, server_static_pubkey)`.
+3. Derive the AES key: `HKDF-SHA256(shared_secret, salt=nil, info="clave-v1")`, which gives you 32 bytes.
 4. Encrypt your JSON body with AES-256-GCM:
-   - Random 12-byte nonce
-   - Wire format: `base64url(nonce || ciphertext)`
-5. Send:
+   - Use a random 12-byte nonce.
+   - Put it on the wire as `base64url(nonce || ciphertext)`.
+5. Send it off:
    - Header: `X-Client-Public-Key: <base64url of your ephemeral pubkey>`
-   - Body: the base64url ciphertext
+   - Body: the base64url ciphertext.
 
-**Response:**
-- Body is also encrypted in the same format — decrypt with the same AES key
-- Verify the `X-Client-Key-Echo` response header matches what you sent. If it doesn't, discard the response (replay attack).
+**When the response comes back:**
+- It's encrypted the same way, so decrypt it with the same AES key.
+- Check that the `X-Client-Key-Echo` header matches the key you sent. If it doesn't line up, throw the response away. Someone's probably replaying an old one.
 
 ---
 
@@ -45,8 +49,7 @@ All request and response bodies on `/activate` and `/validate` are AES-256-GCM e
 ```json
 {
   "licenseKey": "LIC-XXXX-XXXX-XXXX-XXXX",
-  "productId": 1,
-  "customerEmail": "user@example.com",
+  "productId": "<product uuid>",
   "deviceId": {
     "hwid": "<hardware fingerprint>",
     "hostname": "my-macbook"
@@ -54,18 +57,23 @@ All request and response bodies on `/activate` and `/validate` are AES-256-GCM e
 }
 ```
 
-**Hardware fingerprint (`hwid`):** Derive this from stable device identifiers — machine UUID, serial number, MAC address. Hash them together so you're sending a fixed-length string, not raw hardware data. The same device must always produce the same HWID.
+A couple of things that trip people up:
+- `productId` is the product's UUID (a string), not a number.
+- `deviceId` here is an object. Watch out: the trial endpoint below calls the same object `device` instead.
 
-**Response:**
+**About the hardware fingerprint (`hwid`):** build it from stable bits of the machine like its UUID, serial number, or MAC address. Hash those together so you're sending a fixed-length value rather than raw hardware details. The important part is consistency: the same device has to produce the same HWID every single time.
+
+**You'll get back:**
 ```json
 {
-  "activationId": 42,
+  "activationId": "<uuid>",
   "token": "<jwt>",
-  "validUntil": 1234567890
+  "validUntil": 1234567890,
+  "maskedEmail": "u***@e***.com"
 }
 ```
 
-Store `token` and `validUntil` in an encrypted local cache. You'll need both for offline grace periods.
+Stash `token` and `validUntil` in an encrypted local cache; you'll lean on both during offline grace periods. `maskedEmail` is fine to show the user (something like "licensed to u***@e***.com") - it never contains the full address.
 
 ---
 
@@ -73,7 +81,7 @@ Store `token` and `validUntil` in an encrypted local cache. You'll need both for
 
 `POST /api/v1/client/licenses/validate` (encrypted)
 
-Call this on every app launch and periodically while running (every few hours is fine).
+Run this on every launch, and again every few hours while the app is open.
 
 ```json
 {
@@ -82,7 +90,7 @@ Call this on every app launch and periodically while running (every few hours is
 }
 ```
 
-**Response:**
+**You'll get back:**
 ```json
 {
   "token": "<refreshed jwt>",
@@ -90,21 +98,58 @@ Call this on every app launch and periodically while running (every few hours is
 }
 ```
 
-Always replace your cached token with the one from the response.
+Whatever token comes back, swap it in for your cached one.
+
+---
+
+## Starting a Trial
+
+`POST /api/v1/client/trials/start` (encrypted)
+
+Reach for this when the user doesn't have a license key and you want to give them a time-limited trial tied to their device. The server creates the trial license, activates it, and hands you back the same payload `/activate` does. So as far as your client is concerned, starting a trial *is* activating.
+
+```json
+{
+  "productId": "<product uuid>",
+  "device": {
+    "hwid": "<hardware fingerprint>",
+    "hostname": "my-macbook"
+  }
+}
+```
+
+Worth noting:
+- No `licenseKey`, no `customerEmail`. The server mints the trial for you.
+- The device object is called `device` here, not `deviceId` like on the activation endpoint. The fields inside (`hwid`, `hostname`) are exactly the same.
+- Use the same `hwid` you'd use for a real activation, derived the same way. The server hashes it to make sure a device only gets one trial.
+
+**You'll get back** the same thing activation gives you:
+```json
+{
+  "activationId": "<uuid>",
+  "token": "<jwt>",
+  "validUntil": 1234567890,
+  "maskedEmail": ""
+}
+```
+
+`maskedEmail` comes back empty for trials since there's no customer email attached. Cache `token` and `validUntil` just like you would after activation, then validate on the same schedule and use the same grace-period rules.
+
+**One trial per device, per product.** If this device already started a trial for this product, you'll get a `409`. Take that to mean "trial already used" and nudge the user to buy a license and activate with a real key. Don't bother retrying.
 
 ---
 
 ## Offline Grace Period
 
-If the server is unreachable, fall back to your local cache:
+If you can't reach the server, fall back to what's in your local cache:
 
 ```
-now < validUntil              → license is fine, proceed
-now < validUntil + gracePeriod → warn user, still proceed  
-now >= validUntil + gracePeriod → block, tell user to connect
+now < validUntil              -> license is fine, proceed
+now < validUntil + gracePeriod -> warn the user, but still proceed
+now >= validUntil + gracePeriod -> block, and tell them to get back online
 ```
 
-A grace period of 7 days is reasonable. Don't go longer than the token TTL (also 7 days) or the grace period becomes meaningless.
+Seven days is a sensible grace period. Don't push it past the token's TTL (also seven days), or the grace period stops meaning anything.
 
 ---
 
@@ -112,52 +157,20 @@ A grace period of 7 days is reasonable. Don't go longer than the token TTL (also
 
 | Status | Meaning |
 |--------|---------|
-| 400 | Bad request / missing encryption header |
+| 400 | Bad request, or a missing encryption header |
 | 401 | Invalid or expired token |
 | 403 | License revoked or expired |
 | 404 | License not found |
-| 409 | Activation limit reached |
-| 500 | Server error — fall back to cache |
+| 409 | Activation limit reached, or this device already used its trial |
+| 500 | Server error - fall back to the cache |
 
-On 403/404, the license is genuinely invalid. Don't retry. On 5xx or network errors, use the cached token and grace period logic.
-
----
-
-## Update Checks
-
-`POST /api/v1/client/updates/check` (encrypted)
-
-Call this to check whether a newer version of your app is available. The endpoint validates your JWT before responding, so only active licensed clients can query it.
-
-```json
-{
-  "token": "<jwt from activation or last validation>",
-  "version": "1.2.3"
-}
-```
-
-**Response:**
-```json
-{
-  "currentVersion": "1.2.3",
-  "latestVersion": "1.3.0",
-  "updateAvailable": true,
-  "downloadUrl": "https://github.com/..."
-}
-```
-
-- `updateAvailable` is `true` when `latestVersion != currentVersion`
-- `downloadUrl` points to the latest release asset if one exists, otherwise the release page
-
-**When to call:** Once on launch, after validation succeeds. Don't call it before you have a valid token — you'll get a 401.
-
-**On failure:** Update checks are non-critical. If this endpoint returns an error or is unreachable, log it and proceed — don't block the app.
+A 403 or 404 means the license is genuinely no good, so don't retry those. For 5xx responses or plain network failures, lean on the cached token and your grace-period logic.
 
 ---
 
 ## Security Notes
 
-- **Pin the server's X25519 public key** — fetch it once during distribution, bundle it with your app. Don't re-fetch at runtime.
-- **Always verify `X-Client-Key-Echo`** — if it doesn't match your ephemeral pubkey, someone is replaying an old response.
-- **Encrypt your local cache** — use the OS keychain or platform-specific secure storage. Don't store the JWT in plaintext.
-- **Use the same HWID consistently** — if it changes between calls, validation will fail with a 403.
+- **Pin the server's X25519 public key.** Fetch it once when you ship, bundle it with the app, and don't go grabbing it again at runtime.
+- **Always check `X-Client-Key-Echo`.** If it doesn't match the ephemeral pubkey you sent, someone's replaying an old response.
+- **Encrypt your local cache.** Use the OS keychain or whatever secure storage your platform offers. Don't leave the JWT sitting in plaintext.
+- **Keep the HWID stable.** If it changes between calls, validation will start failing with a 403.
