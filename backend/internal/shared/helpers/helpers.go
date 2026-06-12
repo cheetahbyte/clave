@@ -50,7 +50,9 @@ func DecodeJSON[T any](w http.ResponseWriter, r *http.Request, dst *T) error {
 	}
 
 	if dec.More() {
-		return errors.New("body must contain a single JSON object")
+		if dec.Decode(new(struct{})) == nil {
+			return errors.New("body must contain a single JSON object")
+		}
 	}
 
 	return nil

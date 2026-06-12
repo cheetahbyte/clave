@@ -6,12 +6,19 @@ import (
 	"time"
 
 	"github.com/cheetahbyte/clave/internal/shared/encryption"
+	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
 )
 
-var sensitiveRate = httprate.LimitByIP(5, 1*time.Minute)
+var sensitiveRate = httprate.Limit(5, 1*time.Minute, httprate.WithKeyFuncs(func(r *http.Request) (string, error) {
+	ip := helpers.ClientIP(r)
+	if ip == nil {
+		return r.RemoteAddr, nil
+	}
+	return ip.String(), nil
+}, httprate.KeyByEndpoint))
 
 type ClientHandlers struct {
 	Activate    http.HandlerFunc
@@ -129,7 +136,6 @@ func Register(r *chi.Mux, cfg Config) {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(3 * time.Second))
 	r.Use(middleware.Logger)
 	r.Route("/api", func(api chi.Router) {
 		api.Route("/v1", func(v1 chi.Router) {

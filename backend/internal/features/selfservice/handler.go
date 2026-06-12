@@ -73,7 +73,7 @@ func (h *Handler) RequestLink(w http.ResponseWriter, r *http.Request) {
 		}
 		msg, terr := email.MagicLinkEmail(link)
 		if terr == nil {
-			go func() { _ = h.mailer.Send(emailAddr, msg) }()
+			h.mailer.Enqueue(emailAddr, msg)
 		}
 	}
 

@@ -11,7 +11,6 @@ import (
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
@@ -47,12 +46,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var data CreationRequest
 
-	if err := helpers.DecodeAndValidate(w, r, &data); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &data) {
 		return
 	}
 
@@ -79,7 +73,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		msg, terr := email.LicenseCreatedEmail(result.ProductName, result.LicenseKey, portalLink, result.IsTrial)
 		if terr == nil {
 			to := data.CustomerEmail
-			go func() { _ = h.mailer.Send(to, msg) }()
+			h.mailer.Enqueue(to, msg)
 		}
 	}
 
@@ -228,12 +222,7 @@ func (h *Handler) AdminCreateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body CreateProductRequest
-	if err := helpers.DecodeAndValidate(w, r, &body); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &body) {
 		return
 	}
 
@@ -262,12 +251,7 @@ func (h *Handler) AdminUpdateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body UpdateProductRequest
-	if err := helpers.DecodeAndValidate(w, r, &body); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &body) {
 		return
 	}
 
@@ -349,12 +333,7 @@ func (h *Handler) AdminUpdateLicense(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body UpdateLicenseRequest
-	if err := helpers.DecodeAndValidate(w, r, &body); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &body) {
 		return
 	}
 

@@ -109,25 +109,42 @@ WHERE a.license_id = $1 AND l.organization_id = sqlc.arg('organization_id')::uui
 ORDER BY a.created_at DESC;
 
 -- name: GetAdminTimeseriesByOrganization :many
+WITH days AS (
+    SELECT d::date AS day FROM generate_series(
+        (now() - make_interval(days => sqlc.arg('days')::int - 1))::date,
+        now()::date,
+        interval '1 day'
+    ) d
+),
+license_counts AS (
+    SELECT
+        l.created_at::date AS day,
+        COUNT(*) FILTER (WHERE NOT l.is_trial) AS licenses,
+        COUNT(*) FILTER (WHERE l.is_trial) AS trials
+    FROM licenses l
+    WHERE l.organization_id = sqlc.arg('organization_id')::uuid
+      AND l.created_at >= (now() - make_interval(days => sqlc.arg('days')::int))
+    GROUP BY l.created_at::date
+),
+activation_counts AS (
+    SELECT
+        a.created_at::date AS day,
+        COUNT(*) AS activations
+    FROM activations a
+    JOIN licenses l ON a.license_id = l.id
+    WHERE l.organization_id = sqlc.arg('organization_id')::uuid
+      AND a.created_at >= (now() - make_interval(days => sqlc.arg('days')::int))
+    GROUP BY a.created_at::date
+)
 SELECT
-    d::date AS day,
-    (SELECT count(*) FROM licenses l
-        WHERE l.organization_id = sqlc.arg('organization_id')::uuid
-          AND l.created_at::date = d::date) AS licenses,
-    (SELECT count(*) FROM licenses l
-        WHERE l.organization_id = sqlc.arg('organization_id')::uuid
-          AND l.is_trial = true
-          AND l.created_at::date = d::date) AS trials,
-    (SELECT count(*) FROM activations a
-        JOIN licenses l ON a.license_id = l.id
-        WHERE l.organization_id = sqlc.arg('organization_id')::uuid
-          AND a.created_at::date = d::date) AS activations
-FROM generate_series(
-    (now() - make_interval(days => sqlc.arg('days')::int - 1))::date,
-    now()::date,
-    interval '1 day'
-) d
-ORDER BY day ASC;
+    d.day,
+    COALESCE(lc.licenses, 0)::bigint AS licenses,
+    COALESCE(lc.trials, 0)::bigint AS trials,
+    COALESCE(ac.activations, 0)::bigint AS activations
+FROM days d
+LEFT JOIN license_counts lc ON d.day = lc.day
+LEFT JOIN activation_counts ac ON d.day = ac.day
+ORDER BY d.day ASC;
 
 -- name: ListAdminTrialsByOrganization :many
 SELECT

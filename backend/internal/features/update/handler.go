@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
-	"github.com/go-playground/validator/v10"
 )
 
 type Handler struct {
@@ -17,12 +16,7 @@ func NewHandler(svc *Service) *Handler {
 
 func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 	var data CheckRequest
-	if err := helpers.DecodeAndValidate(w, r, &data); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &data) {
 		return
 	}
 

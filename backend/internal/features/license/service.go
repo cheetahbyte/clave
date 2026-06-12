@@ -40,14 +40,11 @@ func NewService(q *db.Queries, pool *pgxpool.Pool, signer signing.Provider) *Ser
 }
 
 func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data CreationRequest) (CreationResponse, error) {
-	key, _ := svc.generateKey()
-	digest := svc.signer.HMACSign(key, signing.NormalizeKey)
-	salt := make([]byte, 16)
-	_, err := rand.Read(salt)
+	key, err := svc.generateKey()
 	if err != nil {
-		return CreationResponse{}, errors.New("failed to generate salt")
+		return CreationResponse{}, errors.New("failed to generate license key")
 	}
-
+	digest := svc.signer.HMACSign(key, signing.NormalizeKey)
 	hash, err := argon2id.CreateHash(key, argon2id.DefaultParams)
 	if err != nil {
 		slog.Error("failed to hash license key", "err", err.Error())
@@ -119,11 +116,6 @@ func (svc *Service) NewTrialLicense(ctx context.Context, orgID uuid.UUID, produc
 		return nil, errors.New("failed to generate trial key")
 	}
 	digest := svc.signer.HMACSign(key, signing.NormalizeKey)
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return nil, errors.New("failed to generate salt")
-	}
-
 	hash, err := argon2id.CreateHash(key, argon2id.DefaultParams)
 	if err != nil {
 		slog.Error("failed to hash trial key", "err", err.Error())
@@ -152,6 +144,9 @@ func (svc *Service) NewTrialLicense(ctx context.Context, orgID uuid.UUID, produc
 		TrialHwidHash:  hwidHash,
 	})
 	if err != nil {
+		if IsUniqueViolation(err) {
+			return nil, errors.New("trial already used")
+		}
 		slog.Error("failed to create trial license", "err", err.Error())
 		return nil, errors.New("failed to create trial license")
 	}

@@ -33,6 +33,14 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
+var pool *pgxpool.Pool
+
+func Close() {
+	if pool != nil {
+		pool.Close()
+	}
+}
+
 func RunMigrations(databaseURL string) {
 	log.Println("running database migrations")
 	migDb, err := sql.Open("pgx", databaseURL)
@@ -49,10 +57,12 @@ func RunMigrations(databaseURL string) {
 func NewRouter(cfg *config.Config) (http.Handler, error) {
 	helpers.TrustProxyHeaders = cfg.TrustProxyHeaders
 
-	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	var err error
+	pool, err = pgxpool.New(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		return nil, err
 	}
+	pool.Config().MaxConns = 20
 
 	q := db.New(pool)
 

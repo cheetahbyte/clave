@@ -3,9 +3,12 @@ package encryption
 import (
 	"bytes"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 )
+
+const maxEncryptedBodySize = 1 << 20
 
 type encryptingResponseWriter struct {
 	http.ResponseWriter
@@ -54,6 +57,11 @@ func Middleware(enc *Service) func(http.Handler) http.Handler {
 			}
 			r.Body.Close()
 
+			if len(encBody) > maxEncryptedBodySize {
+				http.Error(w, fmt.Sprintf(`{"error":"request body exceeds %d bytes"}`, maxEncryptedBodySize), http.StatusRequestEntityTooLarge)
+				return
+			}
+
 			rawBody, err := base64.RawURLEncoding.DecodeString(string(encBody))
 			if err != nil {
 				http.Error(w, `{"error":"body must be base64url encoded"}`, http.StatusBadRequest)
@@ -63,6 +71,11 @@ func Middleware(enc *Service) func(http.Handler) http.Handler {
 			plaintext, err := enc.Decrypt(rawBody, aesKey)
 			if err != nil {
 				http.Error(w, `{"error":"decryption failed"}`, http.StatusBadRequest)
+				return
+			}
+
+			if len(plaintext) > maxEncryptedBodySize {
+				http.Error(w, fmt.Sprintf(`{"error":"decrypted body exceeds %d bytes"}`, maxEncryptedBodySize), http.StatusRequestEntityTooLarge)
 				return
 			}
 

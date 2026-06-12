@@ -80,7 +80,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 
 	act, err := svc.repo.ActivateAtomic(ctx, lic.ID, hwidHash, data.Device.Hostname, lic.MaxActivations)
 	if err != nil {
-		slog.Error("failed to activate license", "licenseId", lic.ID, "hwid", data.Device.HWID, "err", err)
+		slog.Error("failed to activate license", "licenseId", lic.ID, "err", err)
 		p := problem.Of(500).
 			Append(problem.Type("https://api.yourapp.dev/problems/internal")).
 			Append(problem.Title("Internal error")).
@@ -157,6 +157,12 @@ func (svc *Service) StartTrial(ctx context.Context, data StartTrialRequest) (Act
 
 	trial, err := svc.licenses.NewTrialLicense(ctx, product.OrganizationID, productID, hwidHash, 14)
 	if err != nil {
+		if err.Error() == "trial already used" {
+			return ActivateResponse{}, problem.Of(409).
+				Append(problem.Title("Trial already used")).
+				Append(problem.Detail("A trial for this product has already been started on this device.")).
+				Append(problem.Instance(instance))
+		}
 		slog.Error("failed to create trial license", "err", err)
 		return ActivateResponse{}, problem.Of(500).
 			Append(problem.Title("Internal error")).

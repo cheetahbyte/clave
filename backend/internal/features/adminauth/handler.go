@@ -9,7 +9,6 @@ import (
 	"github.com/cheetahbyte/clave/internal/shared/encryption"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/gorilla/csrf"
 )
@@ -26,12 +25,7 @@ func NewHandler(svc *Service, sessions *scs.SessionManager, totpKey []byte) *Han
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var body LoginRequest
-	if err := helpers.DecodeAndValidate(w, r, &body); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &body) {
 		return
 	}
 
@@ -151,12 +145,7 @@ func (h *Handler) SetupVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body SetupVerifyRequest
-	if err := helpers.DecodeAndValidate(w, r, &body); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &body) {
 		return
 	}
 
@@ -201,12 +190,7 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body TOTPVerifyRequest
-	if err := helpers.DecodeAndValidate(w, r, &body); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &body) {
 		return
 	}
 

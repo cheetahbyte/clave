@@ -7,6 +7,7 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -48,6 +49,14 @@ func (r *Repository) Create(ctx context.Context, params db.CreateLicenseParams) 
 		},
 		mapToDomainLicense,
 	)
+}
+
+func IsUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return true
+	}
+	return false
 }
 
 func (r *Repository) ListByCustomerEmail(ctx context.Context, email string) ([]db.ListByCustomerEmailRow, error) {

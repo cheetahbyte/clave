@@ -11,7 +11,6 @@ import (
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
@@ -50,12 +49,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body CreateOrganizationRequest
-	if err := helpers.DecodeAndValidate(w, r, &body); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &body) {
 		return
 	}
 
@@ -80,12 +74,7 @@ func (h *Handler) Switch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body SwitchOrganizationRequest
-	if err := helpers.DecodeAndValidate(w, r, &body); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &body) {
 		return
 	}
 
@@ -130,12 +119,7 @@ func (h *Handler) Invite(w http.ResponseWriter, r *http.Request) {
 	adminID, _ := middleware.AdminIDFromContext(r.Context())
 
 	var body InviteRequest
-	if err := helpers.DecodeAndValidate(w, r, &body); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &body) {
 		return
 	}
 
@@ -152,7 +136,7 @@ func (h *Handler) Invite(w http.ResponseWriter, r *http.Request) {
 		orgName := h.svc.Name(r.Context(), orgID)
 		msg, terr := email.InviteEmail(orgName, link)
 		if terr == nil {
-			go func() { _ = h.mailer.Send(item.Email, msg) }()
+			h.mailer.Enqueue(item.Email, msg)
 		}
 	} else {
 		// No mailer configured (dev) — return token so the link can be built client-side.
@@ -224,12 +208,7 @@ func (h *Handler) InvitePreview(w http.ResponseWriter, r *http.Request) {
 // InviteAccept is public: POST { token, password? }
 func (h *Handler) InviteAccept(w http.ResponseWriter, r *http.Request) {
 	var body AcceptInviteRequest
-	if err := helpers.DecodeAndValidate(w, r, &body); err != nil {
-		if _, ok := err.(validator.ValidationErrors); ok {
-			helpers.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": helpers.FormatValidationError(err)})
-			return
-		}
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if !helpers.DecodeValidated(w, r, &body) {
 		return
 	}
 
