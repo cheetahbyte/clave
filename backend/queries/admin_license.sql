@@ -4,7 +4,9 @@ SELECT
     (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_licenses,
     (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND expires_at IS NOT NULL AND expires_at <= now()) AS expired_licenses,
     (SELECT count(*) FROM products WHERE organization_id = sqlc.arg('organization_id')::uuid) AS total_products,
-    (SELECT count(*) FROM activations a JOIN licenses l ON a.license_id = l.id WHERE l.organization_id = sqlc.arg('organization_id')::uuid) AS total_activations;
+    (SELECT count(*) FROM activations a JOIN licenses l ON a.license_id = l.id WHERE l.organization_id = sqlc.arg('organization_id')::uuid) AS total_activations,
+    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND is_trial = true) AS total_trials,
+    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND is_trial = true AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_trials;
 
 -- name: ListAdminRecentLicensesByOrganization :many
 SELECT
@@ -35,7 +37,12 @@ WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
         OR (sqlc.arg('status')::text = 'inactive' AND lt.is_active = false)
         OR (sqlc.arg('status')::text = 'expired' AND lt.expires_at IS NOT NULL AND lt.expires_at <= now())
     )
-    AND (sqlc.arg('product_id')::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR lt.product_id = sqlc.arg('product_id')::uuid);
+    AND (sqlc.arg('product_id')::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR lt.product_id = sqlc.arg('product_id')::uuid)
+    AND (
+        sqlc.arg('type')::text = 'all'
+        OR (sqlc.arg('type')::text = 'trial' AND lt.is_trial = true)
+        OR (sqlc.arg('type')::text = 'standard' AND lt.is_trial = false)
+    );
 
 -- name: ListAdminLicensesByOrganization :many
 SELECT
@@ -59,6 +66,11 @@ WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
         OR (sqlc.arg('status')::text = 'expired' AND lt.expires_at IS NOT NULL AND lt.expires_at <= now())
     )
     AND (sqlc.arg('product_id')::uuid = '00000000-0000-0000-0000-000000000000'::uuid OR lt.product_id = sqlc.arg('product_id')::uuid)
+    AND (
+        sqlc.arg('type')::text = 'all'
+        OR (sqlc.arg('type')::text = 'trial' AND lt.is_trial = true)
+        OR (sqlc.arg('type')::text = 'standard' AND lt.is_trial = false)
+    )
 ORDER BY lt.created_at DESC
 LIMIT sqlc.arg('limit')
 OFFSET sqlc.arg('offset');
@@ -95,3 +107,48 @@ JOIN devices d ON a.device_id = d.id
 JOIN licenses l ON a.license_id = l.id
 WHERE a.license_id = $1 AND l.organization_id = sqlc.arg('organization_id')::uuid
 ORDER BY a.created_at DESC;
+
+-- name: GetAdminTimeseriesByOrganization :many
+SELECT
+    d::date AS day,
+    (SELECT count(*) FROM licenses l
+        WHERE l.organization_id = sqlc.arg('organization_id')::uuid
+          AND l.created_at::date = d::date) AS licenses,
+    (SELECT count(*) FROM licenses l
+        WHERE l.organization_id = sqlc.arg('organization_id')::uuid
+          AND l.is_trial = true
+          AND l.created_at::date = d::date) AS trials,
+    (SELECT count(*) FROM activations a
+        JOIN licenses l ON a.license_id = l.id
+        WHERE l.organization_id = sqlc.arg('organization_id')::uuid
+          AND a.created_at::date = d::date) AS activations
+FROM generate_series(
+    (now() - make_interval(days => sqlc.arg('days')::int - 1))::date,
+    now()::date,
+    interval '1 day'
+) d
+ORDER BY day ASC;
+
+-- name: ListAdminTrialsByOrganization :many
+SELECT
+    lt.id,
+    lt.customer_email,
+    lt.is_active,
+    lt.max_activations,
+    lt.created_at,
+    lt.expires_at,
+    lt.is_trial,
+    p.name AS product_name,
+    (SELECT count(*) FROM activations WHERE license_id = lt.id) AS activation_count
+FROM licenses lt
+JOIN products p ON lt.product_id = p.id
+WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
+    AND lt.is_trial = true
+    AND (sqlc.arg('q')::text = '' OR lt.customer_email ILIKE '%' || sqlc.arg('q')::text || '%' OR p.name ILIKE '%' || sqlc.arg('q')::text || '%')
+    AND (
+        sqlc.arg('status')::text = 'all'
+        OR (sqlc.arg('status')::text = 'active' AND lt.is_active = true AND (lt.expires_at IS NULL OR lt.expires_at > now()))
+        OR (sqlc.arg('status')::text = 'expired' AND lt.expires_at IS NOT NULL AND lt.expires_at <= now())
+    )
+ORDER BY lt.created_at DESC
+LIMIT 500;

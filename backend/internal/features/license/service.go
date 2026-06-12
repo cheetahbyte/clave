@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var (
@@ -31,12 +32,14 @@ const defaultTrialDays = 14
 type Service struct {
 	repo   *Repository
 	signer signing.Provider
+	pool   *pgxpool.Pool
 }
 
-func NewService(q *db.Queries, signer signing.Provider) *Service {
+func NewService(q *db.Queries, pool *pgxpool.Pool, signer signing.Provider) *Service {
 	return &Service{
 		repo:   NewRepository(q),
 		signer: signer,
+		pool:   pool,
 	}
 }
 
@@ -99,7 +102,16 @@ func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data Creati
 		expiresAt = pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, days), Valid: true}
 	}
 
-	_, err = svc.repo.Create(ctx, db.CreateLicenseParams{
+	tx, err := svc.pool.Begin(ctx)
+	if err != nil {
+		slog.Error("failed to begin transaction", "err", err.Error())
+		return CreationResponse{}, errors.New("failed to begin transaction")
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := svc.repo.q.WithTx(tx)
+
+	row, err := qtx.CreateLicense(ctx, db.CreateLicenseParams{
 		OrganizationID: orgID,
 		ProductID:      productUUID,
 		MaxActivations: data.MaxActivations,
@@ -112,6 +124,33 @@ func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data Creati
 	if err != nil {
 		slog.Error("failed to create license", "err", err.Error())
 		return CreationResponse{}, errors.New("failed to insert license")
+	}
+
+	if !data.IsTrial {
+		if err := qtx.TransferActiveTrialActivationsByEmailProduct(ctx, db.TransferActiveTrialActivationsByEmailProductParams{
+			PaidLicenseID:  row.ID,
+			OrganizationID: orgID,
+			ProductID:      productUUID,
+			CustomerEmail:  email,
+			MaxActivations: data.MaxActivations,
+		}); err != nil {
+			slog.Error("failed to transfer trial activations", "err", err.Error())
+			return CreationResponse{}, errors.New("failed to transfer trial activations")
+		}
+
+		if err := qtx.DeactivateActiveTrialsByEmailProduct(ctx, db.DeactivateActiveTrialsByEmailProductParams{
+			OrganizationID: orgID,
+			ProductID:      productUUID,
+			CustomerEmail:  email,
+		}); err != nil {
+			slog.Error("failed to deactivate trials", "err", err.Error())
+			return CreationResponse{}, errors.New("failed to deactivate existing trials")
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		slog.Error("failed to commit", "err", err.Error())
+		return CreationResponse{}, errors.New("failed to commit license creation")
 	}
 
 	return CreationResponse{
@@ -269,16 +308,71 @@ func (svc *Service) AdminOverview(ctx context.Context, orgID uuid.UUID) (*AdminO
 		ExpiredLicenses:  stats.ExpiredLicenses,
 		TotalProducts:    stats.TotalProducts,
 		TotalActivations: stats.TotalActivations,
+		TotalTrials:      stats.TotalTrials,
+		ActiveTrials:     stats.ActiveTrials,
 		RecentLicenses:   items,
 	}, nil
 }
 
-func (svc *Service) AdminListLicenses(ctx context.Context, orgID uuid.UUID, q string, status string, productID uuid.UUID, page, pageSize int) (*AdminLicenseListResponse, error) {
+func (svc *Service) AdminTimeseries(ctx context.Context, orgID uuid.UUID, days int) ([]AdminTimeseriesPoint, error) {
+	if days < 1 || days > 365 {
+		days = 30
+	}
+
+	rows, err := svc.repo.q.GetAdminTimeseriesByOrganization(ctx, db.GetAdminTimeseriesByOrganizationParams{
+		OrganizationID: orgID,
+		Days:           int32(days),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	points := make([]AdminTimeseriesPoint, len(rows))
+	for i, r := range rows {
+		date := ""
+		if r.Day.Valid {
+			date = r.Day.Time.Format("2006-01-02")
+		}
+		points[i] = AdminTimeseriesPoint{
+			Date:        date,
+			Licenses:    r.Licenses,
+			Trials:      r.Trials,
+			Activations: r.Activations,
+		}
+	}
+	return points, nil
+}
+
+func (svc *Service) AdminListTrials(ctx context.Context, orgID uuid.UUID, q, status string) ([]AdminLicenseItem, error) {
+	if status != "active" && status != "expired" {
+		status = "all"
+	}
+
+	rows, err := svc.repo.q.ListAdminTrialsByOrganization(ctx, db.ListAdminTrialsByOrganizationParams{
+		OrganizationID: orgID,
+		Q:              strings.TrimSpace(q),
+		Status:         status,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]AdminLicenseItem, len(rows))
+	for i, r := range rows {
+		items[i] = toAdminLicenseItem(r.ID, r.CustomerEmail, r.ProductName, r.IsActive, r.IsTrial, r.MaxActivations, r.ActivationCount, r.CreatedAt, r.ExpiresAt)
+	}
+	return items, nil
+}
+
+func (svc *Service) AdminListLicenses(ctx context.Context, orgID uuid.UUID, q string, status string, licenseType string, productID uuid.UUID, page, pageSize int) (*AdminLicenseListResponse, error) {
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
+	}
+	if licenseType != "trial" && licenseType != "standard" {
+		licenseType = "all"
 	}
 	maxPage := math.MaxInt32 / pageSize
 	if page > maxPage {
@@ -290,6 +384,7 @@ func (svc *Service) AdminListLicenses(ctx context.Context, orgID uuid.UUID, q st
 		OrganizationID: orgID,
 		Q:              q,
 		Status:         status,
+		Type:           licenseType,
 		ProductID:      productID,
 	})
 	if err != nil {
@@ -300,6 +395,7 @@ func (svc *Service) AdminListLicenses(ctx context.Context, orgID uuid.UUID, q st
 		OrganizationID: orgID,
 		Q:              q,
 		Status:         status,
+		Type:           licenseType,
 		ProductID:      productID,
 		Limit:          int32(pageSize),
 		Offset:         int32(offset),

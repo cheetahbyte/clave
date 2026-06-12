@@ -103,6 +103,33 @@ func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (L
 	return i, err
 }
 
+const deactivateActiveTrialsByEmailProduct = `-- name: DeactivateActiveTrialsByEmailProduct :exec
+UPDATE licenses
+SET
+  is_active = false,
+  expires_at = CASE
+    WHEN expires_at IS NULL OR expires_at > now() THEN now()
+    ELSE expires_at
+  END
+WHERE organization_id = $1::uuid
+  AND product_id = $2
+  AND lower(customer_email) = lower($3)
+  AND is_trial = true
+  AND is_active = true
+  AND (expires_at IS NULL OR expires_at > now())
+`
+
+type DeactivateActiveTrialsByEmailProductParams struct {
+	OrganizationID uuid.UUID   `json:"organization_id"`
+	ProductID      pgtype.UUID `json:"product_id"`
+	CustomerEmail  string      `json:"customer_email"`
+}
+
+func (q *Queries) DeactivateActiveTrialsByEmailProduct(ctx context.Context, arg DeactivateActiveTrialsByEmailProductParams) error {
+	_, err := q.db.Exec(ctx, deactivateActiveTrialsByEmailProduct, arg.OrganizationID, arg.ProductID, arg.CustomerEmail)
+	return err
+}
+
 const deleteAdminLicense = `-- name: DeleteAdminLicense :one
 DELETE FROM licenses
 WHERE id = $1 AND organization_id = $2::uuid
@@ -417,6 +444,56 @@ func (q *Queries) RevokeSelfServiceLicense(ctx context.Context, arg RevokeSelfSe
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const transferActiveTrialActivationsByEmailProduct = `-- name: TransferActiveTrialActivationsByEmailProduct :exec
+WITH trial_activations AS (
+    SELECT DISTINCT ON (d.hwid_hash)
+        d.hwid_hash,
+        d.hostname
+    FROM licenses l
+    JOIN devices d ON d.license_id = l.id
+    JOIN activations a ON a.license_id = l.id AND a.device_id = d.id
+    WHERE l.organization_id = $2::uuid
+      AND l.product_id = $3
+      AND lower(l.customer_email) = lower($4)
+      AND l.is_trial = true
+      AND l.is_active = true
+      AND (l.expires_at IS NULL OR l.expires_at > now())
+    ORDER BY d.hwid_hash, a.checked_in_at DESC NULLS LAST
+),
+limited AS (
+    SELECT hwid_hash, hostname FROM trial_activations
+    LIMIT $5
+),
+new_devices AS (
+    INSERT INTO devices (license_id, hwid_hash, hostname)
+    SELECT $1::uuid, tr.hwid_hash, tr.hostname
+    FROM limited tr
+    RETURNING id, hwid_hash
+)
+INSERT INTO activations (device_id, license_id)
+SELECT nd.id, $1::uuid
+FROM new_devices nd
+`
+
+type TransferActiveTrialActivationsByEmailProductParams struct {
+	PaidLicenseID  uuid.UUID   `json:"paid_license_id"`
+	OrganizationID uuid.UUID   `json:"organization_id"`
+	ProductID      pgtype.UUID `json:"product_id"`
+	CustomerEmail  string      `json:"customer_email"`
+	MaxActivations int32       `json:"max_activations"`
+}
+
+func (q *Queries) TransferActiveTrialActivationsByEmailProduct(ctx context.Context, arg TransferActiveTrialActivationsByEmailProductParams) error {
+	_, err := q.db.Exec(ctx, transferActiveTrialActivationsByEmailProduct,
+		arg.PaidLicenseID,
+		arg.OrganizationID,
+		arg.ProductID,
+		arg.CustomerEmail,
+		arg.MaxActivations,
+	)
+	return err
 }
 
 const updateAdminLicense = `-- name: UpdateAdminLicense :one

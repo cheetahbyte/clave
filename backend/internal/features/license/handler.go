@@ -69,7 +69,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "license.created", "license", nil)
 
-	if h.mailer != nil {
+	if h.mailer != nil && data.SendEmail {
 		var portalLink string
 		if h.appURL != "" {
 			if slug := h.svc.OrgSlug(r.Context(), orgID); slug != "" {
@@ -102,6 +102,49 @@ func (h *Handler) AdminOverview(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, overview)
 }
 
+func (h *Handler) AdminTimeseries(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	days, _ := strconv.Atoi(r.URL.Query().Get("days"))
+	if days == 0 {
+		days = 30
+	}
+
+	points, err := h.svc.AdminTimeseries(r.Context(), orgID, days)
+	if err != nil {
+		slog.Error("admin timeseries failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, points)
+}
+
+func (h *Handler) AdminListTrials(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	q := r.URL.Query().Get("q")
+	status := r.URL.Query().Get("status")
+	if status == "" {
+		status = "all"
+	}
+
+	items, err := h.svc.AdminListTrials(r.Context(), orgID, q, status)
+	if err != nil {
+		slog.Error("admin list trials failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, items)
+}
+
 func (h *Handler) AdminListLicenses(w http.ResponseWriter, r *http.Request) {
 	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
 	if !ok {
@@ -124,10 +167,14 @@ func (h *Handler) AdminListLicenses(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	licenseType := r.URL.Query().Get("type")
+	if licenseType == "" {
+		licenseType = "all"
+	}
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
 
-	result, err := h.svc.AdminListLicenses(r.Context(), orgID, q, status, productID, page, pageSize)
+	result, err := h.svc.AdminListLicenses(r.Context(), orgID, q, status, licenseType, productID, page, pageSize)
 	if err != nil {
 		slog.Error("admin list licenses failed", "err", err)
 		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})

@@ -144,7 +144,7 @@ func main() {
 
 	signer := signing.New(pub, priv, hmacSecret)
 
-	licenseSvc := license.NewService(q, signer)
+	licenseSvc := license.NewService(q, pool, signer)
 	activationSvc := activation.NewService(q, pool, signer, licenseSvc)
 	validationSvc := validation.NewService(signer, licenseSvc)
 	updateSvc := update.NewService(licenseSvc, signer)
@@ -265,6 +265,8 @@ func main() {
 		Admin2FAVerify:     adminAuthH.SetupVerify,
 		Admin2FACheck:      adminAuthH.Verify,
 		AdminOverview:      licenseH.AdminOverview,
+		AdminTimeseries:    licenseH.AdminTimeseries,
+		AdminListTrials:    licenseH.AdminListTrials,
 		AdminGetLicense:    licenseH.AdminGetLicense,
 		AdminListLicenses:  licenseH.AdminListLicenses,
 		AdminListProducts:  licenseH.AdminListProducts,
