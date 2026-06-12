@@ -41,17 +41,9 @@ jobs:
 
       - name: Generate CI keys
         run: |
-          # Ed25519 key pair for license JWT signing
-          openssl genpkey -algorithm ed25519 -out /tmp/jwt_private.pem
-          openssl pkey -in /tmp/jwt_private.pem -pubout -out /tmp/jwt_public.pem
-          echo "LICENSE_JWT_PRIVATE_KEY=$(openssl pkey -in /tmp/jwt_private.pem -noout -text_pub | tail -2 | head -1 | xxd -r -p | base64 -w0)" >> "$GITHUB_ENV"
-          echo "LICENSE_JWT_PUBLIC_KEY=$(openssl pkey -in /tmp/jwt_public.pem -pubin -noout -text_pub | tail -2 | head -1 | xxd -r -p | base64 -w0)" >> "$GITHUB_ENV"
+          go run scripts/generate_jwt_keys.go >> "$GITHUB_ENV"
+          go run scripts/generate_x25519_key/main.go >> "$GITHUB_ENV"
 
-          # X25519 key pair for request encryption
-          openssl genpkey -algorithm x25519 -out /tmp/x25519_private.pem
-          echo "X25519_PRIVATE_KEY=$(openssl pkey -in /tmp/x25519_private.pem -noout -text | grep 'priv:' -A 1 | tail -1 | tr -d ' :' | xxd -r -p | base64 -w0 | tr '+/' '-_')" >> "$GITHUB_ENV"
-
-          # Random hex secrets for non-crypto CI values
           echo "ADMIN_TOTP_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           echo "SELF_SERVICE_TOKEN_PEPPER=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
           echo "LICENSE_HMAC_SECRET=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
