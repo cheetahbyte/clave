@@ -8,14 +8,9 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-func mapToDomainActivation(row db.Activation) *Activation {
-	return &Activation{
-		ID: row.ID,
-	}
-}
 
 type Repository struct {
 	q    *db.Queries
@@ -32,6 +27,14 @@ func (r *Repository) CountByLicense(ctx context.Context, licenseID uuid.UUID) (i
 		return 0, fmt.Errorf("count activations: %w", err)
 	}
 	return val, nil
+}
+
+func (r *Repository) CountTrialsByHwidProduct(ctx context.Context, orgID uuid.UUID, productID uuid.UUID, hwidHash []byte) (int64, error) {
+	return r.q.CountTrialsByHwidProduct(ctx, db.CountTrialsByHwidProductParams{
+		OrganizationID: orgID,
+		ProductID:      uuidToPG(productID),
+		TrialHwidHash:  hwidHash,
+	})
 }
 
 func (r *Repository) ActivateAtomic(
@@ -92,7 +95,7 @@ func (r *Repository) ActivateAtomic(
 		if commitErr := tx.Commit(ctx); commitErr != nil {
 			return nil, fmt.Errorf("commit tx: %w", commitErr)
 		}
-		return mapToDomainActivation(existingAct), nil
+		return &Activation{ID: existingAct.ID}, nil
 	}
 
 	count, countErr := qtx.CountActivations(ctx, licenseID)
@@ -116,5 +119,9 @@ func (r *Repository) ActivateAtomic(
 		return nil, fmt.Errorf("commit tx: %w", commitErr)
 	}
 
-	return mapToDomainActivation(activation), nil
+	return &Activation{ID: activation.ID}, nil
+}
+
+func uuidToPG(id uuid.UUID) pgtype.UUID {
+	return pgtype.UUID{Bytes: [16]byte(id), Valid: true}
 }

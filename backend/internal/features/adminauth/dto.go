@@ -12,16 +12,16 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	ID                     uuid.UUID `json:"id"`
-	Email                  string    `json:"email"`
-	Role                   string    `json:"role"`
-	OrganizationID         uuid.UUID `json:"organizationId"`
-	OrganizationName       string    `json:"organizationName"`
-	MfaEnabled             bool      `json:"mfaEnabled"`
-	MfaVerified            bool      `json:"mfaVerified"`
-	MfaSetupRequired       bool      `json:"mfaSetupRequired,omitempty"`
-	MfaVerificationRequired bool     `json:"mfaVerificationRequired,omitempty"`
-	CreatedAt              time.Time `json:"created_at"`
+	ID                      uuid.UUID `json:"id"`
+	Email                   string    `json:"email"`
+	Role                    string    `json:"role"`
+	OrganizationID          uuid.UUID `json:"organizationId"`
+	OrganizationName        string    `json:"organizationName"`
+	MfaEnabled              bool      `json:"mfaEnabled"`
+	MfaVerified             bool      `json:"mfaVerified"`
+	MfaSetupRequired        bool      `json:"mfaSetupRequired,omitempty"`
+	MfaVerificationRequired bool      `json:"mfaVerificationRequired,omitempty"`
+	CreatedAt               time.Time `json:"created_at"`
 }
 
 type AdminProfileResponse struct {

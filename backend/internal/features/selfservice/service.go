@@ -24,7 +24,7 @@ var (
 )
 
 func (svc *Service) ResolveOrg(ctx context.Context, slug string) (uuid.UUID, error) {
-	org, err := svc.q.GetOrganizationBySlug(ctx, strings.TrimSpace(slug))
+	org, err := svc.repo.GetOrganizationBySlug(ctx, strings.TrimSpace(slug))
 	if err != nil {
 		return uuid.Nil, ErrUnknownOrganization
 	}
@@ -32,18 +32,11 @@ func (svc *Service) ResolveOrg(ctx context.Context, slug string) (uuid.UUID, err
 }
 
 func (svc *Service) ListLicensesForOrg(ctx context.Context, email string, orgID uuid.UUID) ([]db.ListByCustomerEmailAndOrganizationRow, error) {
-	return svc.q.ListByCustomerEmailAndOrganization(ctx, db.ListByCustomerEmailAndOrganizationParams{
-		CustomerEmail:  email,
-		OrganizationID: orgID,
-	})
+	return svc.repo.ListLicensesByCustomer(ctx, email, orgID)
 }
 
 func (svc *Service) ListDevicesForLicense(ctx context.Context, email string, orgID, licenseID uuid.UUID) ([]DeviceItem, error) {
-	rows, err := svc.q.ListSelfServiceDevices(ctx, db.ListSelfServiceDevicesParams{
-		LicenseID:      licenseID,
-		CustomerEmail:  email,
-		OrganizationID: orgID,
-	})
+	rows, err := svc.repo.ListDevices(ctx, licenseID, email, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -68,33 +61,22 @@ func (svc *Service) ListDevicesForLicense(ctx context.Context, email string, org
 }
 
 func (svc *Service) RemoveDevice(ctx context.Context, email string, orgID, licenseID, deviceID uuid.UUID) error {
-	_, err := svc.q.DeleteSelfServiceDevice(ctx, db.DeleteSelfServiceDeviceParams{
-		DeviceID:       deviceID,
-		LicenseID:      licenseID,
-		CustomerEmail:  email,
-		OrganizationID: orgID,
-	})
-	return err
+	return svc.repo.DeleteDevice(ctx, licenseID, deviceID, email, orgID)
 }
 
 func (svc *Service) RevokeLicense(ctx context.Context, email string, orgID, licenseID uuid.UUID) error {
-	_, err := svc.q.RevokeSelfServiceLicense(ctx, db.RevokeSelfServiceLicenseParams{
-		LicenseID:      licenseID,
-		CustomerEmail:  email,
-		OrganizationID: orgID,
-	})
-	return err
+	return svc.repo.RevokeLicense(ctx, licenseID, email, orgID)
 }
 
 type Service struct {
-	q      *db.Queries
+	repo   *Repository
 	pepper []byte
 	signer *signing.Service
 }
 
-func NewService(q *db.Queries, pepper []byte, signer *signing.Service) *Service {
+func NewService(repo *Repository, pepper []byte, signer *signing.Service) *Service {
 	return &Service{
-		q:      q,
+		repo:   repo,
 		pepper: pepper,
 		signer: signer,
 	}
@@ -114,8 +96,7 @@ func (svc *Service) RequestToken(ctx context.Context, data db.CreateSelfServiceL
 
 	data.TokenHash = svc.hashToken(rawToken)
 
-	_, err = svc.q.CreateSelfServiceLink(ctx, data)
-	if err != nil {
+	if err = svc.repo.CreateLink(ctx, data); err != nil {
 		return "", fmt.Errorf("create self service token: %w", err)
 	}
 
@@ -135,7 +116,7 @@ func (svc *Service) ValidateToken(ctx context.Context, data ValidateTokenRequest
 
 	tokenHash := svc.hashToken(raw)
 
-	email, err := svc.q.ConsumeSelfServiceToken(ctx, tokenHash)
+	email, err := svc.repo.ConsumeToken(ctx, tokenHash)
 	if err != nil {
 		slog.Warn("self-service token consume failed", "err", err)
 		return ValidateTokenResponse{}, errors.New("problem with token")

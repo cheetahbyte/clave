@@ -1,0 +1,211 @@
+package app
+
+import (
+	"context"
+	"database/sql"
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/alexedwards/scs/pgxstore"
+	"github.com/alexedwards/scs/v2"
+	"github.com/cheetahbyte/clave/internal/api"
+	"github.com/cheetahbyte/clave/internal/config"
+	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/features/activation"
+	"github.com/cheetahbyte/clave/internal/features/adminauth"
+	"github.com/cheetahbyte/clave/internal/features/audit"
+	"github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/features/organization"
+	publicfeature "github.com/cheetahbyte/clave/internal/features/public"
+	"github.com/cheetahbyte/clave/internal/features/selfservice"
+	"github.com/cheetahbyte/clave/internal/features/update"
+	"github.com/cheetahbyte/clave/internal/features/validation"
+	"github.com/cheetahbyte/clave/internal/shared/email"
+	"github.com/cheetahbyte/clave/internal/shared/encryption"
+	"github.com/cheetahbyte/clave/internal/shared/helpers"
+	"github.com/cheetahbyte/clave/internal/shared/middleware"
+	"github.com/cheetahbyte/clave/internal/shared/signing"
+	"github.com/go-chi/chi/v5"
+	"github.com/gorilla/csrf"
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
+)
+
+func RunMigrations(databaseURL string) {
+	log.Println("running database migrations")
+	migDb, err := sql.Open("pgx", databaseURL)
+	if err != nil {
+		log.Fatalf("failed to open migration connection: %v", err)
+	}
+	if err := goose.Up(migDb, "./migrations"); err != nil {
+		log.Fatalf("migration failed: %v", err)
+	}
+	migDb.Close()
+	log.Println("migrations complete")
+}
+
+func NewRouter(cfg *config.Config) (http.Handler, error) {
+	helpers.TrustProxyHeaders = cfg.TrustProxyHeaders
+
+	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	q := db.New(pool)
+
+	signer := signing.New(cfg.LicenseJWTPublicKey, cfg.LicenseJWTPrivateKey, cfg.LicenseHMACSecret)
+
+	licenseSvc := license.NewService(q, pool, signer)
+	activationSvc := activation.NewService(q, pool, signer, licenseSvc)
+	validationSvc := validation.NewService(signer, licenseSvc)
+	updateSvc := update.NewService(licenseSvc, signer, cfg.GitHubRepo, cfg.GitHubToken)
+	selfServiceRepo := selfservice.NewRepository(q)
+	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer)
+
+	adminAuthRepo := adminauth.NewRepository(q)
+	adminAuthSvc := adminauth.NewService(adminAuthRepo, cfg.AdminTOTPEncryptionKey)
+
+	var mailer *email.Sender
+	if cfg.SMTPHost != "" {
+		mailer = email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.MailFrom)
+	}
+
+	appURL := cfg.PublicAppURL
+	licenseH := license.NewHandler(licenseSvc, mailer, appURL)
+	activationH := activation.NewHandler(activationSvc)
+	validationH := validation.NewHandler(validationSvc)
+	updateH := update.NewHandler(updateSvc)
+	selfserviceH := selfservice.NewHandler(selfserviceSvc, mailer, appURL, cfg.SelfServiceReturnToken, cfg.Dev)
+
+	var encSvc *encryption.Service
+	if cfg.DisableEncryption {
+		log.Println("request payload encryption is disabled")
+	} else {
+		var err error
+		encSvc, err = encryption.New(cfg.X25519PrivateKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+	publicH := publicfeature.NewHandler(encSvc, cfg.DisableEncryption)
+
+	sessionManager := scs.New()
+	sessionManager.Store = pgxstore.New(pool)
+	sessionManager.Lifetime = 12 * time.Hour
+	sessionManager.IdleTimeout = 30 * time.Minute
+	sessionManager.Cookie.Name = "clave_admin_session"
+	sessionManager.Cookie.HttpOnly = true
+	sessionManager.Cookie.Secure = cfg.IsProduction()
+	sessionManager.Cookie.SameSite = http.SameSiteLaxMode
+	sessionManager.Cookie.Path = "/"
+	sessionManager.Cookie.Persist = true
+
+	adminAuthH := adminauth.NewHandler(adminAuthSvc, sessionManager, cfg.AdminTOTPEncryptionKey)
+
+	orgRepo := organization.NewRepository(q)
+	orgSvc := organization.NewService(orgRepo, []byte(cfg.SelfServiceTokenPepper))
+	orgH := organization.NewHandler(orgSvc, sessionManager, mailer, appURL)
+
+	auditRepo := audit.NewRepository(q)
+	auditSvc := audit.NewService(auditRepo)
+	auditH := audit.NewHandler(auditSvc)
+
+	csrfMW := csrf.Protect(
+		cfg.CSRFAuthKey,
+		csrf.Secure(cfg.IsProduction()),
+		csrf.Path("/"),
+		csrf.HttpOnly(true),
+		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			reason := ""
+			if err := csrf.FailureReason(r); err != nil {
+				reason = err.Error()
+			}
+			msg := `{"error":"CSRF token missing or invalid"`
+			if reason != "" && !cfg.IsProduction() {
+				msg += `,"reason":"` + reason + `"`
+			}
+			msg += "}"
+			w.Write([]byte(msg))
+		})),
+	)
+
+	csrfPlaintext := middleware.CSRFPlaintext(!cfg.IsProduction())
+
+	ssAuth := middleware.RequireSelfServiceAuth(cfg.LicenseJWTPublicKey)
+	adminAuth := middleware.RequireAdmin(sessionManager)
+	adminVerified := middleware.RequireAdminVerified(sessionManager)
+
+	r := chi.NewRouter()
+	api.Register(r, api.Config{
+		Public: publicH.PubKey,
+		Client: api.ClientHandlers{
+			Activate:    activationH.Activate,
+			Validate:    validationH.Validate,
+			TrialStart:  activationH.StartTrial,
+			CheckUpdate: updateH.Check,
+		},
+		SelfService: api.SelfServiceHandlers{
+			RequestLink:   selfserviceH.RequestLink,
+			Validate:      selfserviceH.ValidateToken,
+			CheckSession:  selfserviceH.CheckSession,
+			ListLicenses:  selfserviceH.ListLicenses,
+			ListDevices:   selfserviceH.ListDevices,
+			RemoveDevice:  selfserviceH.RemoveDevice,
+			RevokeLicense: selfserviceH.RevokeLicense,
+			Logout:        selfserviceH.Logout,
+		},
+		AdminAuth: api.AdminAuthHandlers{
+			Login:       adminAuthH.Login,
+			Logout:      adminAuthH.Logout,
+			Me:          adminAuthH.Me,
+			CSRF:        adminAuthH.CSRFToken,
+			SetupStart:  adminAuthH.SetupStart,
+			SetupVerify: adminAuthH.SetupVerify,
+			Verify:      adminAuthH.Verify,
+		},
+		LicenseAdmin: api.LicenseAdminHandlers{
+			Create:        licenseH.Create,
+			Overview:      licenseH.AdminOverview,
+			Timeseries:    licenseH.AdminTimeseries,
+			ListTrials:    licenseH.AdminListTrials,
+			GetLicense:    licenseH.AdminGetLicense,
+			ListLicenses:  licenseH.AdminListLicenses,
+			ListProducts:  licenseH.AdminListProducts,
+			CreateProduct: licenseH.AdminCreateProduct,
+			UpdateProduct: licenseH.AdminUpdateProduct,
+			DeleteProduct: licenseH.AdminDeleteProduct,
+			UpdateLicense: licenseH.AdminUpdateLicense,
+			DeleteLicense: licenseH.AdminDeleteLicense,
+		},
+		Organization: api.OrganizationHandlers{
+			List:          orgH.List,
+			Create:        orgH.Create,
+			Switch:        orgH.Switch,
+			Members:       orgH.Members,
+			Invite:        orgH.Invite,
+			DeleteInvite:  orgH.DeleteInvite,
+			RemoveMember:  orgH.RemoveMember,
+			InvitePreview: orgH.InvitePreview,
+			InviteAccept:  orgH.InviteAccept,
+		},
+		AdminAuditLogs: auditH.List,
+		Middleware: api.MiddlewareConfig{
+			SSAuth:      ssAuth,
+			AdminAuth:   adminAuth,
+			VerifiedAuth: adminVerified,
+			SessionMW:   sessionManager.LoadAndSave,
+			CSRFAuth:    csrfMW,
+			CSRFPlain:   csrfPlaintext,
+			EncSvc:      encSvc,
+			EncDisabled: cfg.DisableEncryption,
+			Verbose:     cfg.VerboseLogging,
+		},
+	})
+
+	return r, nil
+}

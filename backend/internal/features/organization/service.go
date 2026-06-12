@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -21,16 +20,16 @@ var (
 )
 
 type Service struct {
-	q      *db.Queries
+	repo   *Repository
 	pepper []byte
 }
 
-func NewService(q *db.Queries, pepper []byte) *Service {
-	return &Service{q: q, pepper: pepper}
+func NewService(repo *Repository, pepper []byte) *Service {
+	return &Service{repo: repo, pepper: pepper}
 }
 
 func (s *Service) ListForAdmin(ctx context.Context, adminID uuid.UUID) ([]OrganizationItem, error) {
-	rows, err := s.q.GetAdminOrganizations(ctx, adminID)
+	rows, err := s.repo.GetAdminOrganizations(ctx, adminID)
 	if err != nil {
 		return nil, err
 	}
@@ -53,16 +52,12 @@ func (s *Service) Create(ctx context.Context, adminID uuid.UUID, name string) (*
 		return nil, err
 	}
 
-	org, err := s.q.CreateOrganization(ctx, db.CreateOrganizationParams{Name: name, Slug: slug})
+	org, err := s.repo.CreateOrganization(ctx, name, slug)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.q.CreateOrganizationMember(ctx, db.CreateOrganizationMemberParams{
-		OrganizationID: org.ID,
-		AdminUserID:    adminID,
-		Role:           "owner",
-	}); err != nil {
+	if err := s.repo.CreateOrganizationMember(ctx, org.ID, adminID, "owner"); err != nil {
 		return nil, err
 	}
 
@@ -77,10 +72,7 @@ func (s *Service) Create(ctx context.Context, adminID uuid.UUID, name string) (*
 
 // Switch verifies the admin is a member of the target org and returns it.
 func (s *Service) Switch(ctx context.Context, adminID, orgID uuid.UUID) (*OrganizationItem, error) {
-	membership, err := s.q.GetOrganizationMembership(ctx, db.GetOrganizationMembershipParams{
-		OrganizationID: orgID,
-		AdminUserID:    adminID,
-	})
+	membership, err := s.repo.GetOrganizationMembership(ctx, orgID, adminID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotMember
@@ -88,7 +80,7 @@ func (s *Service) Switch(ctx context.Context, adminID, orgID uuid.UUID) (*Organi
 		return nil, err
 	}
 
-	org, err := s.q.GetOrganizationById(ctx, orgID)
+	org, err := s.repo.GetOrganizationByID(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +96,7 @@ func (s *Service) Switch(ctx context.Context, adminID, orgID uuid.UUID) (*Organi
 
 // Name returns the organization's display name, or "" on error.
 func (s *Service) Name(ctx context.Context, orgID uuid.UUID) string {
-	org, err := s.q.GetOrganizationById(ctx, orgID)
+	org, err := s.repo.GetOrganizationByID(ctx, orgID)
 	if err != nil {
 		return ""
 	}
@@ -127,7 +119,7 @@ func (s *Service) uniqueSlug(ctx context.Context, name string) (string, error) {
 	base := slugify(name)
 	candidate := base
 	for i := 2; i < 100; i++ {
-		_, err := s.q.GetOrganizationBySlug(ctx, candidate)
+		_, err := s.repo.GetOrganizationBySlug(ctx, candidate)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return candidate, nil
 		}

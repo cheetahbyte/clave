@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"os"
 	"strings"
 
 	problem "github.com/cheetahbyte/problems"
@@ -100,8 +99,27 @@ func WriteError(w http.ResponseWriter, r *http.Request, err error) {
 	p.WriteTo(w)
 }
 
+func DecodeValidated[T any](w http.ResponseWriter, r *http.Request, dst *T) bool {
+	if err := DecodeAndValidate(w, r, dst); err != nil {
+		if _, ok := err.(validator.ValidationErrors); ok {
+			WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{"errors": FormatValidationError(err)})
+			return false
+		}
+		WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return false
+	}
+	return true
+}
+
+func WriteInternal(w http.ResponseWriter, r *http.Request, msg string, err error) {
+	slog.Error(msg, "err", err)
+	WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+}
+
+var TrustProxyHeaders bool
+
 func ClientIP(r *http.Request) *netip.Addr {
-	if trustProxyHeaders() {
+	if TrustProxyHeaders {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			parts := strings.Split(xff, ",")
 			if len(parts) > 0 {
@@ -130,11 +148,6 @@ func ClientIP(r *http.Request) *netip.Addr {
 	}
 
 	return nil
-}
-
-func trustProxyHeaders() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("TRUST_PROXY_HEADERS")))
-	return v == "true" || v == "1" || v == "yes"
 }
 
 func parseNetipAddr(s string) (netip.Addr, bool) {

@@ -11,11 +11,11 @@ import (
 )
 
 type Service struct {
-	q *db.Queries
+	repo *Repository
 }
 
-func NewService(q *db.Queries) *Service {
-	return &Service{q: q}
+func NewService(repo *Repository) *Service {
+	return &Service{repo: repo}
 }
 
 func (s *Service) List(ctx context.Context, orgID uuid.UUID, page, pageSize int) (*AuditLogListResponse, error) {
@@ -31,16 +31,12 @@ func (s *Service) List(ctx context.Context, orgID uuid.UUID, page, pageSize int)
 	}
 	offset := (page - 1) * pageSize
 
-	total, err := s.q.CountAuditLogsByOrganization(ctx, orgID)
+	total, err := s.repo.CountByOrganization(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := s.q.ListAuditLogsByOrganization(ctx, db.ListAuditLogsByOrganizationParams{
-		OrganizationID: orgID,
-		Limit:          int32(pageSize),
-		Offset:         int32(offset),
-	})
+	rows, err := s.repo.ListByOrganization(ctx, orgID, int32(pageSize), int32(offset))
 	if err != nil {
 		return nil, err
 	}

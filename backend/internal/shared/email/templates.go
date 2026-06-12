@@ -6,14 +6,14 @@ import (
 )
 
 type templateData struct {
-	Preheader  string
-	Heading    string
-	Paragraphs []string
-	ButtonText string
-	ButtonURL  string
+	Preheader   string
+	Heading     string
+	Paragraphs  []string
+	ButtonText  string
+	ButtonURL   string
 	FallbackURL string
-	CodeBlock  string
-	FooterNote string
+	CodeBlock   string
+	FooterNote  string
 }
 
 const baseLayout = `<!doctype html>

@@ -3,7 +3,6 @@ package selfservice
 import (
 	"errors"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -18,20 +17,20 @@ import (
 )
 
 type Handler struct {
-	svc       *Service
-	mailer    *email.Sender
-	appURL    string
+	svc         *Service
+	mailer      *email.Sender
+	appURL      string
 	returnToken bool
+	dev         bool
 }
 
-func NewHandler(svc *Service, mailer *email.Sender) *Handler {
-	appURL := strings.TrimRight(os.Getenv("PUBLIC_APP_URL"), "/")
-	returnToken := strings.ToLower(os.Getenv("SELF_SERVICE_RETURN_TOKEN")) == "true"
+func NewHandler(svc *Service, mailer *email.Sender, appURL string, returnToken bool, dev bool) *Handler {
 	return &Handler{
-		svc:       svc,
-		mailer:    mailer,
-		appURL:    appURL,
+		svc:         svc,
+		mailer:      mailer,
+		appURL:      strings.TrimRight(appURL, "/"),
 		returnToken: returnToken,
+		dev:         dev,
 	}
 }
 
@@ -102,7 +101,7 @@ func (h *Handler) ValidateToken(w http.ResponseWriter, r *http.Request) {
 		Value:    result.Token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   !isSelfServiceDev(),
+		Secure:   !h.dev,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   60 * 60,
 	})
@@ -123,7 +122,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   !isSelfServiceDev(),
+		Secure:   !h.dev,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
@@ -248,9 +247,4 @@ func selfServiceScope(w http.ResponseWriter, r *http.Request) (string, uuid.UUID
 	}
 
 	return email, orgID, true
-}
-
-func isSelfServiceDev() bool {
-	v := strings.ToLower(strings.TrimSpace(os.Getenv("DEV")))
-	return v == "true" || v == "1" || v == "yes"
 }

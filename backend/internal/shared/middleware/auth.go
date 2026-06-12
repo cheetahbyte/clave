@@ -6,15 +6,14 @@ import (
 	"crypto/subtle"
 	"errors"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
+	problem "github.com/cheetahbyte/problems"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/csrf"
-	problem "github.com/cheetahbyte/problems"
 )
 
 type contextKey string
@@ -122,34 +121,35 @@ func RequireSelfServiceAuth(pubKey ed25519.PublicKey) func(http.Handler) http.Ha
 	}
 }
 
-func RequireAdminBearerToken(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw := os.Getenv("ADMIN_BEARER_TOKEN")
-		if raw == "" {
-			p := problem.Of(500).
-				Append(problem.Title("Server misconfiguration")).
-				Append(problem.Detail("Admin token not configured"))
-			p.WriteTo(w)
-			return
-		}
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") {
-			p := problem.Of(401).
-				Append(problem.Title("Unauthorized")).
-				Append(problem.Detail("Missing or malformed authorization header"))
-			p.WriteTo(w)
-			return
-		}
-		token := strings.TrimPrefix(auth, "Bearer ")
-		if subtle.ConstantTimeCompare([]byte(token), []byte(raw)) != 1 {
-			p := problem.Of(401).
-				Append(problem.Title("Unauthorized")).
-				Append(problem.Detail("Invalid authorization token"))
-			p.WriteTo(w)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+func RequireAdminBearerToken(expectedToken string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if expectedToken == "" {
+				p := problem.Of(500).
+					Append(problem.Title("Server misconfiguration")).
+					Append(problem.Detail("Admin token not configured"))
+				p.WriteTo(w)
+				return
+			}
+			auth := r.Header.Get("Authorization")
+			if !strings.HasPrefix(auth, "Bearer ") {
+				p := problem.Of(401).
+					Append(problem.Title("Unauthorized")).
+					Append(problem.Detail("Missing or malformed authorization header"))
+				p.WriteTo(w)
+				return
+			}
+			token := strings.TrimPrefix(auth, "Bearer ")
+			if subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) != 1 {
+				p := problem.Of(401).
+					Append(problem.Title("Unauthorized")).
+					Append(problem.Detail("Invalid authorization token"))
+				p.WriteTo(w)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 func RequireAdmin(sm *scs.SessionManager) func(http.Handler) http.Handler {
@@ -173,27 +173,27 @@ func RequireAdmin(sm *scs.SessionManager) func(http.Handler) http.Handler {
 				return
 			}
 
-		email := sm.GetString(r.Context(), "admin_email")
-		role := sm.GetString(r.Context(), "admin_role")
+			email := sm.GetString(r.Context(), "admin_email")
+			role := sm.GetString(r.Context(), "admin_role")
 
-		orgIDStr := sm.GetString(r.Context(), "admin_organization_id")
-		orgID, err := uuid.Parse(orgIDStr)
-		if err != nil {
-			p := problem.Of(401).
-				Append(problem.Title("Unauthorized")).
-				Append(problem.Detail("Invalid admin session"))
-			p.WriteTo(w)
-			return
-		}
+			orgIDStr := sm.GetString(r.Context(), "admin_organization_id")
+			orgID, err := uuid.Parse(orgIDStr)
+			if err != nil {
+				p := problem.Of(401).
+					Append(problem.Title("Unauthorized")).
+					Append(problem.Detail("Invalid admin session"))
+				p.WriteTo(w)
+				return
+			}
 
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, adminIDKey, id)
-		ctx = context.WithValue(ctx, adminEmailKey, email)
-		ctx = context.WithValue(ctx, adminRoleKey, role)
-		ctx = context.WithValue(ctx, adminOrganizationIDKey, orgID)
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, adminIDKey, id)
+			ctx = context.WithValue(ctx, adminEmailKey, email)
+			ctx = context.WithValue(ctx, adminRoleKey, role)
+			ctx = context.WithValue(ctx, adminOrganizationIDKey, orgID)
 
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
 	}
 }
 
@@ -227,27 +227,27 @@ func RequireAdminVerified(sm *scs.SessionManager) func(http.Handler) http.Handle
 				return
 			}
 
-		email := sm.GetString(r.Context(), "admin_email")
-		role := sm.GetString(r.Context(), "admin_role")
+			email := sm.GetString(r.Context(), "admin_email")
+			role := sm.GetString(r.Context(), "admin_role")
 
-		orgIDStr := sm.GetString(r.Context(), "admin_organization_id")
-		orgID, err := uuid.Parse(orgIDStr)
-		if err != nil {
-			p := problem.Of(401).
-				Append(problem.Title("Unauthorized")).
-				Append(problem.Detail("Invalid admin session"))
-			p.WriteTo(w)
-			return
-		}
+			orgIDStr := sm.GetString(r.Context(), "admin_organization_id")
+			orgID, err := uuid.Parse(orgIDStr)
+			if err != nil {
+				p := problem.Of(401).
+					Append(problem.Title("Unauthorized")).
+					Append(problem.Detail("Invalid admin session"))
+				p.WriteTo(w)
+				return
+			}
 
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, adminIDKey, id)
-		ctx = context.WithValue(ctx, adminEmailKey, email)
-		ctx = context.WithValue(ctx, adminRoleKey, role)
-		ctx = context.WithValue(ctx, adminOrganizationIDKey, orgID)
+			ctx := r.Context()
+			ctx = context.WithValue(ctx, adminIDKey, id)
+			ctx = context.WithValue(ctx, adminEmailKey, email)
+			ctx = context.WithValue(ctx, adminRoleKey, role)
+			ctx = context.WithValue(ctx, adminOrganizationIDKey, orgID)
 
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
 	}
 }
 

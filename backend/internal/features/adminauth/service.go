@@ -24,16 +24,16 @@ var (
 )
 
 type Service struct {
-	q         *db.Queries
-	totpKey   []byte
+	repo    *Repository
+	totpKey []byte
 }
 
-func NewService(q *db.Queries, totpKey []byte) *Service {
-	return &Service{q: q, totpKey: totpKey}
+func NewService(repo *Repository, totpKey []byte) *Service {
+	return &Service{repo: repo, totpKey: totpKey}
 }
 
 func (s *Service) Login(ctx context.Context, email, password string) (*LoginResponse, error) {
-	admin, err := s.q.GetAdminByEmail(ctx, email)
+	admin, err := s.repo.GetAdminByEmail(ctx, email)
 	if err != nil {
 		slog.Debug("admin login: email not found", "email", email)
 		return nil, ErrInvalidCredentials
@@ -52,27 +52,27 @@ func (s *Service) Login(ctx context.Context, email, password string) (*LoginResp
 		return nil, ErrAdminInactive
 	}
 
-	if err := s.q.UpdateLastLogin(ctx, admin.ID); err != nil {
+	if err := s.repo.UpdateLastLogin(ctx, admin.ID); err != nil {
 		slog.Error("failed to update last login", "err", err)
 	}
 
-	orgs, err := s.q.GetAdminOrganizations(ctx, admin.ID)
+	orgs, err := s.repo.GetAdminOrganizations(ctx, admin.ID)
 	if err != nil || len(orgs) == 0 {
 		return nil, ErrNoOrganization
 	}
 	org := orgs[0]
 
 	return &LoginResponse{
-		ID:                     admin.ID,
-		Email:                  admin.Email,
-		Role:                   admin.Role,
-		OrganizationID:         org.ID,
-		OrganizationName:       org.Name,
-		MfaEnabled:             admin.TotpEnabled,
-		MfaVerified:            false,
-		MfaSetupRequired:       !admin.TotpEnabled,
+		ID:                      admin.ID,
+		Email:                   admin.Email,
+		Role:                    admin.Role,
+		OrganizationID:          org.ID,
+		OrganizationName:        org.Name,
+		MfaEnabled:              admin.TotpEnabled,
+		MfaVerified:             false,
+		MfaSetupRequired:        !admin.TotpEnabled,
 		MfaVerificationRequired: admin.TotpEnabled,
-		CreatedAt:              admin.CreatedAt.Time,
+		CreatedAt:               admin.CreatedAt.Time,
 	}, nil
 }
 
@@ -80,7 +80,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*LoginResp
 // (activeOrgID, taken from the session). Falls back to the admin's first org
 // when activeOrgID is nil or no longer a valid membership.
 func (s *Service) GetByID(ctx context.Context, id uuid.UUID, activeOrgID *uuid.UUID) (*AdminProfileResponse, error) {
-	admin, err := s.q.GetAdminById(ctx, id)
+	admin, err := s.repo.GetAdminByID(ctx, id)
 	if err != nil {
 		return nil, ErrAdminNotFound
 	}
@@ -93,7 +93,7 @@ func (s *Service) GetByID(ctx context.Context, id uuid.UUID, activeOrgID *uuid.U
 		lastLogin = &admin.LastLoginAt.Time
 	}
 
-	orgs, err := s.q.GetAdminOrganizations(ctx, admin.ID)
+	orgs, err := s.repo.GetAdminOrganizations(ctx, admin.ID)
 	if err != nil || len(orgs) == 0 {
 		return nil, ErrNoOrganization
 	}
@@ -121,7 +121,7 @@ func (s *Service) GetByID(ctx context.Context, id uuid.UUID, activeOrgID *uuid.U
 }
 
 func (s *Service) SetupStart(ctx context.Context, adminID uuid.UUID) (*SetupStartResponse, error) {
-	admin, err := s.q.GetAdminById(ctx, adminID)
+	admin, err := s.repo.GetAdminByID(ctx, adminID)
 	if err != nil {
 		return nil, ErrAdminNotFound
 	}
@@ -153,15 +153,11 @@ func (s *Service) CompleteTOTPSetup(ctx context.Context, adminID uuid.UUID, code
 		return ErrInvalidTOTPCode
 	}
 
-	return s.q.EnableTOTP(ctx, db.EnableTOTPParams{
-		ID:          adminID,
-		SecretEnc:   enc,
-		SecretNonce: nonce,
-	})
+	return s.repo.EnableTOTP(ctx, adminID, enc, nonce)
 }
 
 func (s *Service) SetupVerify(ctx context.Context, adminID uuid.UUID, code string) error {
-	admin, err := s.q.GetAdminById(ctx, adminID)
+	admin, err := s.repo.GetAdminByID(ctx, adminID)
 	if err != nil {
 		return ErrAdminNotFound
 	}
@@ -185,7 +181,7 @@ func (s *Service) SetupVerify(ctx context.Context, adminID uuid.UUID, code strin
 }
 
 func (s *Service) Verify(ctx context.Context, adminID uuid.UUID, code string) error {
-	admin, err := s.q.GetAdminById(ctx, adminID)
+	admin, err := s.repo.GetAdminByID(ctx, adminID)
 	if err != nil {
 		return ErrAdminNotFound
 	}
@@ -222,11 +218,7 @@ func (s *Service) CreateAdmin(ctx context.Context, email, password, role string)
 		return nil, errors.New("failed to hash password")
 	}
 
-	admin, err := s.q.CreateAdmin(ctx, db.CreateAdminParams{
-		Email:        email,
-		PasswordHash: hash,
-		Role:         role,
-	})
+	admin, err := s.repo.CreateAdmin(ctx, email, hash, role)
 	if err != nil {
 		return nil, err
 	}

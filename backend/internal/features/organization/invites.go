@@ -21,11 +21,11 @@ const inviteTTL = 7 * 24 * time.Hour
 
 // Members returns the current members plus pending invites for an org.
 func (s *Service) Members(ctx context.Context, orgID uuid.UUID) (*MembersResponse, error) {
-	memberRows, err := s.q.ListOrganizationMembers(ctx, orgID)
+	memberRows, err := s.repo.ListMembers(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
-	inviteRows, err := s.q.ListPendingInvites(ctx, orgID)
+	inviteRows, err := s.repo.ListPendingInvites(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
@@ -69,14 +69,11 @@ func (s *Service) CreateInvite(ctx context.Context, orgID, invitedBy uuid.UUID, 
 	}
 
 	// Replace any existing pending invite for this email.
-	if err := s.q.DeletePendingInvitesByEmail(ctx, db.DeletePendingInvitesByEmailParams{
-		OrganizationID: orgID,
-		Lower:          email,
-	}); err != nil {
+	if err := s.repo.DeletePendingInvitesByEmail(ctx, orgID, email); err != nil {
 		return "", nil, err
 	}
 
-	invite, err := s.q.CreateInvite(ctx, db.CreateInviteParams{
+	invite, err := s.repo.CreateInvite(ctx, db.CreateInviteParams{
 		OrganizationID: orgID,
 		Email:          email,
 		Role:           role,
@@ -98,22 +95,20 @@ func (s *Service) CreateInvite(ctx context.Context, orgID, invitedBy uuid.UUID, 
 }
 
 func (s *Service) DeleteInvite(ctx context.Context, orgID, inviteID uuid.UUID) error {
-	return s.q.DeleteInvite(ctx, db.DeleteInviteParams{ID: inviteID, OrganizationID: orgID})
-}
+	return s.repo.DeleteInvite(ctx, orgID, inviteID)
 
+}
 func (s *Service) RemoveMember(ctx context.Context, orgID, adminID, targetID uuid.UUID) error {
 	if adminID == targetID {
 		return ErrCannotRemoveSelf
 	}
-	return s.q.DeleteOrganizationMember(ctx, db.DeleteOrganizationMemberParams{
-		OrganizationID: orgID,
-		AdminUserID:    targetID,
-	})
+	return s.repo.DeleteOrganizationMember(ctx, orgID, targetID)
+
 }
 
 // PreviewInvite validates a raw token and describes what accepting it requires.
 func (s *Service) PreviewInvite(ctx context.Context, rawToken string) (*InvitePreviewResponse, error) {
-	invite, err := s.q.GetInviteByTokenHash(ctx, s.hashToken(strings.TrimSpace(rawToken)))
+	invite, err := s.repo.GetInviteByTokenHash(ctx, s.hashToken(strings.TrimSpace(rawToken)))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return &InvitePreviewResponse{Valid: false}, nil
@@ -125,7 +120,7 @@ func (s *Service) PreviewInvite(ctx context.Context, rawToken string) (*InvitePr
 	}
 
 	requiresPassword := false
-	if _, err := s.q.GetAdminByEmail(ctx, invite.Email); err != nil {
+	if _, err := s.repo.GetAdminByEmail(ctx, invite.Email); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			requiresPassword = true
 		} else {
@@ -143,7 +138,7 @@ func (s *Service) PreviewInvite(ctx context.Context, rawToken string) (*InvitePr
 
 // AcceptInvite consumes a token: adds (or creates) the admin and grants membership.
 func (s *Service) AcceptInvite(ctx context.Context, rawToken, password string) error {
-	invite, err := s.q.GetInviteByTokenHash(ctx, s.hashToken(strings.TrimSpace(rawToken)))
+	invite, err := s.repo.GetInviteByTokenHash(ctx, s.hashToken(strings.TrimSpace(rawToken)))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrInviteNotFound
@@ -158,7 +153,7 @@ func (s *Service) AcceptInvite(ctx context.Context, rawToken, password string) e
 	}
 
 	var adminID uuid.UUID
-	admin, err := s.q.GetAdminByEmail(ctx, invite.Email)
+	admin, err := s.repo.GetAdminByEmail(ctx, invite.Email)
 	if err != nil {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
@@ -171,11 +166,7 @@ func (s *Service) AcceptInvite(ctx context.Context, rawToken, password string) e
 		if herr != nil {
 			return errors.New("failed to hash password")
 		}
-		created, cerr := s.q.CreateAdmin(ctx, db.CreateAdminParams{
-			Email:        invite.Email,
-			PasswordHash: hash,
-			Role:         invite.Role,
-		})
+		created, cerr := s.repo.CreateAdmin(ctx, invite.Email, hash, invite.Role)
 		if cerr != nil {
 			return cerr
 		}
@@ -185,22 +176,15 @@ func (s *Service) AcceptInvite(ctx context.Context, rawToken, password string) e
 	}
 
 	// Grant membership (ignore if already a member).
-	if _, merr := s.q.GetOrganizationMembership(ctx, db.GetOrganizationMembershipParams{
-		OrganizationID: invite.OrganizationID,
-		AdminUserID:    adminID,
-	}); errors.Is(merr, pgx.ErrNoRows) {
-		if cerr := s.q.CreateOrganizationMember(ctx, db.CreateOrganizationMemberParams{
-			OrganizationID: invite.OrganizationID,
-			AdminUserID:    adminID,
-			Role:           invite.Role,
-		}); cerr != nil {
+	if _, merr := s.repo.GetOrganizationMembership(ctx, invite.OrganizationID, adminID); errors.Is(merr, pgx.ErrNoRows) {
+		if cerr := s.repo.CreateOrganizationMember(ctx, invite.OrganizationID, adminID, invite.Role); cerr != nil {
 			return cerr
 		}
 	} else if merr != nil {
 		return merr
 	}
 
-	_, err = s.q.AcceptInvite(ctx, invite.ID)
+	err = s.repo.AcceptInvite(ctx, invite.ID)
 	return err
 }
 

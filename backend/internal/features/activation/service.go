@@ -9,7 +9,6 @@ import (
 	"github.com/alexedwards/argon2id"
 	problem "github.com/cheetahbyte/problems"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
@@ -142,11 +141,7 @@ func (svc *Service) StartTrial(ctx context.Context, data StartTrialRequest) (Act
 
 	hwidHash := svc.signer.HMACSign(data.Device.HWID, signing.DontNormalizeKey)
 
-	cnt, err := svc.repo.q.CountTrialsByHwidProduct(ctx, db.CountTrialsByHwidProductParams{
-		OrganizationID: product.OrganizationID,
-		ProductID:      pgtype.UUID{Bytes: [16]byte(productID), Valid: true},
-		TrialHwidHash:  hwidHash,
-	})
+	cnt, err := svc.repo.CountTrialsByHwidProduct(ctx, product.OrganizationID, productID, hwidHash)
 	if err != nil {
 		slog.Error("failed to check trial by hwid", "err", err)
 		return ActivateResponse{}, problem.Of(500).

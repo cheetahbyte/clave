@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -41,16 +41,20 @@ func (err *githubReleaseError) Error() string {
 }
 
 type Service struct {
-	licenses *license.Service
-	signer   *signing.Service
-	client   *http.Client
+	licenses    *license.Service
+	signer      *signing.Service
+	client      *http.Client
+	githubRepo  string
+	githubToken string
 }
 
-func NewService(licenses *license.Service, signer *signing.Service) *Service {
+func NewService(licenses *license.Service, signer *signing.Service, githubRepo, githubToken string) *Service {
 	return &Service{
-		licenses: licenses,
-		signer:   signer,
-		client:   &http.Client{Timeout: githubReleaseFetchTimeout},
+		licenses:    licenses,
+		signer:      signer,
+		client:      &http.Client{Timeout: githubReleaseFetchTimeout},
+		githubRepo:  githubRepo,
+		githubToken: githubToken,
 	}
 }
 
@@ -84,7 +88,7 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 			Append(problem.Instance(instance))
 	}
 
-	repo := strings.TrimSpace(os.Getenv("GITHUB_REPO"))
+	repo := strings.TrimSpace(svc.githubRepo)
 	if repo == "" {
 		slog.Error("github repo is not configured")
 		return CheckResponse{}, problem.Of(500).
@@ -105,7 +109,8 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 				Append(problem.Detail("No published latest release is available for the configured repository.")).
 				Append(problem.Instance(instance))
 		}
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || os.IsTimeout(err) {
+		var netErr net.Error
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) || (errors.As(err, &netErr) && netErr.Timeout()) {
 			return CheckResponse{}, problem.Of(504).
 				Append(problem.Title("Release lookup timed out")).
 				Append(problem.Detail("GitHub release information could not be fetched before the request deadline")).
@@ -139,8 +144,8 @@ func (svc *Service) fetchLatestRelease(ctx context.Context, repo string) (*githu
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "clave-update-service")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	if svc.githubToken != "" {
+		req.Header.Set("Authorization", "Bearer "+svc.githubToken)
 	}
 
 	resp, err := svc.client.Do(req)
