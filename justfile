@@ -2,7 +2,7 @@ set dotenv-load := true
 set shell := ["bash", "-ceu"]
 
 backend_dir := "backend"
-frontend_dir := "frontend"
+frontend_dir := "website"
 
 _default:
     @just --list
@@ -19,15 +19,9 @@ dev-be:
 dev-fe:
     cd {{frontend_dir}} && pnpm dev
 
-migrate: migrate-be migrate-fe
-
-migrate-be:
+migrate:
     @echo "Running backend migrations..."
     goose up
-
-migrate-fe:
-    @echo "Running frontend migrations (Drizzle)..."
-    cd {{frontend_dir}} && pnpm drizzle-kit migrate
 
 reset-be:
     @echo "Rolling back all backend migrations..."

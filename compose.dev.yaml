@@ -1,0 +1,63 @@
+# Local dev/testing stack for Clave.
+#
+#   docker compose -f compose.dev.yaml up -d
+#
+# Brings up Postgres, Mailpit (catch-all SMTP) and the Clave backend.
+# The backend reads secrets from your .env file (see README). The few
+# vars below override host/port so the containers can find each other.
+
+name: clave-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: clave
+      POSTGRES_DB: clave
+      # No password locally — matches sslmode=disable in DATABASE_URL.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "54321:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clave -d clave"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Fake SMTP server. Catches every mail, nothing leaves your machine.
+  # Web inbox: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # web UI
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      # Talk to the sibling containers, not localhost.
+      DATABASE_URL: "postgres://clave@postgres:5432/clave?sslmode=disable"
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      RUN_MIGRATIONS: "true"
+      DEV: "true"
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+volumes:
+  pgdata:
