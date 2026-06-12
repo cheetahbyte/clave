@@ -49,6 +49,7 @@ export function LicenseDetails({ license }: LicenseDetailsProps) {
   const queryClient = useQueryClient();
   const [deviceToRemove, setDeviceToRemove] = useState<Device | null>(null);
   const [revokeOpen, setRevokeOpen] = useState(false);
+  const [logoError, setLogoError] = useState(false);
 
   const {
     data: devices = [],
@@ -87,14 +88,12 @@ export function LicenseDetails({ license }: LicenseDetailsProps) {
       <header className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900">
-            {license.logo_url ? (
+            {license.logo_url && !logoError ? (
               <img
                 src={license.logo_url}
                 alt=""
                 className="h-full w-full object-contain"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                }}
+                onError={() => setLogoError(true)}
               />
             ) : (
               <ShieldCheck className="size-5" />

@@ -187,6 +187,7 @@ function ProductDialog({
   const [name, setName] = useState(product?.name ?? "");
   const [version, setVersion] = useState(product?.version ?? "");
   const [logoUrl, setLogoUrl] = useState(product?.logoUrl ?? "");
+  const [logoError, setLogoError] = useState(false);
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -246,16 +247,16 @@ function ProductDialog({
               />
               {logoUrl.trim() && (
                 <div className="mt-2 flex size-12 items-center justify-center overflow-hidden rounded-xl border bg-white">
-                  <img
-                    src={logoUrl.trim()}
-                    alt="Logo preview"
-                    className="h-full w-full object-contain"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = "none";
-                      (e.currentTarget.nextSibling as HTMLElement).style.display = "flex";
-                    }}
-                  />
-                  <ImageIcon className="hidden size-6 text-slate-300" />
+                  {logoError ? (
+                    <ImageIcon className="size-6 text-slate-300" />
+                  ) : (
+                    <img
+                      src={logoUrl.trim()}
+                      alt="Logo preview"
+                      className="h-full w-full object-contain"
+                      onError={() => setLogoError(true)}
+                    />
+                  )}
                 </div>
               )}
             </div>

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -278,6 +279,10 @@ func (svc *Service) AdminListLicenses(ctx context.Context, orgID uuid.UUID, q st
 	}
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 20
+	}
+	maxPage := math.MaxInt32 / pageSize
+	if page > maxPage {
+		page = maxPage
 	}
 	offset := (page - 1) * pageSize
 

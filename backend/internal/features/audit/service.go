@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/cheetahbyte/clave/internal/db"
@@ -23,6 +24,10 @@ func (s *Service) List(ctx context.Context, orgID uuid.UUID, page, pageSize int)
 	}
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 50
+	}
+	maxPage := math.MaxInt32 / pageSize
+	if page > maxPage {
+		page = maxPage
 	}
 	offset := (page - 1) * pageSize
 

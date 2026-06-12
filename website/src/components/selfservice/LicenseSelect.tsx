@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Package, ShieldCheck, Calendar, ChevronRight, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { logoutSelfService } from "@/features/selfservice/api";
@@ -33,6 +34,8 @@ export function LicenseSelect({ licenses, orgSlug }: LicenseSelectProps) {
       navigate({ to: "/selfservice/$orgSlug", params: { orgSlug }, search: { licenseId: undefined }, replace: true });
     },
   });
+
+  const [logoErrors, setLogoErrors] = useState<Set<string>>(new Set());
 
   return (
     <main className="min-h-dvh bg-white px-6 py-12 dark:bg-slate-950">
@@ -89,14 +92,12 @@ export function LicenseSelect({ licenses, orgSlug }: LicenseSelectProps) {
                     }
                   >
                     <div className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900">
-                      {license.logo_url ? (
+                      {license.logo_url && !logoErrors.has(license.id) ? (
                         <img
                           src={license.logo_url}
                           alt=""
                           className="h-full w-full object-contain"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).style.display = "none";
-                          }}
+                          onError={() => setLogoErrors((prev) => new Set(prev).add(license.id))}
                         />
                       ) : (
                         <ShieldCheck className="size-5" />
