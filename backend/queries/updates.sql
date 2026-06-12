@@ -1,0 +1,163 @@
+-- name: GetDefaultChannelForProduct :one
+SELECT * FROM update_channels
+WHERE product_id = $1 AND is_default = true
+LIMIT 1;
+
+-- name: GetChannelsForProduct :many
+SELECT * FROM update_channels
+WHERE product_id = $1
+ORDER BY name;
+
+-- name: GetChannelByProductAndName :one
+SELECT * FROM update_channels
+WHERE product_id = $1 AND name = $2;
+
+-- name: UpsertUpdateChannel :one
+INSERT INTO update_channels (organization_id, product_id, name, is_default)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (product_id, name)
+DO UPDATE SET is_default = EXCLUDED.is_default, updated_at = now()
+RETURNING *;
+
+-- name: GetProductUpdateConfig :one
+SELECT puc.*
+FROM product_update_configs puc
+JOIN update_channels c ON c.id = puc.channel_id
+WHERE puc.product_id = $1
+  AND puc.platform = $2
+  AND c.name = $3
+  AND puc.enabled = true;
+
+-- name: GetProductUpdateConfigs :many
+SELECT puc.*, c.name AS channel_name
+FROM product_update_configs puc
+JOIN update_channels c ON c.id = puc.channel_id
+WHERE puc.product_id = $1
+ORDER BY puc.platform, c.name;
+
+-- name: DeleteProductUpdateConfig :one
+DELETE FROM product_update_configs
+WHERE id = $1 AND organization_id = $2
+RETURNING *;
+
+-- name: UpsertProductUpdateConfig :one
+INSERT INTO product_update_configs (
+    organization_id, product_id, platform, channel_id, provider_key, config, enabled
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (product_id, platform, channel_id)
+DO UPDATE SET
+    provider_key = EXCLUDED.provider_key,
+    config = EXCLUDED.config,
+    enabled = EXCLUDED.enabled,
+    updated_at = now()
+RETURNING *;
+
+-- name: LatestPublishedUpdateRelease :one
+SELECT *
+FROM update_releases
+WHERE product_id = $1
+  AND platform = $2
+  AND channel_id = $3
+  AND status = 'published'
+  AND published_at <= now()
+ORDER BY published_at DESC, created_at DESC
+LIMIT 1;
+
+-- name: GetUpdateRelease :one
+SELECT * FROM update_releases WHERE id = $1;
+
+-- name: InsertUpdateRelease :one
+INSERT INTO update_releases (
+    organization_id, product_id, channel_id, platform,
+    version, build_number, status, release_notes, published_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING *;
+
+-- name: PublishUpdateRelease :one
+UPDATE update_releases
+SET status = 'published', published_at = now(), updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: YankUpdateRelease :one
+UPDATE update_releases
+SET status = 'yanked', updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteUpdateRelease :one
+DELETE FROM update_releases
+WHERE id = $1
+RETURNING *;
+
+-- name: ListReleasesForProductChannel :many
+SELECT * FROM update_releases
+WHERE product_id = $1
+  AND platform = $2
+  AND channel_id = $3
+ORDER BY created_at DESC
+LIMIT $4 OFFSET $5;
+
+-- name: ListReleasesForOrganization :many
+SELECT ur.*, p.name AS product_name, c.name AS channel_name
+FROM update_releases ur
+JOIN products p ON p.id = ur.product_id
+JOIN update_channels c ON c.id = ur.channel_id
+WHERE ur.organization_id = $1
+ORDER BY ur.created_at DESC
+LIMIT $2 OFFSET $3;
+
+-- name: ListArtifactsForRelease :many
+SELECT * FROM update_artifacts
+WHERE release_id = $1;
+
+-- name: GetUpdateArtifact :one
+SELECT * FROM update_artifacts WHERE id = $1;
+
+-- name: InsertUpdateArtifact :one
+INSERT INTO update_artifacts (
+    release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata,
+    filename, mime_type, minimum_system_version, sparkle_ed_signature, storage_backend, storage_key
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+RETURNING *;
+
+-- name: GetReleasePolicy :one
+SELECT * FROM update_release_policies
+WHERE release_id = $1;
+
+-- name: UpsertReleasePolicy :one
+INSERT INTO update_release_policies (
+    release_id, mandatory, min_supported_version, rollout_percentage, starts_at, ends_at
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (release_id)
+DO UPDATE SET
+    mandatory = EXCLUDED.mandatory,
+    min_supported_version = EXCLUDED.min_supported_version,
+    rollout_percentage = EXCLUDED.rollout_percentage,
+    starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at,
+    updated_at = now()
+RETURNING *;
+
+-- name: InsertUpdateCheck :one
+INSERT INTO update_checks (
+    organization_id, product_id, license_id, platform, channel,
+    provider_key, current_version, current_build, arch, os_version, decision, selected_release_id
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING *;
+
+-- name: ListPublishedReleasesForAppcast :many
+SELECT *
+FROM update_releases
+WHERE product_id = $1
+  AND platform = $2
+  AND channel_id = $3
+  AND status = 'published'
+  AND published_at <= now()
+ORDER BY published_at DESC
+LIMIT 20;
