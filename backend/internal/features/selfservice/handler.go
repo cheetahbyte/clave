@@ -72,9 +72,9 @@ func (h *Handler) RequestLink(w http.ResponseWriter, r *http.Request) {
 		if body.OrgSlug != "" {
 			link = h.appURL + "/selfservice/" + body.OrgSlug + "/auth?token=" + rawToken
 		}
-		subject, htmlBody, terr := email.MagicLinkEmail(link)
+		msg, terr := email.MagicLinkEmail(link)
 		if terr == nil {
-			go func() { _ = h.mailer.Send(emailAddr, subject, htmlBody) }()
+			go func() { _ = h.mailer.Send(emailAddr, msg) }()
 		}
 	}
 

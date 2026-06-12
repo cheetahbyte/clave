@@ -150,9 +150,9 @@ func (h *Handler) Invite(w http.ResponseWriter, r *http.Request) {
 	if h.mailer != nil && h.appURL != "" {
 		link := h.appURL + "/invite/" + rawToken
 		orgName := h.svc.Name(r.Context(), orgID)
-		subject, htmlBody, terr := email.InviteEmail(orgName, link)
+		msg, terr := email.InviteEmail(orgName, link)
 		if terr == nil {
-			go func() { _ = h.mailer.Send(item.Email, subject, htmlBody) }()
+			go func() { _ = h.mailer.Send(item.Email, msg) }()
 		}
 	} else {
 		// No mailer configured (dev) — return token so the link can be built client-side.

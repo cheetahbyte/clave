@@ -5,16 +5,13 @@ import (
 	"html/template"
 )
 
-// templateData drives the shared email layout.
 type templateData struct {
 	Preheader  string
 	Heading    string
 	Paragraphs []string
 	ButtonText string
 	ButtonURL  string
-	// FallbackURL is shown as a copyable plain link below the button.
 	FallbackURL string
-	// CodeBlock renders a prominent monospace box (e.g. a license key).
 	CodeBlock  string
 	FooterNote string
 }
@@ -88,9 +85,8 @@ func render(d templateData) (string, error) {
 	return buf.String(), nil
 }
 
-// MagicLinkEmail builds the self-service sign-in email.
-func MagicLinkEmail(link string) (subject, html string, err error) {
-	html, err = render(templateData{
+func MagicLinkEmail(link string) (Message, error) {
+	html, err := render(templateData{
 		Preheader:   "Your secure sign-in link for Clave self-service.",
 		Heading:     "Sign in to self-service",
 		Paragraphs:  []string{"Click the button below to view and manage your licenses. This link expires in 15 minutes and can only be used once."},
@@ -99,18 +95,17 @@ func MagicLinkEmail(link string) (subject, html string, err error) {
 		FallbackURL: link,
 		FooterNote:  "If you didn't request this, you can safely ignore this email.",
 	})
-	return "Your Clave sign-in link", html, err
+	return Message{subject: "Your Clave sign-in link", html: html}, err
 }
 
-// InviteEmail builds the organization invitation email.
-func InviteEmail(orgName, link string) (subject, html string, err error) {
+func InviteEmail(orgName, link string) (Message, error) {
 	heading := "You've been invited"
 	intro := "You've been invited to join an organization on Clave."
 	if orgName != "" {
 		heading = "Join " + orgName
 		intro = "You've been invited to join " + orgName + " on Clave."
 	}
-	html, err = render(templateData{
+	html, err := render(templateData{
 		Preheader:   intro,
 		Heading:     heading,
 		Paragraphs:  []string{intro, "Accept the invite to get access. This link expires in 7 days."},
@@ -119,12 +114,10 @@ func InviteEmail(orgName, link string) (subject, html string, err error) {
 		FallbackURL: link,
 		FooterNote:  "If you weren't expecting this invitation, you can ignore this email.",
 	})
-	return "You've been invited to Clave", html, err
+	return Message{subject: "You've been invited to Clave", html: html}, err
 }
 
-// LicenseCreatedEmail builds the email delivering a new license key to a customer.
-// portalLink may be empty (button is omitted).
-func LicenseCreatedEmail(productName, licenseKey, portalLink string, isTrial bool) (subject, html string, err error) {
+func LicenseCreatedEmail(productName, licenseKey, portalLink string, isTrial bool) (Message, error) {
 	noun := "license"
 	if isTrial {
 		noun = "trial"
@@ -151,10 +144,10 @@ func LicenseCreatedEmail(productName, licenseKey, portalLink string, isTrial boo
 		data.ButtonURL = portalLink
 		data.FallbackURL = portalLink
 	}
-	html, err = render(data)
-	subject = "Your Clave license key"
+	html, err := render(data)
+	subject := "Your Clave license key"
 	if isTrial {
 		subject = "Your Clave trial key"
 	}
-	return subject, html, err
+	return Message{subject: subject, html: html}, err
 }

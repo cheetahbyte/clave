@@ -76,10 +76,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 				portalLink = h.appURL + "/selfservice/" + slug
 			}
 		}
-		subject, htmlBody, terr := email.LicenseCreatedEmail(result.ProductName, result.LicenseKey, portalLink, result.IsTrial)
+		msg, terr := email.LicenseCreatedEmail(result.ProductName, result.LicenseKey, portalLink, result.IsTrial)
 		if terr == nil {
 			to := data.CustomerEmail
-			go func() { _ = h.mailer.Send(to, subject, htmlBody) }()
+			go func() { _ = h.mailer.Send(to, msg) }()
 		}
 	}
 

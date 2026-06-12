@@ -9,6 +9,11 @@ import (
 	"strings"
 )
 
+type Message struct {
+	subject string
+	html    string
+}
+
 type Sender struct {
 	host     string
 	port     string
@@ -27,7 +32,7 @@ func NewSender(host, port, username, password, from string) *Sender {
 	}
 }
 
-func (s *Sender) Send(to, subject, htmlBody string) error {
+func (s *Sender) Send(to string, msg Message) error {
 	fromAddr, err := mail.ParseAddress(s.from)
 	if err != nil {
 		return fmt.Errorf("invalid from address: %w", err)
@@ -37,7 +42,7 @@ func (s *Sender) Send(to, subject, htmlBody string) error {
 		return fmt.Errorf("invalid to address: %w", err)
 	}
 
-	msg, err := buildMessage(fromAddr.String(), toAddr.String(), subject, htmlBody)
+	raw, err := buildMessage(fromAddr.String(), toAddr.String(), msg)
 	if err != nil {
 		return err
 	}
@@ -77,23 +82,23 @@ func (s *Sender) Send(to, subject, htmlBody string) error {
 		if err != nil {
 			return fmt.Errorf("smtp data: %w", err)
 		}
-		_, err = w.Write([]byte(msg))
+		_, err = w.Write([]byte(raw))
 		if err != nil {
 			return fmt.Errorf("smtp write: %w", err)
 		}
 		return w.Close()
 	}
 
-	return smtp.SendMail(addr, nil, fromAddr.Address, []string{toAddr.Address}, []byte(msg))
+	return smtp.SendMail(addr, nil, fromAddr.Address, []string{toAddr.Address}, []byte(raw))
 }
 
-func buildMessage(from, to, subject, htmlBody string) (string, error) {
-	if strings.ContainsAny(from, "\r\n") || strings.ContainsAny(to, "\r\n") || strings.ContainsAny(subject, "\r\n") {
+func buildMessage(from, to string, msg Message) (string, error) {
+	if strings.ContainsAny(from, "\r\n") || strings.ContainsAny(to, "\r\n") || strings.ContainsAny(msg.subject, "\r\n") {
 		return "", fmt.Errorf("email headers must not contain CRLF")
 	}
 
 	enc := mime.QEncoding
-	encodedSubject := enc.Encode("utf-8", subject)
+	encodedSubject := enc.Encode("utf-8", msg.subject)
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("From: %s\r\n", from))
@@ -102,6 +107,6 @@ func buildMessage(from, to, subject, htmlBody string) (string, error) {
 	b.WriteString("MIME-Version: 1.0\r\n")
 	b.WriteString("Content-Type: text/html; charset=UTF-8\r\n")
 	b.WriteString("\r\n")
-	b.WriteString(htmlBody)
+	b.WriteString(msg.html)
 	return b.String(), nil
 }
