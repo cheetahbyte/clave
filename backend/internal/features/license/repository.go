@@ -47,7 +47,7 @@ func fetchAndMapSlice[T any, R any](
 func mapToDomainLicense(row db.License) *License {
 	return &License{
 		ID:             row.ID,
-		ProductID:      *row.ProductID,
+		ProductID:      uuid.UUID(row.ProductID.Bytes),
 		LookupDigest:   row.LookupDigest,
 		KeyPhc:         row.KeyPhc,
 		CustomerEmail:  row.CustomerEmail,

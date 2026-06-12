@@ -12,13 +12,13 @@ import (
 )
 
 const createDevice = `-- name: CreateDevice :one
-insert into devices(license_id, hwid_hash, hostname) values($1, $2, $3) returning id, license_id, hwid_hash, hostname, created_at
+insert into devices(license_id, hwid_hash, hostname) values($1, $2, $3) returning id, hwid_hash, hostname, created_at, license_id
 `
 
 type CreateDeviceParams struct {
 	LicenseID uuid.UUID `json:"license_id"`
-	HwidHash  []byte  `json:"hwid_hash"`
-	Hostname  *string `json:"hostname"`
+	HwidHash  []byte    `json:"hwid_hash"`
+	Hostname  *string   `json:"hostname"`
 }
 
 func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error) {
@@ -26,21 +26,21 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 	var i Device
 	err := row.Scan(
 		&i.ID,
-		&i.LicenseID,
 		&i.HwidHash,
 		&i.Hostname,
 		&i.CreatedAt,
+		&i.LicenseID,
 	)
 	return i, err
 }
 
 const getDeviceByLicenseAndHwidHash = `-- name: GetDeviceByLicenseAndHwidHash :one
-select id, license_id, hwid_hash, hostname, created_at from devices where license_id = $1 and hwid_hash = $2
+select id, hwid_hash, hostname, created_at, license_id from devices where license_id = $1 and hwid_hash = $2
 `
 
 type GetDeviceByLicenseAndHwidHashParams struct {
 	LicenseID uuid.UUID `json:"license_id"`
-	HwidHash  []byte `json:"hwid_hash"`
+	HwidHash  []byte    `json:"hwid_hash"`
 }
 
 func (q *Queries) GetDeviceByLicenseAndHwidHash(ctx context.Context, arg GetDeviceByLicenseAndHwidHashParams) (Device, error) {
@@ -48,10 +48,10 @@ func (q *Queries) GetDeviceByLicenseAndHwidHash(ctx context.Context, arg GetDevi
 	var i Device
 	err := row.Scan(
 		&i.ID,
-		&i.LicenseID,
 		&i.HwidHash,
 		&i.Hostname,
 		&i.CreatedAt,
+		&i.LicenseID,
 	)
 	return i, err
 }

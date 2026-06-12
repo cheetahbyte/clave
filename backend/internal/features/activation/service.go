@@ -8,6 +8,8 @@ import (
 
 	"github.com/alexedwards/argon2id"
 	problem "github.com/cheetahbyte/problems"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
@@ -65,6 +67,16 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 		return ActivateResponse{}, p
 	}
 
+	if !lic.ExpiresAt.IsZero() && time.Now().UTC().After(lic.ExpiresAt.UTC()) {
+		slog.Warn("license expired", "licenseId", lic.ID)
+		p := problem.Of(403).
+			Append(problem.Type("https://api.yourapp.dev/problems/license-expired")).
+			Append(problem.Title("License expired")).
+			Append(problem.Detail("This license has expired")).
+			Append(problem.Instance(instance))
+		return ActivateResponse{}, p
+	}
+
 	hwidHash := svc.signer.HMACSign(data.Device.HWID, signing.DontNormalizeKey)
 
 	act, err := svc.repo.ActivateAtomic(ctx, lic.ID, hwidHash, data.Device.Hostname, lic.MaxActivations)
@@ -109,6 +121,59 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 		ValidUntil:   claims.ExpiresAt.Unix(),
 		MaskedEmail:  maskEmail(lic.CustomerEmail),
 	}, nil
+}
+
+func (svc *Service) StartTrial(ctx context.Context, data StartTrialRequest) (ActivateResponse, error) {
+	instance := "/trials/start"
+
+	productID, err := uuid.Parse(data.ProductID)
+	if err != nil {
+		return ActivateResponse{}, problem.Of(400).
+			Append(problem.Title("Invalid product ID")).
+			Append(problem.Instance(instance))
+	}
+
+	product, err := svc.licenses.GetProductByID(ctx, productID)
+	if err != nil {
+		return ActivateResponse{}, problem.Of(404).
+			Append(problem.Title("Product not found")).
+			Append(problem.Instance(instance))
+	}
+
+	hwidHash := svc.signer.HMACSign(data.Device.HWID, signing.DontNormalizeKey)
+
+	cnt, err := svc.repo.q.CountTrialsByHwidProduct(ctx, db.CountTrialsByHwidProductParams{
+		OrganizationID: product.OrganizationID,
+		ProductID:      pgtype.UUID{Bytes: [16]byte(productID), Valid: true},
+		TrialHwidHash:  hwidHash,
+	})
+	if err != nil {
+		slog.Error("failed to check trial by hwid", "err", err)
+		return ActivateResponse{}, problem.Of(500).
+			Append(problem.Title("Internal error")).
+			Append(problem.Instance(instance))
+	}
+	if cnt > 0 {
+		return ActivateResponse{}, problem.Of(409).
+			Append(problem.Title("Trial already used")).
+			Append(problem.Detail("A trial for this product has already been started on this device.")).
+			Append(problem.Instance(instance))
+	}
+
+	trial, err := svc.licenses.NewTrialLicense(ctx, product.OrganizationID, productID, hwidHash, 14)
+	if err != nil {
+		slog.Error("failed to create trial license", "err", err)
+		return ActivateResponse{}, problem.Of(500).
+			Append(problem.Title("Internal error")).
+			Append(problem.Instance(instance))
+	}
+
+	actReq := ActivateRequest{
+		LicenseKey: trial.LicenseKey,
+		ProductID:  data.ProductID,
+		Device:     data.Device,
+	}
+	return svc.Activate(ctx, actReq)
 }
 
 func maskEmail(email string) string {

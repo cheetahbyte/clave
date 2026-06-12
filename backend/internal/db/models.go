@@ -12,24 +12,57 @@ import (
 )
 
 type Activation struct {
-	ID          uuid.UUID          `json:"id"`
 	DeviceID    uuid.UUID          `json:"device_id"`
-	LicenseID   uuid.UUID          `json:"license_id"`
 	CheckedInAt pgtype.Timestamptz `json:"checked_in_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID          uuid.UUID          `json:"id"`
+	LicenseID   uuid.UUID          `json:"license_id"`
+}
+
+type AdminAuditLog struct {
+	ID             uuid.UUID          `json:"id"`
+	AdminUserID    pgtype.UUID        `json:"admin_user_id"`
+	Action         string             `json:"action"`
+	ResourceType   string             `json:"resource_type"`
+	ResourceID     pgtype.UUID        `json:"resource_id"`
+	Metadata       []byte             `json:"metadata"`
+	Ip             *netip.Addr        `json:"ip"`
+	UserAgent      *string            `json:"user_agent"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	OrganizationID pgtype.UUID        `json:"organization_id"`
+}
+
+type AdminRecoveryCode struct {
+	ID          uuid.UUID          `json:"id"`
+	AdminUserID uuid.UUID          `json:"admin_user_id"`
+	CodeHash    string             `json:"code_hash"`
+	UsedAt      pgtype.Timestamptz `json:"used_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type AdminUser struct {
+	ID              uuid.UUID          `json:"id"`
+	Email           string             `json:"email"`
+	PasswordHash    string             `json:"password_hash"`
+	Role            string             `json:"role"`
+	IsActive        bool               `json:"is_active"`
+	LastLoginAt     pgtype.Timestamptz `json:"last_login_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	TotpEnabled     bool               `json:"totp_enabled"`
+	TotpSecretEnc   []byte             `json:"totp_secret_enc"`
+	TotpSecretNonce []byte             `json:"totp_secret_nonce"`
 }
 
 type Device struct {
 	ID        uuid.UUID          `json:"id"`
-	LicenseID uuid.UUID          `json:"license_id"`
 	HwidHash  []byte             `json:"hwid_hash"`
 	Hostname  *string            `json:"hostname"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	LicenseID uuid.UUID          `json:"license_id"`
 }
 
 type License struct {
-	ID             uuid.UUID          `json:"id"`
-	ProductID      *uuid.UUID         `json:"product_id"`
 	LookupDigest   []byte             `json:"lookup_digest"`
 	KeyPhc         string             `json:"key_phc"`
 	CustomerEmail  string             `json:"customer_email"`
@@ -38,13 +71,47 @@ type License struct {
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	Features       []string           `json:"features"`
+	ID             uuid.UUID          `json:"id"`
+	ProductID      pgtype.UUID        `json:"product_id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	IsTrial        bool               `json:"is_trial"`
+	TrialHwidHash  []byte             `json:"trial_hwid_hash"`
+}
+
+type Organization struct {
+	ID        uuid.UUID          `json:"id"`
+	Name      string             `json:"name"`
+	Slug      string             `json:"slug"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type OrganizationInvite struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	Email          string             `json:"email"`
+	Role           string             `json:"role"`
+	TokenHash      string             `json:"token_hash"`
+	InvitedBy      pgtype.UUID        `json:"invited_by"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	AcceptedAt     pgtype.Timestamptz `json:"accepted_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type OrganizationMember struct {
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	AdminUserID    uuid.UUID          `json:"admin_user_id"`
+	Role           string             `json:"role"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type Product struct {
-	ID        uuid.UUID          `json:"id"`
-	Name      string             `json:"name"`
-	Version   *string            `json:"version"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Name           string             `json:"name"`
+	Version        *string            `json:"version"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	LogoUrl        *string            `json:"logo_url"`
 }
 
 type SelfServiceToken struct {
@@ -57,4 +124,10 @@ type SelfServiceToken struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	CreatedIp *netip.Addr        `json:"created_ip"`
 	UserAgent *string            `json:"user_agent"`
+}
+
+type Session struct {
+	Token  string             `json:"token"`
+	Data   []byte             `json:"data"`
+	Expiry pgtype.Timestamptz `json:"expiry"`
 }

@@ -12,30 +12,80 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countTrialsByEmailProduct = `-- name: CountTrialsByEmailProduct :one
+SELECT count(*) FROM licenses
+WHERE organization_id = $1::uuid
+  AND product_id = $2
+  AND lower(customer_email) = lower($3)
+  AND is_trial = true
+`
+
+type CountTrialsByEmailProductParams struct {
+	OrganizationID uuid.UUID   `json:"organization_id"`
+	ProductID      pgtype.UUID `json:"product_id"`
+	CustomerEmail  string      `json:"customer_email"`
+}
+
+func (q *Queries) CountTrialsByEmailProduct(ctx context.Context, arg CountTrialsByEmailProductParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countTrialsByEmailProduct, arg.OrganizationID, arg.ProductID, arg.CustomerEmail)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countTrialsByHwidProduct = `-- name: CountTrialsByHwidProduct :one
+SELECT count(*) FROM licenses
+WHERE organization_id = $1::uuid
+  AND product_id = $2
+  AND trial_hwid_hash = $3
+  AND is_trial = true
+`
+
+type CountTrialsByHwidProductParams struct {
+	OrganizationID uuid.UUID   `json:"organization_id"`
+	ProductID      pgtype.UUID `json:"product_id"`
+	TrialHwidHash  []byte      `json:"trial_hwid_hash"`
+}
+
+func (q *Queries) CountTrialsByHwidProduct(ctx context.Context, arg CountTrialsByHwidProductParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countTrialsByHwidProduct, arg.OrganizationID, arg.ProductID, arg.TrialHwidHash)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createLicense = `-- name: CreateLicense :one
-INSERT INTO licenses(product_id, max_activations, lookup_digest, key_phc, customer_email) values($1, $2, $3, $4, $5) returning id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features
+INSERT INTO licenses(organization_id, product_id, max_activations, lookup_digest, key_phc, customer_email, expires_at, is_trial, trial_hwid_hash)
+values($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9)
+returning lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash
 `
 
 type CreateLicenseParams struct {
-	ProductID      *uuid.UUID `json:"product_id"`
-	MaxActivations int32  `json:"max_activations"`
-	LookupDigest   []byte `json:"lookup_digest"`
-	KeyPhc         string `json:"key_phc"`
-	CustomerEmail  string `json:"customer_email"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	ProductID      pgtype.UUID        `json:"product_id"`
+	MaxActivations int32              `json:"max_activations"`
+	LookupDigest   []byte             `json:"lookup_digest"`
+	KeyPhc         string             `json:"key_phc"`
+	CustomerEmail  string             `json:"customer_email"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	IsTrial        bool               `json:"is_trial"`
+	TrialHwidHash  []byte             `json:"trial_hwid_hash"`
 }
 
 func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (License, error) {
 	row := q.db.QueryRow(ctx, createLicense,
+		arg.OrganizationID,
 		arg.ProductID,
 		arg.MaxActivations,
 		arg.LookupDigest,
 		arg.KeyPhc,
 		arg.CustomerEmail,
+		arg.ExpiresAt,
+		arg.IsTrial,
+		arg.TrialHwidHash,
 	)
 	var i License
 	err := row.Scan(
-		&i.ID,
-		&i.ProductID,
 		&i.LookupDigest,
 		&i.KeyPhc,
 		&i.CustomerEmail,
@@ -44,20 +94,102 @@ func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (L
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.Features,
+		&i.ID,
+		&i.ProductID,
+		&i.OrganizationID,
+		&i.IsTrial,
+		&i.TrialHwidHash,
+	)
+	return i, err
+}
+
+const deleteAdminLicense = `-- name: DeleteAdminLicense :one
+DELETE FROM licenses
+WHERE id = $1 AND organization_id = $2::uuid
+RETURNING id
+`
+
+type DeleteAdminLicenseParams struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) DeleteAdminLicense(ctx context.Context, arg DeleteAdminLicenseParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteAdminLicense, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const deleteSelfServiceDevice = `-- name: DeleteSelfServiceDevice :one
+delete from devices d
+where d.id = $1
+  and d.license_id in (
+    select l.id from licenses l
+    where l.id = $2
+      and l.customer_email = $3
+      and l.organization_id = $4
+  )
+returning d.id
+`
+
+type DeleteSelfServiceDeviceParams struct {
+	DeviceID       uuid.UUID `json:"device_id"`
+	LicenseID      uuid.UUID `json:"license_id"`
+	CustomerEmail  string    `json:"customer_email"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) DeleteSelfServiceDevice(ctx context.Context, arg DeleteSelfServiceDeviceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteSelfServiceDevice,
+		arg.DeviceID,
+		arg.LicenseID,
+		arg.CustomerEmail,
+		arg.OrganizationID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getAdminLicenseById = `-- name: GetAdminLicenseById :one
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash from licenses where id = $1 and organization_id = $2::uuid
+`
+
+type GetAdminLicenseByIdParams struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) GetAdminLicenseById(ctx context.Context, arg GetAdminLicenseByIdParams) (License, error) {
+	row := q.db.QueryRow(ctx, getAdminLicenseById, arg.ID, arg.OrganizationID)
+	var i License
+	err := row.Scan(
+		&i.LookupDigest,
+		&i.KeyPhc,
+		&i.CustomerEmail,
+		&i.MaxActivations,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.Features,
+		&i.ID,
+		&i.ProductID,
+		&i.OrganizationID,
+		&i.IsTrial,
+		&i.TrialHwidHash,
 	)
 	return i, err
 }
 
 const getLicenseByDigest = `-- name: GetLicenseByDigest :one
-select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features from licenses where lookup_digest = $1
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash from licenses where lookup_digest = $1
 `
 
 func (q *Queries) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error) {
 	row := q.db.QueryRow(ctx, getLicenseByDigest, lookupDigest)
 	var i License
 	err := row.Scan(
-		&i.ID,
-		&i.ProductID,
 		&i.LookupDigest,
 		&i.KeyPhc,
 		&i.CustomerEmail,
@@ -66,20 +198,23 @@ func (q *Queries) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.Features,
+		&i.ID,
+		&i.ProductID,
+		&i.OrganizationID,
+		&i.IsTrial,
+		&i.TrialHwidHash,
 	)
 	return i, err
 }
 
 const getLicenseById = `-- name: GetLicenseById :one
-select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features from licenses where id = $1
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash from licenses where id = $1
 `
 
 func (q *Queries) GetLicenseById(ctx context.Context, id uuid.UUID) (License, error) {
 	row := q.db.QueryRow(ctx, getLicenseById, id)
 	var i License
 	err := row.Scan(
-		&i.ID,
-		&i.ProductID,
 		&i.LookupDigest,
 		&i.KeyPhc,
 		&i.CustomerEmail,
@@ -88,20 +223,23 @@ func (q *Queries) GetLicenseById(ctx context.Context, id uuid.UUID) (License, er
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.Features,
+		&i.ID,
+		&i.ProductID,
+		&i.OrganizationID,
+		&i.IsTrial,
+		&i.TrialHwidHash,
 	)
 	return i, err
 }
 
 const getLicenseByIdForUpdate = `-- name: GetLicenseByIdForUpdate :one
-select id, product_id, lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features from licenses where id = $1 for update
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash from licenses where id = $1 for update
 `
 
 func (q *Queries) GetLicenseByIdForUpdate(ctx context.Context, id uuid.UUID) (License, error) {
 	row := q.db.QueryRow(ctx, getLicenseByIdForUpdate, id)
 	var i License
 	err := row.Scan(
-		&i.ID,
-		&i.ProductID,
 		&i.LookupDigest,
 		&i.KeyPhc,
 		&i.CustomerEmail,
@@ -110,12 +248,17 @@ func (q *Queries) GetLicenseByIdForUpdate(ctx context.Context, id uuid.UUID) (Li
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.Features,
+		&i.ID,
+		&i.ProductID,
+		&i.OrganizationID,
+		&i.IsTrial,
+		&i.TrialHwidHash,
 	)
 	return i, err
 }
 
 const listByCustomerEmail = `-- name: ListByCustomerEmail :many
-select lt.is_active, lt.id, lt.max_activations, lt.expires_at, p.name from licenses lt join products p on lt.product_id = p.id where customer_email = $1
+select lt.is_active, lt.id, lt.max_activations, lt.expires_at, p.name, p.logo_url from licenses lt join products p on lt.product_id = p.id where customer_email = $1
 `
 
 type ListByCustomerEmailRow struct {
@@ -124,6 +267,7 @@ type ListByCustomerEmailRow struct {
 	MaxActivations int32              `json:"max_activations"`
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	Name           string             `json:"name"`
+	LogoUrl        *string            `json:"logo_url"`
 }
 
 func (q *Queries) ListByCustomerEmail(ctx context.Context, customerEmail string) ([]ListByCustomerEmailRow, error) {
@@ -141,6 +285,7 @@ func (q *Queries) ListByCustomerEmail(ctx context.Context, customerEmail string)
 			&i.MaxActivations,
 			&i.ExpiresAt,
 			&i.Name,
+			&i.LogoUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -150,4 +295,176 @@ func (q *Queries) ListByCustomerEmail(ctx context.Context, customerEmail string)
 		return nil, err
 	}
 	return items, nil
+}
+
+const listByCustomerEmailAndOrganization = `-- name: ListByCustomerEmailAndOrganization :many
+select lt.is_active, lt.id, lt.max_activations, lt.expires_at, p.name, p.logo_url
+from licenses lt
+join products p on lt.product_id = p.id
+where lt.customer_email = $1 and lt.organization_id = $2
+`
+
+type ListByCustomerEmailAndOrganizationParams struct {
+	CustomerEmail  string    `json:"customer_email"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+type ListByCustomerEmailAndOrganizationRow struct {
+	IsActive       bool               `json:"is_active"`
+	ID             uuid.UUID          `json:"id"`
+	MaxActivations int32              `json:"max_activations"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Name           string             `json:"name"`
+	LogoUrl        *string            `json:"logo_url"`
+}
+
+func (q *Queries) ListByCustomerEmailAndOrganization(ctx context.Context, arg ListByCustomerEmailAndOrganizationParams) ([]ListByCustomerEmailAndOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listByCustomerEmailAndOrganization, arg.CustomerEmail, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListByCustomerEmailAndOrganizationRow{}
+	for rows.Next() {
+		var i ListByCustomerEmailAndOrganizationRow
+		if err := rows.Scan(
+			&i.IsActive,
+			&i.ID,
+			&i.MaxActivations,
+			&i.ExpiresAt,
+			&i.Name,
+			&i.LogoUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSelfServiceDevices = `-- name: ListSelfServiceDevices :many
+select
+    d.id,
+    d.hostname,
+    d.created_at,
+    a.checked_in_at
+from activations a
+join devices d on a.device_id = d.id
+join licenses l on a.license_id = l.id
+where a.license_id = $1
+  and l.customer_email = $2
+  and l.organization_id = $3
+order by a.checked_in_at desc nulls last
+`
+
+type ListSelfServiceDevicesParams struct {
+	LicenseID      uuid.UUID `json:"license_id"`
+	CustomerEmail  string    `json:"customer_email"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+type ListSelfServiceDevicesRow struct {
+	ID          uuid.UUID          `json:"id"`
+	Hostname    *string            `json:"hostname"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	CheckedInAt pgtype.Timestamptz `json:"checked_in_at"`
+}
+
+func (q *Queries) ListSelfServiceDevices(ctx context.Context, arg ListSelfServiceDevicesParams) ([]ListSelfServiceDevicesRow, error) {
+	rows, err := q.db.Query(ctx, listSelfServiceDevices, arg.LicenseID, arg.CustomerEmail, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSelfServiceDevicesRow{}
+	for rows.Next() {
+		var i ListSelfServiceDevicesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Hostname,
+			&i.CreatedAt,
+			&i.CheckedInAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeSelfServiceLicense = `-- name: RevokeSelfServiceLicense :one
+update licenses set is_active = false
+where id = $1
+  and customer_email = $2
+  and organization_id = $3
+returning id
+`
+
+type RevokeSelfServiceLicenseParams struct {
+	LicenseID      uuid.UUID `json:"license_id"`
+	CustomerEmail  string    `json:"customer_email"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) RevokeSelfServiceLicense(ctx context.Context, arg RevokeSelfServiceLicenseParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, revokeSelfServiceLicense, arg.LicenseID, arg.CustomerEmail, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const updateAdminLicense = `-- name: UpdateAdminLicense :one
+UPDATE licenses SET
+    customer_email = $2,
+    max_activations = $3,
+    is_active = $4,
+    expires_at = $5,
+    features = $6
+WHERE id = $1 AND organization_id = $7::uuid
+RETURNING lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash
+`
+
+type UpdateAdminLicenseParams struct {
+	ID             uuid.UUID          `json:"id"`
+	CustomerEmail  string             `json:"customer_email"`
+	MaxActivations int32              `json:"max_activations"`
+	IsActive       bool               `json:"is_active"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	Features       []string           `json:"features"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+}
+
+func (q *Queries) UpdateAdminLicense(ctx context.Context, arg UpdateAdminLicenseParams) (License, error) {
+	row := q.db.QueryRow(ctx, updateAdminLicense,
+		arg.ID,
+		arg.CustomerEmail,
+		arg.MaxActivations,
+		arg.IsActive,
+		arg.ExpiresAt,
+		arg.Features,
+		arg.OrganizationID,
+	)
+	var i License
+	err := row.Scan(
+		&i.LookupDigest,
+		&i.KeyPhc,
+		&i.CustomerEmail,
+		&i.MaxActivations,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.Features,
+		&i.ID,
+		&i.ProductID,
+		&i.OrganizationID,
+		&i.IsTrial,
+		&i.TrialHwidHash,
+	)
+	return i, err
 }

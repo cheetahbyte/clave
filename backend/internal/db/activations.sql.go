@@ -12,7 +12,7 @@ import (
 )
 
 const activateLicense = `-- name: ActivateLicense :one
-insert into activations (device_id, license_id) values($1, $2) returning id, device_id, license_id, checked_in_at, created_at
+insert into activations (device_id, license_id) values($1, $2) returning device_id, checked_in_at, created_at, id, license_id
 `
 
 type ActivateLicenseParams struct {
@@ -24,11 +24,11 @@ func (q *Queries) ActivateLicense(ctx context.Context, arg ActivateLicenseParams
 	row := q.db.QueryRow(ctx, activateLicense, arg.DeviceID, arg.LicenseID)
 	var i Activation
 	err := row.Scan(
-		&i.ID,
 		&i.DeviceID,
-		&i.LicenseID,
 		&i.CheckedInAt,
 		&i.CreatedAt,
+		&i.ID,
+		&i.LicenseID,
 	)
 	return i, err
 }
@@ -45,7 +45,7 @@ func (q *Queries) CountActivations(ctx context.Context, licenseID uuid.UUID) (in
 }
 
 const getActivationByLicenseAndDevice = `-- name: GetActivationByLicenseAndDevice :one
-select id, device_id, license_id, checked_in_at, created_at from activations where license_id = $1 and device_id = $2
+select device_id, checked_in_at, created_at, id, license_id from activations where license_id = $1 and device_id = $2
 `
 
 type GetActivationByLicenseAndDeviceParams struct {
@@ -57,17 +57,17 @@ func (q *Queries) GetActivationByLicenseAndDevice(ctx context.Context, arg GetAc
 	row := q.db.QueryRow(ctx, getActivationByLicenseAndDevice, arg.LicenseID, arg.DeviceID)
 	var i Activation
 	err := row.Scan(
-		&i.ID,
 		&i.DeviceID,
-		&i.LicenseID,
 		&i.CheckedInAt,
 		&i.CreatedAt,
+		&i.ID,
+		&i.LicenseID,
 	)
 	return i, err
 }
 
 const getActivationsForLicense = `-- name: GetActivationsForLicense :many
-select id, device_id, license_id, checked_in_at, created_at from activations where license_id = $1
+select device_id, checked_in_at, created_at, id, license_id from activations where license_id = $1
 `
 
 func (q *Queries) GetActivationsForLicense(ctx context.Context, licenseID uuid.UUID) ([]Activation, error) {
@@ -80,11 +80,11 @@ func (q *Queries) GetActivationsForLicense(ctx context.Context, licenseID uuid.U
 	for rows.Next() {
 		var i Activation
 		if err := rows.Scan(
-			&i.ID,
 			&i.DeviceID,
-			&i.LicenseID,
 			&i.CheckedInAt,
 			&i.CreatedAt,
+			&i.ID,
+			&i.LicenseID,
 		); err != nil {
 			return nil, err
 		}

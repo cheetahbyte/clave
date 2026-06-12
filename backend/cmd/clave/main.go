@@ -3,26 +3,36 @@ package main
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/alexedwards/scs/pgxstore"
+	"github.com/alexedwards/scs/v2"
 	"github.com/cheetahbyte/clave/internal/api"
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/activation"
+	"github.com/cheetahbyte/clave/internal/features/adminauth"
+	"github.com/cheetahbyte/clave/internal/features/audit"
 	"github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/features/organization"
 	publicfeature "github.com/cheetahbyte/clave/internal/features/public"
 	"github.com/cheetahbyte/clave/internal/features/selfservice"
 	"github.com/cheetahbyte/clave/internal/features/update"
 	"github.com/cheetahbyte/clave/internal/features/validation"
+	"github.com/cheetahbyte/clave/internal/shared/email"
 	"github.com/cheetahbyte/clave/internal/shared/encryption"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/go-chi/chi/v5"
+	"github.com/gorilla/csrf"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
@@ -53,6 +63,10 @@ func configureLogging(verbose bool) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: level,
 	})))
+}
+
+func isProduction() bool {
+	return !truthy(os.Getenv("DEV"))
 }
 
 func main() {
@@ -136,31 +150,148 @@ func main() {
 	updateSvc := update.NewService(licenseSvc, signer)
 	selfserviceSvc := selfservice.NewService(q, []byte(pepper), signer)
 
-	licenseH := license.NewHandler(licenseSvc)
+	totpKey := os.Getenv("ADMIN_TOTP_ENCRYPTION_KEY")
+	var totpKeyBytes []byte
+	if totpKey != "" {
+		var err error
+		totpKeyBytes, err = hex.DecodeString(totpKey)
+		if err != nil {
+			log.Fatalf("ADMIN_TOTP_ENCRYPTION_KEY must be a hex-encoded 32-byte key: %v", err)
+		}
+		if len(totpKeyBytes) != 32 {
+			log.Fatalf("ADMIN_TOTP_ENCRYPTION_KEY must be 32 bytes (64 hex chars), got %d bytes", len(totpKeyBytes))
+		}
+	} else {
+		if isProduction() {
+			log.Fatal("ADMIN_TOTP_ENCRYPTION_KEY is required in production")
+		}
+		totpKeyBytes = make([]byte, 32)
+		if _, err := rand.Read(totpKeyBytes); err != nil {
+			log.Fatalf("failed to generate TOTP encryption key: %v", err)
+		}
+		slog.Warn("ADMIN_TOTP_ENCRYPTION_KEY not set, using ephemeral key")
+	}
+
+	adminAuthSvc := adminauth.NewService(q, totpKeyBytes)
+
+	var mailer *email.Sender
+	if host := os.Getenv("SMTP_HOST"); host != "" {
+		mailer = email.NewSender(
+			host,
+			getEnv("SMTP_PORT", "587"),
+			os.Getenv("SMTP_USER"),
+			os.Getenv("SMTP_PASS"),
+			getEnv("MAIL_FROM", "noreply@clave.app"),
+		)
+	}
+
+	licenseH := license.NewHandler(licenseSvc, mailer, os.Getenv("PUBLIC_APP_URL"))
 	activationH := activation.NewHandler(activationSvc)
 	validationH := validation.NewHandler(validationSvc)
 	updateH := update.NewHandler(updateSvc)
-	selfserviceH := selfservice.NewHandler(selfserviceSvc)
+	selfserviceH := selfservice.NewHandler(selfserviceSvc, mailer)
 	publicH := publicfeature.NewHandler(encSvc, encDisabled)
 
+	// --- Admin session manager (SCS with Postgres store) ---
+	sessionManager := scs.New()
+	sessionManager.Store = pgxstore.New(pool)
+	sessionManager.Lifetime = 12 * time.Hour
+	sessionManager.IdleTimeout = 30 * time.Minute
+	sessionManager.Cookie.Name = "clave_admin_session"
+	sessionManager.Cookie.HttpOnly = true
+	sessionManager.Cookie.Secure = isProduction()
+	sessionManager.Cookie.SameSite = http.SameSiteLaxMode
+	sessionManager.Cookie.Path = "/"
+	sessionManager.Cookie.Persist = true
+
+	adminAuthH := adminauth.NewHandler(adminAuthSvc, sessionManager, totpKeyBytes)
+
+	orgSvc := organization.NewService(q, []byte(pepper))
+	orgH := organization.NewHandler(orgSvc, sessionManager, mailer, os.Getenv("PUBLIC_APP_URL"))
+
+	auditSvc := audit.NewService(q)
+	auditH := audit.NewHandler(auditSvc)
+
+	// --- CSRF middleware ---
+	csrfAuthKey := csrfKey()
+	csrfMW := csrf.Protect(
+		csrfAuthKey,
+		csrf.Secure(isProduction()),
+		csrf.Path("/"),
+		csrf.HttpOnly(true),
+		csrf.ErrorHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			reason := ""
+			if err := csrf.FailureReason(r); err != nil {
+				reason = err.Error()
+			}
+			msg := `{"error":"CSRF token missing or invalid"`
+			if reason != "" && !isProduction() {
+				msg += `,"reason":"` + reason + `"`
+			}
+			msg += "}"
+			w.Write([]byte(msg))
+		})),
+	)
+
+	csrfPlaintext := middleware.CSRFPlaintext(!isProduction())
+
 	ssAuth := middleware.RequireSelfServiceAuth(pub)
+	adminAuth := middleware.RequireAdmin(sessionManager)
+	adminVerified := middleware.RequireAdminVerified(sessionManager)
 
 	r := chi.NewRouter()
 	api.Register(r, api.Config{
-		Public:      publicH.PubKey,
-		Activate:    activationH.Activate,
-		Validate:    validationH.Validate,
-		CheckUpdate: updateH.Check,
-		Create:      licenseH.Create,
-		RequestLink: selfserviceH.RequestLink,
-		ValidateSS:  selfserviceH.ValidateToken,
-		CheckSS:     selfserviceH.CheckSession,
-		ListSS:      selfserviceH.ListLicenses,
-		SSAuth:      ssAuth,
-		AdminAuth:   middleware.RequireAdminBearerToken,
-		EncSvc:      encSvc,
-		EncDisabled: encDisabled,
-		Verbose:     verboseLogging,
+		Public:             publicH.PubKey,
+		Activate:           activationH.Activate,
+		TrialStart:         activationH.StartTrial,
+		Validate:           validationH.Validate,
+		CheckUpdate:        updateH.Check,
+		Create:             licenseH.Create,
+		RequestLink:        selfserviceH.RequestLink,
+		ValidateSS:         selfserviceH.ValidateToken,
+		CheckSS:            selfserviceH.CheckSession,
+		ListSS:             selfserviceH.ListLicenses,
+		ListSSDevices:      selfserviceH.ListDevices,
+		RemoveSSDevice:     selfserviceH.RemoveDevice,
+		RevokeSS:           selfserviceH.RevokeLicense,
+		LogoutSS:           selfserviceH.Logout,
+		AdminLogin:         adminAuthH.Login,
+		AdminLogout:        adminAuthH.Logout,
+		AdminMe:            adminAuthH.Me,
+		AdminCSRF:          adminAuthH.CSRFToken,
+		Admin2FASetup:      adminAuthH.SetupStart,
+		Admin2FAVerify:     adminAuthH.SetupVerify,
+		Admin2FACheck:      adminAuthH.Verify,
+		AdminOverview:      licenseH.AdminOverview,
+		AdminGetLicense:    licenseH.AdminGetLicense,
+		AdminListLicenses:  licenseH.AdminListLicenses,
+		AdminListProducts:  licenseH.AdminListProducts,
+		AdminCreateProduct: licenseH.AdminCreateProduct,
+		AdminUpdateProduct: licenseH.AdminUpdateProduct,
+		AdminDeleteProduct: licenseH.AdminDeleteProduct,
+		AdminUpdateLicense: licenseH.AdminUpdateLicense,
+		AdminDeleteLicense: licenseH.AdminDeleteLicense,
+		AdminAuditLogs:     auditH.List,
+		OrgList:            orgH.List,
+		OrgCreate:          orgH.Create,
+		OrgSwitch:          orgH.Switch,
+		OrgMembers:         orgH.Members,
+		OrgInvite:          orgH.Invite,
+		OrgInviteDelete:    orgH.DeleteInvite,
+		OrgMemberRemove:    orgH.RemoveMember,
+		InvitePreview:      orgH.InvitePreview,
+		InviteAccept:       orgH.InviteAccept,
+		SSAuth:             ssAuth,
+		AdminAuth:          adminAuth,
+		VerifiedAuth:       adminVerified,
+		SessionMW:          sessionManager.LoadAndSave,
+		CSRFAuth:           csrfMW,
+		CSRFPlain:          csrfPlaintext,
+		EncSvc:             encSvc,
+		EncDisabled:        encDisabled,
+		Verbose:            verboseLogging,
 	})
 
 	port := getEnv("PORT", "8000")
@@ -169,4 +300,28 @@ func main() {
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatal("failed to start server")
 	}
+}
+
+func csrfKey() []byte {
+	if key := os.Getenv("CSRF_AUTH_KEY"); key != "" {
+		decoded, err := hex.DecodeString(key)
+		if err != nil {
+			log.Fatalf("CSRF_AUTH_KEY must be a hex-encoded 32-byte key: %v", err)
+		}
+		if len(decoded) != 32 {
+			log.Fatalf("CSRF_AUTH_KEY must be 32 bytes (64 hex chars), got %d bytes", len(decoded))
+		}
+		return decoded
+	}
+
+	if isProduction() {
+		log.Fatal("CSRF_AUTH_KEY is required in production")
+	}
+
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		log.Fatalf("failed to generate CSRF key: %v", err)
+	}
+	slog.Warn("CSRF_AUTH_KEY not set, using ephemeral key (sessions will break on restart)")
+	return key
 }

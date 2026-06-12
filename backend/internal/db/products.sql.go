@@ -9,30 +9,123 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getOneById = `-- name: GetOneById :one
-select id, name, version, created_at from products where id = $1
+const countLicensesByProduct = `-- name: CountLicensesByProduct :one
+SELECT count(*) FROM licenses
+WHERE product_id = $1 AND organization_id = $2::uuid
 `
 
-func (q *Queries) GetOneById(ctx context.Context, id uuid.UUID) (Product, error) {
-	row := q.db.QueryRow(ctx, getOneById, id)
+type CountLicensesByProductParams struct {
+	ProductID      pgtype.UUID `json:"product_id"`
+	OrganizationID uuid.UUID   `json:"organization_id"`
+}
+
+func (q *Queries) CountLicensesByProduct(ctx context.Context, arg CountLicensesByProductParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countLicensesByProduct, arg.ProductID, arg.OrganizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createProduct = `-- name: CreateProduct :one
+INSERT INTO products (organization_id, name, version, logo_url)
+VALUES ($1::uuid, $2, $3, $4)
+RETURNING name, version, created_at, id, organization_id, logo_url
+`
+
+type CreateProductParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	Name           string    `json:"name"`
+	Version        *string   `json:"version"`
+	LogoUrl        *string   `json:"logo_url"`
+}
+
+func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
+	row := q.db.QueryRow(ctx, createProduct,
+		arg.OrganizationID,
+		arg.Name,
+		arg.Version,
+		arg.LogoUrl,
+	)
 	var i Product
 	err := row.Scan(
-		&i.ID,
 		&i.Name,
 		&i.Version,
 		&i.CreatedAt,
+		&i.ID,
+		&i.OrganizationID,
+		&i.LogoUrl,
 	)
 	return i, err
 }
 
-const getProducts = `-- name: GetProducts :many
-select id, name, version, created_at from products
+const deleteProduct = `-- name: DeleteProduct :one
+DELETE FROM products
+WHERE id = $1 AND organization_id = $2::uuid
+RETURNING id
 `
 
-func (q *Queries) GetProducts(ctx context.Context) ([]Product, error) {
-	rows, err := q.db.Query(ctx, getProducts)
+type DeleteProductParams struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) DeleteProduct(ctx context.Context, arg DeleteProductParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteProduct, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const getOneByIdForOrganization = `-- name: GetOneByIdForOrganization :one
+select name, version, created_at, id, organization_id, logo_url from products where id = $1 and organization_id = $2::uuid
+`
+
+type GetOneByIdForOrganizationParams struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) GetOneByIdForOrganization(ctx context.Context, arg GetOneByIdForOrganizationParams) (Product, error) {
+	row := q.db.QueryRow(ctx, getOneByIdForOrganization, arg.ID, arg.OrganizationID)
+	var i Product
+	err := row.Scan(
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.ID,
+		&i.OrganizationID,
+		&i.LogoUrl,
+	)
+	return i, err
+}
+
+const getProductById = `-- name: GetProductById :one
+select name, version, created_at, id, organization_id, logo_url from products where id = $1
+`
+
+func (q *Queries) GetProductById(ctx context.Context, id uuid.UUID) (Product, error) {
+	row := q.db.QueryRow(ctx, getProductById, id)
+	var i Product
+	err := row.Scan(
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.ID,
+		&i.OrganizationID,
+		&i.LogoUrl,
+	)
+	return i, err
+}
+
+const getProductsByOrganization = `-- name: GetProductsByOrganization :many
+select name, version, created_at, id, organization_id, logo_url from products where organization_id = $1::uuid
+`
+
+func (q *Queries) GetProductsByOrganization(ctx context.Context, organizationID uuid.UUID) ([]Product, error) {
+	rows, err := q.db.Query(ctx, getProductsByOrganization, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -41,10 +134,12 @@ func (q *Queries) GetProducts(ctx context.Context) ([]Product, error) {
 	for rows.Next() {
 		var i Product
 		if err := rows.Scan(
-			&i.ID,
 			&i.Name,
 			&i.Version,
 			&i.CreatedAt,
+			&i.ID,
+			&i.OrganizationID,
+			&i.LogoUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -54,4 +149,39 @@ func (q *Queries) GetProducts(ctx context.Context) ([]Product, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateProduct = `-- name: UpdateProduct :one
+UPDATE products
+SET name = $2, version = $3, logo_url = $4
+WHERE id = $1 AND organization_id = $5::uuid
+RETURNING name, version, created_at, id, organization_id, logo_url
+`
+
+type UpdateProductParams struct {
+	ID             uuid.UUID `json:"id"`
+	Name           string    `json:"name"`
+	Version        *string   `json:"version"`
+	LogoUrl        *string   `json:"logo_url"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
+	row := q.db.QueryRow(ctx, updateProduct,
+		arg.ID,
+		arg.Name,
+		arg.Version,
+		arg.LogoUrl,
+		arg.OrganizationID,
+	)
+	var i Product
+	err := row.Scan(
+		&i.Name,
+		&i.Version,
+		&i.CreatedAt,
+		&i.ID,
+		&i.OrganizationID,
+		&i.LogoUrl,
+	)
+	return i, err
 }

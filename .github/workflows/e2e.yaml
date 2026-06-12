@@ -1,0 +1,80 @@
+name: Backend E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: clave
+          POSTGRES_PASSWORD: clave
+          POSTGRES_DB: clave
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U clave"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://clave:clave@localhost:5432/clave?sslmode=disable
+      # Non-secret keys, generated for CI only.
+      LICENSE_JWT_PUBLIC_KEY: ***REMOVED***
+      LICENSE_JWT_PRIVATE_KEY: ***REMOVED***
+      X25519_PRIVATE_KEY: ***REMOVED***
+      ADMIN_TOTP_ENCRYPTION_KEY: ***REMOVED***
+      SELF_SERVICE_TOKEN_PEPPER: ci-pepper
+      LICENSE_HMAC_SECRET: ci-hmac
+      SELF_SERVICE_RETURN_TOKEN: "true"
+      DEV: "true"
+      PORT: "8000"
+      E2E_BASE_URL: http://localhost:8000
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Run migrations
+        env:
+          GOOSE_DRIVER: postgres
+          GOOSE_DBSTRING: ${{ env.DATABASE_URL }}
+        run: |
+          go install github.com/pressly/goose/v3/cmd/goose@latest
+          goose -dir migrations up
+
+      - name: Build server
+        working-directory: backend
+        run: go build -o /tmp/clave ./cmd/clave
+
+      - name: Start server
+        run: |
+          /tmp/clave > /tmp/clave.log 2>&1 &
+          echo "Waiting for server to be ready..."
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/api/v1/public/pubkey >/dev/null 2>&1; then
+              echo "Server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to start"; cat /tmp/clave.log; exit 1
+
+      - name: Run e2e tests
+        working-directory: backend
+        run: go test -count=1 -v ./tests/e2e/...
+
+      - name: Server logs
+        if: always()
+        run: cat /tmp/clave.log || true

@@ -9,38 +9,263 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SelfserviceRouteImport } from './routes/selfservice'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SettingsIndexRouteImport } from './routes/settings/index'
+import { Route as ProductsIndexRouteImport } from './routes/products/index'
+import { Route as OrganizationIndexRouteImport } from './routes/organization/index'
+import { Route as LicensesIndexRouteImport } from './routes/licenses/index'
+import { Route as AuditIndexRouteImport } from './routes/audit/index'
+import { Route as R2faIndexRouteImport } from './routes/2fa/index'
+import { Route as LicensesLicenseIdRouteImport } from './routes/licenses/$licenseId'
+import { Route as InviteTokenRouteImport } from './routes/invite/$token'
+import { Route as R2faSetupRouteImport } from './routes/2fa/setup'
+import { Route as SelfserviceOrgSlugIndexRouteImport } from './routes/selfservice/$orgSlug/index'
+import { Route as SelfserviceOrgSlugAuthRouteImport } from './routes/selfservice/$orgSlug/auth'
 
+const SelfserviceRoute = SelfserviceRouteImport.update({
+  id: '/selfservice',
+  path: '/selfservice',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductsIndexRoute = ProductsIndexRouteImport.update({
+  id: '/products/',
+  path: '/products/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrganizationIndexRoute = OrganizationIndexRouteImport.update({
+  id: '/organization/',
+  path: '/organization/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LicensesIndexRoute = LicensesIndexRouteImport.update({
+  id: '/licenses/',
+  path: '/licenses/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuditIndexRoute = AuditIndexRouteImport.update({
+  id: '/audit/',
+  path: '/audit/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const R2faIndexRoute = R2faIndexRouteImport.update({
+  id: '/2fa/',
+  path: '/2fa/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LicensesLicenseIdRoute = LicensesLicenseIdRouteImport.update({
+  id: '/licenses/$licenseId',
+  path: '/licenses/$licenseId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InviteTokenRoute = InviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const R2faSetupRoute = R2faSetupRouteImport.update({
+  id: '/2fa/setup',
+  path: '/2fa/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SelfserviceOrgSlugIndexRoute = SelfserviceOrgSlugIndexRouteImport.update({
+  id: '/$orgSlug/',
+  path: '/$orgSlug/',
+  getParentRoute: () => SelfserviceRoute,
+} as any)
+const SelfserviceOrgSlugAuthRoute = SelfserviceOrgSlugAuthRouteImport.update({
+  id: '/$orgSlug/auth',
+  path: '/$orgSlug/auth',
+  getParentRoute: () => SelfserviceRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/selfservice': typeof SelfserviceRouteWithChildren
+  '/2fa/setup': typeof R2faSetupRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/licenses/$licenseId': typeof LicensesLicenseIdRoute
+  '/2fa/': typeof R2faIndexRoute
+  '/audit/': typeof AuditIndexRoute
+  '/licenses/': typeof LicensesIndexRoute
+  '/organization/': typeof OrganizationIndexRoute
+  '/products/': typeof ProductsIndexRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
+  '/selfservice/$orgSlug/': typeof SelfserviceOrgSlugIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/selfservice': typeof SelfserviceRouteWithChildren
+  '/2fa/setup': typeof R2faSetupRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/licenses/$licenseId': typeof LicensesLicenseIdRoute
+  '/2fa': typeof R2faIndexRoute
+  '/audit': typeof AuditIndexRoute
+  '/licenses': typeof LicensesIndexRoute
+  '/organization': typeof OrganizationIndexRoute
+  '/products': typeof ProductsIndexRoute
+  '/settings': typeof SettingsIndexRoute
+  '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
+  '/selfservice/$orgSlug': typeof SelfserviceOrgSlugIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
+  '/dashboard': typeof DashboardRoute
+  '/login': typeof LoginRoute
+  '/selfservice': typeof SelfserviceRouteWithChildren
+  '/2fa/setup': typeof R2faSetupRoute
+  '/invite/$token': typeof InviteTokenRoute
+  '/licenses/$licenseId': typeof LicensesLicenseIdRoute
+  '/2fa/': typeof R2faIndexRoute
+  '/audit/': typeof AuditIndexRoute
+  '/licenses/': typeof LicensesIndexRoute
+  '/organization/': typeof OrganizationIndexRoute
+  '/products/': typeof ProductsIndexRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
+  '/selfservice/$orgSlug/': typeof SelfserviceOrgSlugIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/account'
+    | '/dashboard'
+    | '/login'
+    | '/selfservice'
+    | '/2fa/setup'
+    | '/invite/$token'
+    | '/licenses/$licenseId'
+    | '/2fa/'
+    | '/audit/'
+    | '/licenses/'
+    | '/organization/'
+    | '/products/'
+    | '/settings/'
+    | '/selfservice/$orgSlug/auth'
+    | '/selfservice/$orgSlug/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/account'
+    | '/dashboard'
+    | '/login'
+    | '/selfservice'
+    | '/2fa/setup'
+    | '/invite/$token'
+    | '/licenses/$licenseId'
+    | '/2fa'
+    | '/audit'
+    | '/licenses'
+    | '/organization'
+    | '/products'
+    | '/settings'
+    | '/selfservice/$orgSlug/auth'
+    | '/selfservice/$orgSlug'
+  id:
+    | '__root__'
+    | '/'
+    | '/account'
+    | '/dashboard'
+    | '/login'
+    | '/selfservice'
+    | '/2fa/setup'
+    | '/invite/$token'
+    | '/licenses/$licenseId'
+    | '/2fa/'
+    | '/audit/'
+    | '/licenses/'
+    | '/organization/'
+    | '/products/'
+    | '/settings/'
+    | '/selfservice/$orgSlug/auth'
+    | '/selfservice/$orgSlug/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
+  DashboardRoute: typeof DashboardRoute
+  LoginRoute: typeof LoginRoute
+  SelfserviceRoute: typeof SelfserviceRouteWithChildren
+  R2faSetupRoute: typeof R2faSetupRoute
+  InviteTokenRoute: typeof InviteTokenRoute
+  LicensesLicenseIdRoute: typeof LicensesLicenseIdRoute
+  R2faIndexRoute: typeof R2faIndexRoute
+  AuditIndexRoute: typeof AuditIndexRoute
+  LicensesIndexRoute: typeof LicensesIndexRoute
+  OrganizationIndexRoute: typeof OrganizationIndexRoute
+  ProductsIndexRoute: typeof ProductsIndexRoute
+  SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/selfservice': {
+      id: '/selfservice'
+      path: '/selfservice'
+      fullPath: '/selfservice'
+      preLoaderRoute: typeof SelfserviceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +273,115 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/': {
+      id: '/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/products/': {
+      id: '/products/'
+      path: '/products'
+      fullPath: '/products/'
+      preLoaderRoute: typeof ProductsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/organization/': {
+      id: '/organization/'
+      path: '/organization'
+      fullPath: '/organization/'
+      preLoaderRoute: typeof OrganizationIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/licenses/': {
+      id: '/licenses/'
+      path: '/licenses'
+      fullPath: '/licenses/'
+      preLoaderRoute: typeof LicensesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audit/': {
+      id: '/audit/'
+      path: '/audit'
+      fullPath: '/audit/'
+      preLoaderRoute: typeof AuditIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/2fa/': {
+      id: '/2fa/'
+      path: '/2fa'
+      fullPath: '/2fa/'
+      preLoaderRoute: typeof R2faIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/licenses/$licenseId': {
+      id: '/licenses/$licenseId'
+      path: '/licenses/$licenseId'
+      fullPath: '/licenses/$licenseId'
+      preLoaderRoute: typeof LicensesLicenseIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invite/$token': {
+      id: '/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof InviteTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/2fa/setup': {
+      id: '/2fa/setup'
+      path: '/2fa/setup'
+      fullPath: '/2fa/setup'
+      preLoaderRoute: typeof R2faSetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/selfservice/$orgSlug/': {
+      id: '/selfservice/$orgSlug/'
+      path: '/$orgSlug'
+      fullPath: '/selfservice/$orgSlug/'
+      preLoaderRoute: typeof SelfserviceOrgSlugIndexRouteImport
+      parentRoute: typeof SelfserviceRoute
+    }
+    '/selfservice/$orgSlug/auth': {
+      id: '/selfservice/$orgSlug/auth'
+      path: '/$orgSlug/auth'
+      fullPath: '/selfservice/$orgSlug/auth'
+      preLoaderRoute: typeof SelfserviceOrgSlugAuthRouteImport
+      parentRoute: typeof SelfserviceRoute
+    }
   }
 }
 
+interface SelfserviceRouteChildren {
+  SelfserviceOrgSlugAuthRoute: typeof SelfserviceOrgSlugAuthRoute
+  SelfserviceOrgSlugIndexRoute: typeof SelfserviceOrgSlugIndexRoute
+}
+
+const SelfserviceRouteChildren: SelfserviceRouteChildren = {
+  SelfserviceOrgSlugAuthRoute: SelfserviceOrgSlugAuthRoute,
+  SelfserviceOrgSlugIndexRoute: SelfserviceOrgSlugIndexRoute,
+}
+
+const SelfserviceRouteWithChildren = SelfserviceRoute._addFileChildren(
+  SelfserviceRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
+  DashboardRoute: DashboardRoute,
+  LoginRoute: LoginRoute,
+  SelfserviceRoute: SelfserviceRouteWithChildren,
+  R2faSetupRoute: R2faSetupRoute,
+  InviteTokenRoute: InviteTokenRoute,
+  LicensesLicenseIdRoute: LicensesLicenseIdRoute,
+  R2faIndexRoute: R2faIndexRoute,
+  AuditIndexRoute: AuditIndexRoute,
+  LicensesIndexRoute: LicensesIndexRoute,
+  OrganizationIndexRoute: OrganizationIndexRoute,
+  ProductsIndexRoute: ProductsIndexRoute,
+  SettingsIndexRoute: SettingsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

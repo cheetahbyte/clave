@@ -15,9 +15,76 @@ import (
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
-var ErrInvalidEmail = errors.New("invalid email")
+var (
+	ErrInvalidEmail        = errors.New("invalid email")
+	ErrUnknownOrganization = errors.New("unknown organization")
+)
+
+func (svc *Service) ResolveOrg(ctx context.Context, slug string) (uuid.UUID, error) {
+	org, err := svc.q.GetOrganizationBySlug(ctx, strings.TrimSpace(slug))
+	if err != nil {
+		return uuid.Nil, ErrUnknownOrganization
+	}
+	return org.ID, nil
+}
+
+func (svc *Service) ListLicensesForOrg(ctx context.Context, email string, orgID uuid.UUID) ([]db.ListByCustomerEmailAndOrganizationRow, error) {
+	return svc.q.ListByCustomerEmailAndOrganization(ctx, db.ListByCustomerEmailAndOrganizationParams{
+		CustomerEmail:  email,
+		OrganizationID: orgID,
+	})
+}
+
+func (svc *Service) ListDevicesForLicense(ctx context.Context, email string, orgID, licenseID uuid.UUID) ([]DeviceItem, error) {
+	rows, err := svc.q.ListSelfServiceDevices(ctx, db.ListSelfServiceDevicesParams{
+		LicenseID:      licenseID,
+		CustomerEmail:  email,
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]DeviceItem, len(rows))
+	for i, r := range rows {
+		item := DeviceItem{ID: r.ID.String()}
+		if r.Hostname != nil {
+			item.Name = *r.Hostname
+		}
+		if r.CheckedInAt.Valid {
+			t := r.CheckedInAt.Time
+			item.LastSeen = &t
+		}
+		if r.CreatedAt.Valid {
+			t := r.CreatedAt.Time
+			item.RegisteredAt = &t
+		}
+		items[i] = item
+	}
+	return items, nil
+}
+
+func (svc *Service) RemoveDevice(ctx context.Context, email string, orgID, licenseID, deviceID uuid.UUID) error {
+	_, err := svc.q.DeleteSelfServiceDevice(ctx, db.DeleteSelfServiceDeviceParams{
+		DeviceID:       deviceID,
+		LicenseID:      licenseID,
+		CustomerEmail:  email,
+		OrganizationID: orgID,
+	})
+	return err
+}
+
+func (svc *Service) RevokeLicense(ctx context.Context, email string, orgID, licenseID uuid.UUID) error {
+	_, err := svc.q.RevokeSelfServiceLicense(ctx, db.RevokeSelfServiceLicenseParams{
+		LicenseID:      licenseID,
+		CustomerEmail:  email,
+		OrganizationID: orgID,
+	})
+	return err
+}
 
 type Service struct {
 	q      *db.Queries
@@ -61,6 +128,11 @@ func (svc *Service) ValidateToken(ctx context.Context, data ValidateTokenRequest
 		return ValidateTokenResponse{}, errors.New("token not found")
 	}
 
+	orgID, err := svc.ResolveOrg(ctx, data.OrgSlug)
+	if err != nil {
+		return ValidateTokenResponse{}, err
+	}
+
 	tokenHash := svc.hashToken(raw)
 
 	email, err := svc.q.ConsumeSelfServiceToken(ctx, tokenHash)
@@ -76,6 +148,7 @@ func (svc *Service) ValidateToken(ctx context.Context, data ValidateTokenRequest
 		"aud":   "selfservice",
 		"sub":   email,
 		"email": email,
+		"org":   orgID.String(),
 		"iat":   now.Unix(),
 		"exp":   expiresAt.Unix(),
 	}

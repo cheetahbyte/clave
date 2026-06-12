@@ -11,21 +11,67 @@ import (
 )
 
 type Querier interface {
+	AcceptInvite(ctx context.Context, id uuid.UUID) (OrganizationInvite, error)
 	ActivateLicense(ctx context.Context, arg ActivateLicenseParams) (Activation, error)
+	ConsumeRecoveryCode(ctx context.Context, arg ConsumeRecoveryCodeParams) (uuid.UUID, error)
 	ConsumeSelfServiceToken(ctx context.Context, tokenHash string) (string, error)
 	CountActivations(ctx context.Context, licenseID uuid.UUID) (int64, error)
+	CountAdminLicensesByOrganization(ctx context.Context, arg CountAdminLicensesByOrganizationParams) (int64, error)
+	CountAuditLogsByOrganization(ctx context.Context, organizationID uuid.UUID) (int64, error)
+	CountLicensesByProduct(ctx context.Context, arg CountLicensesByProductParams) (int64, error)
+	CountTrialsByEmailProduct(ctx context.Context, arg CountTrialsByEmailProductParams) (int64, error)
+	CountTrialsByHwidProduct(ctx context.Context, arg CountTrialsByHwidProductParams) (int64, error)
+	CreateAdmin(ctx context.Context, arg CreateAdminParams) (AdminUser, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
+	CreateInvite(ctx context.Context, arg CreateInviteParams) (OrganizationInvite, error)
 	CreateLicense(ctx context.Context, arg CreateLicenseParams) (License, error)
+	CreateOrganization(ctx context.Context, arg CreateOrganizationParams) (Organization, error)
+	CreateOrganizationMember(ctx context.Context, arg CreateOrganizationMemberParams) error
+	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateSelfServiceLink(ctx context.Context, arg CreateSelfServiceLinkParams) (SelfServiceToken, error)
+	DeleteAdminLicense(ctx context.Context, arg DeleteAdminLicenseParams) (uuid.UUID, error)
+	DeleteInvite(ctx context.Context, arg DeleteInviteParams) error
+	DeleteOrganizationMember(ctx context.Context, arg DeleteOrganizationMemberParams) error
+	DeletePendingInvitesByEmail(ctx context.Context, arg DeletePendingInvitesByEmailParams) error
+	DeleteProduct(ctx context.Context, arg DeleteProductParams) (uuid.UUID, error)
+	DeleteSelfServiceDevice(ctx context.Context, arg DeleteSelfServiceDeviceParams) (uuid.UUID, error)
+	DisableTOTP(ctx context.Context, id uuid.UUID) error
+	EnableTOTP(ctx context.Context, arg EnableTOTPParams) error
 	GetActivationByLicenseAndDevice(ctx context.Context, arg GetActivationByLicenseAndDeviceParams) (Activation, error)
 	GetActivationsForLicense(ctx context.Context, licenseID uuid.UUID) ([]Activation, error)
+	GetAdminByEmail(ctx context.Context, email string) (AdminUser, error)
+	GetAdminById(ctx context.Context, id uuid.UUID) (AdminUser, error)
+	GetAdminLicenseById(ctx context.Context, arg GetAdminLicenseByIdParams) (License, error)
+	GetAdminLicenseDetailByOrganization(ctx context.Context, arg GetAdminLicenseDetailByOrganizationParams) (GetAdminLicenseDetailByOrganizationRow, error)
+	GetAdminOrganizations(ctx context.Context, adminUserID uuid.UUID) ([]GetAdminOrganizationsRow, error)
+	GetAdminOverviewStatsByOrganization(ctx context.Context, organizationID uuid.UUID) (GetAdminOverviewStatsByOrganizationRow, error)
 	GetDeviceByLicenseAndHwidHash(ctx context.Context, arg GetDeviceByLicenseAndHwidHashParams) (Device, error)
+	GetInviteByTokenHash(ctx context.Context, tokenHash string) (GetInviteByTokenHashRow, error)
 	GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error)
 	GetLicenseById(ctx context.Context, id uuid.UUID) (License, error)
 	GetLicenseByIdForUpdate(ctx context.Context, id uuid.UUID) (License, error)
-	GetOneById(ctx context.Context, id uuid.UUID) (Product, error)
-	GetProducts(ctx context.Context) ([]Product, error)
+	GetOneByIdForOrganization(ctx context.Context, arg GetOneByIdForOrganizationParams) (Product, error)
+	GetOrganizationById(ctx context.Context, id uuid.UUID) (Organization, error)
+	GetOrganizationBySlug(ctx context.Context, slug string) (Organization, error)
+	GetOrganizationMembership(ctx context.Context, arg GetOrganizationMembershipParams) (OrganizationMember, error)
+	GetProductById(ctx context.Context, id uuid.UUID) (Product, error)
+	GetProductsByOrganization(ctx context.Context, organizationID uuid.UUID) ([]Product, error)
+	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
+	InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCodeParams) error
+	InvalidateRecoveryCodes(ctx context.Context, adminUserID uuid.UUID) error
+	ListAdminLicenseActivationsByOrganization(ctx context.Context, arg ListAdminLicenseActivationsByOrganizationParams) ([]ListAdminLicenseActivationsByOrganizationRow, error)
+	ListAdminLicensesByOrganization(ctx context.Context, arg ListAdminLicensesByOrganizationParams) ([]ListAdminLicensesByOrganizationRow, error)
+	ListAdminRecentLicensesByOrganization(ctx context.Context, arg ListAdminRecentLicensesByOrganizationParams) ([]ListAdminRecentLicensesByOrganizationRow, error)
+	ListAuditLogsByOrganization(ctx context.Context, arg ListAuditLogsByOrganizationParams) ([]ListAuditLogsByOrganizationRow, error)
 	ListByCustomerEmail(ctx context.Context, customerEmail string) ([]ListByCustomerEmailRow, error)
+	ListByCustomerEmailAndOrganization(ctx context.Context, arg ListByCustomerEmailAndOrganizationParams) ([]ListByCustomerEmailAndOrganizationRow, error)
+	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]ListOrganizationMembersRow, error)
+	ListPendingInvites(ctx context.Context, organizationID uuid.UUID) ([]ListPendingInvitesRow, error)
+	ListSelfServiceDevices(ctx context.Context, arg ListSelfServiceDevicesParams) ([]ListSelfServiceDevicesRow, error)
+	RevokeSelfServiceLicense(ctx context.Context, arg RevokeSelfServiceLicenseParams) (uuid.UUID, error)
+	UpdateAdminLicense(ctx context.Context, arg UpdateAdminLicenseParams) (License, error)
+	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
+	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 }
 
 var _ Querier = (*Queries)(nil)

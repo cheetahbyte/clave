@@ -19,3 +19,8 @@ type ActivateResponse struct {
 	ValidUntil   int64     `json:"validUntil"`
 	MaskedEmail  string    `json:"maskedEmail"`
 }
+
+type StartTrialRequest struct {
+	ProductID string `json:"productId" validate:"required,uuid"`
+	Device    Device `json:"device"`
+}

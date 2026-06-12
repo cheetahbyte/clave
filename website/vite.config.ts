@@ -10,6 +10,14 @@ export default defineConfig({
         target: 'react',
         autoCodeSplitting: true,
       }),react(), tailwindcss()],
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: false,
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
