@@ -80,6 +80,7 @@ type UpdateAdminHandlers struct {
 	ListReleases        http.HandlerFunc
 	CreateRelease       http.HandlerFunc
 	UploadArtifact      http.HandlerFunc
+	GenerateDelta       http.HandlerFunc
 	PublishRelease      http.HandlerFunc
 	YankRelease         http.HandlerFunc
 	DeleteRelease        http.HandlerFunc
@@ -92,6 +93,10 @@ type UpdateAdminHandlers struct {
 	GetStorageConfig    http.HandlerFunc
 	SaveStorageConfig   http.HandlerFunc
 	TestStorageConfig   http.HandlerFunc
+	WorkerGetDeltaJob     http.HandlerFunc
+	WorkerStartDeltaJob   http.HandlerFunc
+	WorkerCompleteDeltaJob http.HandlerFunc
+	WorkerFailDeltaJob    http.HandlerFunc
 }
 
 type OrganizationHandlers struct {
@@ -114,6 +119,7 @@ type MiddlewareConfig struct {
 	CSRFAuth     func(http.Handler) http.Handler
 	CSRFPlain    func(http.Handler) http.Handler
 	ForceHTTPS   func(http.Handler) http.Handler
+	WorkerAuth   func(http.Handler) http.Handler
 	Verbose      bool
 }
 
@@ -244,6 +250,7 @@ func Register(r *chi.Mux, cfg Config) {
 					protected.Get("/update-providers", ua.ListProviders)
 					protected.Get("/update-releases", ua.ListReleases)
 					protected.Post("/update-releases", ua.CreateRelease)
+					protected.Post("/update-releases/{id}/generate-delta", ua.GenerateDelta)
 					protected.Post("/update-releases/{id}/artifacts", ua.UploadArtifact)
 					protected.Post("/update-releases/{id}/publish", ua.PublishRelease)
 					protected.Post("/update-releases/{id}/yank", ua.YankRelease)
@@ -287,6 +294,14 @@ func Register(r *chi.Mux, cfg Config) {
 				v1.Get("/updates/releases/{releaseId}/changelog.html", ua.Changelog)
 
 			v1.Get("/updates/artifacts/{artifactId}/download", ua.DownloadArtifact)
+
+			v1.Route("/worker", func(worker chi.Router) {
+				worker.Use(mw.WorkerAuth)
+				worker.Get("/delta-jobs/{jobId}", ua.WorkerGetDeltaJob)
+				worker.Post("/delta-jobs/{jobId}/started", ua.WorkerStartDeltaJob)
+				worker.Post("/delta-jobs/{jobId}/complete", ua.WorkerCompleteDeltaJob)
+				worker.Post("/delta-jobs/{jobId}/failed", ua.WorkerFailDeltaJob)
+			})
 
 			})
 	})

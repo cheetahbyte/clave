@@ -1,6 +1,8 @@
 package update
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -8,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,8 +19,10 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/cheetahbyte/clave/internal/shared/storage"
+	"github.com/cheetahbyte/clave/pkg/delta"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -890,4 +895,437 @@ func (svc *Service) artifactDownloadURL(artifactID uuid.UUID) string {
 		return fmt.Sprintf("/api/v1/updates/artifacts/%s/download", artifactID)
 	}
 	return fmt.Sprintf("%s/api/v1/updates/artifacts/%s/download", base, artifactID)
+}
+
+func (svc *Service) GenerateDelta(ctx context.Context, orgID, releaseID uuid.UUID, publisher interface{ PublishDeltaGenerate(context.Context, events.DeltaGenerateEvent) error }) (*db.UpdateDeltaJob, error) {
+	release, err := svc.repo.GetUpdateRelease(ctx, releaseID)
+	if err != nil {
+		return nil, fmt.Errorf("release not found: %w", err)
+	}
+	if release.OrganizationID != orgID {
+		return nil, fmt.Errorf("release not found")
+	}
+
+	sourceRelease, err := svc.repo.FindPreviousPublishedRelease(ctx, db.FindPreviousPublishedReleaseParams{
+		ProductID: release.ProductID,
+		Platform:  release.Platform,
+		ChannelID: release.ChannelID,
+		ID:        releaseID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("no previous published release found for this product/platform/channel")
+	}
+
+	artifacts, err := svc.repo.ListArtifactsForRelease(ctx, releaseID)
+	if err != nil || len(artifacts) == 0 {
+		return nil, fmt.Errorf("no artifacts found for target release")
+	}
+	sourceArtifacts, err := svc.repo.ListArtifactsForRelease(ctx, sourceRelease.ID)
+	if err != nil || len(sourceArtifacts) == 0 {
+		return nil, fmt.Errorf("no artifacts found for source release")
+	}
+
+	var targetArtifact, sourceArtifact *db.UpdateArtifact
+	for i := range artifacts {
+		a := &artifacts[i]
+		if a.ArtifactType == "delta" {
+			continue
+		}
+		if targetArtifact == nil {
+			targetArtifact = a
+		}
+	}
+	for i := range sourceArtifacts {
+		a := &sourceArtifacts[i]
+		if a.ArtifactType == "delta" {
+			continue
+		}
+		if sourceArtifact == nil {
+			sourceArtifact = a
+		}
+	}
+	if targetArtifact == nil || sourceArtifact == nil {
+		return nil, fmt.Errorf("could not find full artifacts in both releases")
+	}
+
+	pgSourceArtifact := pgtype.UUID{Bytes: sourceArtifact.ID, Valid: true}
+	pgTargetArtifact := pgtype.UUID{Bytes: targetArtifact.ID, Valid: true}
+
+	job, err := svc.repo.InsertDeltaJob(ctx, db.InsertDeltaJobParams{
+		OrganizationID:   orgID,
+		ReleaseID:        releaseID,
+		SourceReleaseID:  sourceRelease.ID,
+		SourceArtifactID: pgSourceArtifact,
+		TargetArtifactID: pgTargetArtifact,
+		Status:           "queued",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create delta job: %w", err)
+	}
+
+	if publisher != nil {
+		_ = publisher.PublishDeltaGenerate(ctx, events.DeltaGenerateEvent{
+			Type:             "delta.generate",
+			JobID:            job.ID.String(),
+			OrganizationID:   orgID.String(),
+			ReleaseID:        releaseID.String(),
+			SourceReleaseID:  sourceRelease.ID.String(),
+			SourceArtifactID: sourceArtifact.ID.String(),
+			TargetArtifactID: targetArtifact.ID.String(),
+		})
+	}
+
+	return &job, nil
+}
+
+func (svc *Service) generateDeltaFromArtifacts(ctx context.Context, sourceArtifact, targetArtifact *db.UpdateArtifact, sourceRelease, targetRelease db.UpdateRelease) (uuid.UUID, error) {
+	backend, kind, err := svc.storageForProduct(ctx, targetRelease.ProductID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("storage backend: %w", err)
+	}
+
+	fromDir, err := os.MkdirTemp("", "clave-delta-from-")
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("temp dir: %w", err)
+	}
+	defer os.RemoveAll(fromDir)
+	toDir, err := os.MkdirTemp("", "clave-delta-to-")
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("temp dir: %w", err)
+	}
+	defer os.RemoveAll(toDir)
+
+	sourceKey := svc.artifactStorageKey(*sourceArtifact)
+	targetKey := svc.artifactStorageKey(*targetArtifact)
+
+	if err := downloadAndExtract(ctx, backend, sourceKey, fromDir); err != nil {
+		return uuid.Nil, fmt.Errorf("extract source: %w", err)
+	}
+	if err := downloadAndExtract(ctx, backend, targetKey, toDir); err != nil {
+		return uuid.Nil, fmt.Errorf("extract target: %w", err)
+	}
+
+	fromManifest, fromManifestSHA, err := delta.BuildManifest(fromDir)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("build source manifest: %w", err)
+	}
+	toManifest, toManifestSHA, err := delta.BuildManifest(toDir)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("build target manifest: %w", err)
+	}
+
+	sourceSHA := ""
+	if sourceArtifact.ChecksumSha256 != nil {
+		sourceSHA = *sourceArtifact.ChecksumSha256
+	}
+	targetSHA := ""
+	if targetArtifact.ChecksumSha256 != nil {
+		targetSHA = *targetArtifact.ChecksumSha256
+	}
+
+	fromMeta := delta.ReleaseMeta{
+		Version:        sourceRelease.Version,
+		ManifestSHA256: fromManifestSHA,
+		ArtifactSHA256: sourceSHA,
+	}
+	if sourceRelease.BuildNumber != nil {
+		fromMeta.Build = *sourceRelease.BuildNumber
+	}
+	toMeta := delta.ReleaseMeta{
+		Version:        targetRelease.Version,
+		ManifestSHA256: toManifestSHA,
+		ArtifactSHA256: targetSHA,
+	}
+	if targetRelease.BuildNumber != nil {
+		toMeta.Build = *targetRelease.BuildNumber
+	}
+
+	dm := delta.Diff(fromManifest, toManifest, fromMeta, toMeta)
+	deltaBytes, err := delta.BuildDelta(dm, toManifest, toDir)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("build delta archive: %w", err)
+	}
+
+	artifactID := uuid.New()
+	ext := ".delta.zip"
+	storedFilename := artifactID.String() + ext
+	storageKey := artifactID.String() + "/" + storedFilename
+
+	deltaSHA := sha256.Sum256(deltaBytes)
+	deltaChecksum := fmt.Sprintf("%x", deltaSHA)
+
+	sizeBytes, err := backend.Put(ctx, storageKey, bytes.NewReader(deltaBytes))
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("store delta: %w", err)
+	}
+
+	downloadURL := svc.artifactDownloadURL(artifactID)
+	mimeType := "application/zip"
+	backendName := string(kind)
+	
+	md := map[string]any{
+		"format":               "clave.delta/v1",
+		"fromVersion":          fromMeta.Version,
+		"fromBuild":            fromMeta.Build,
+		"fromManifestSha256":   fromManifestSHA,
+		"fromArtifactSha256":   sourceSHA,
+		"toVersion":            toMeta.Version,
+		"toBuild":              toMeta.Build,
+		"toManifestSha256":     toManifestSHA,
+		"toArtifactSha256":     targetSHA,
+	}
+	mdJSON, _ := json.Marshal(md)
+
+	artifact, err := svc.repo.InsertUpdateArtifact(ctx, db.InsertUpdateArtifactParams{
+		ID:                   artifactID,
+		ReleaseID:            targetRelease.ID,
+		ArtifactType:         "delta",
+		Os:                   targetArtifact.Os,
+		Arch:                 targetArtifact.Arch,
+		Url:                  downloadURL,
+		SizeBytes:            &sizeBytes,
+		ChecksumSha256:       &deltaChecksum,
+		Metadata:             mdJSON,
+		Filename:             &storedFilename,
+		MimeType:             &mimeType,
+		MinimumSystemVersion: nil,
+		StorageBackend:       &backendName,
+		StorageKey:           &storageKey,
+	})
+	if err != nil {
+		_ = backend.Delete(ctx, storageKey)
+		return uuid.Nil, fmt.Errorf("insert delta artifact: %w", err)
+	}
+
+	return artifact.ID, nil
+}
+
+func downloadAndExtract(ctx context.Context, backend storage.Backend, key, destDir string) error {
+	rc, err := backend.Open(ctx, key)
+	if err != nil {
+		return fmt.Errorf("open %s: %w", key, err)
+	}
+	defer rc.Close()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", key, err)
+	}
+
+	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return fmt.Errorf("read zip %s: %w", key, err)
+	}
+
+	for _, f := range r.File {
+		path := filepath.Join(destDir, filepath.FromSlash(f.Name))
+		if strings.Contains(f.Name, "..") || filepath.IsAbs(f.Name) {
+			continue
+		}
+		if f.FileInfo().IsDir() {
+			os.MkdirAll(path, 0755)
+			continue
+		}
+		os.MkdirAll(filepath.Dir(path), 0755)
+		rc2, err := f.Open()
+		if err != nil {
+			return err
+		}
+		out, err := os.Create(path)
+		if err != nil {
+			rc2.Close()
+			return err
+		}
+		_, err = io.Copy(out, rc2)
+		rc2.Close()
+		out.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type DeltaJobDTO struct {
+	ID                 string `json:"id"`
+	Status             string `json:"status"`
+	SourceArtifactURL  string `json:"sourceArtifactUrl"`
+	TargetArtifactURL  string `json:"targetArtifactUrl"`
+	SourceArtifactSHA  string `json:"sourceArtifactSha256"`
+	TargetArtifactSHA  string `json:"targetArtifactSha256"`
+	SourceVersion      string `json:"sourceVersion"`
+	SourceBuild        string `json:"sourceBuild,omitempty"`
+	TargetVersion      string `json:"targetVersion"`
+	TargetBuild        string `json:"targetBuild,omitempty"`
+	Os                 string `json:"os"`
+	Arch               string `json:"arch"`
+}
+
+func (svc *Service) GetDeltaJobForWorker(ctx context.Context, jobID uuid.UUID) (*DeltaJobDTO, error) {
+	job, err := svc.repo.GetDeltaJob(ctx, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("job not found: %w", err)
+	}
+
+	sourceArtifact, err := svc.repo.GetArtifact(ctx, uuid.UUID(job.SourceArtifactID.Bytes))
+	if err != nil {
+		return nil, fmt.Errorf("source artifact not found: %w", err)
+	}
+	targetArtifact, err := svc.repo.GetArtifact(ctx, uuid.UUID(job.TargetArtifactID.Bytes))
+	if err != nil {
+		return nil, fmt.Errorf("target artifact not found: %w", err)
+	}
+
+	targetRelease, err := svc.repo.GetUpdateRelease(ctx, job.ReleaseID)
+	if err != nil {
+		return nil, fmt.Errorf("target release not found: %w", err)
+	}
+	sourceRelease, err := svc.repo.GetUpdateRelease(ctx, job.SourceReleaseID)
+	if err != nil {
+		return nil, fmt.Errorf("source release not found: %w", err)
+	}
+
+	dto := &DeltaJobDTO{
+		ID:                  job.ID.String(),
+		Status:              job.Status,
+		SourceArtifactURL:   sourceArtifact.Url,
+		TargetArtifactURL:   targetArtifact.Url,
+		SourceVersion:       sourceRelease.Version,
+		TargetVersion:       targetRelease.Version,
+		Os:                  targetArtifact.Os,
+		Arch:                targetArtifact.Arch,
+	}
+	if sourceArtifact.ChecksumSha256 != nil {
+		dto.SourceArtifactSHA = *sourceArtifact.ChecksumSha256
+	}
+	if targetArtifact.ChecksumSha256 != nil {
+		dto.TargetArtifactSHA = *targetArtifact.ChecksumSha256
+	}
+	if sourceRelease.BuildNumber != nil {
+		dto.SourceBuild = *sourceRelease.BuildNumber
+	}
+	if targetRelease.BuildNumber != nil {
+		dto.TargetBuild = *targetRelease.BuildNumber
+	}
+
+	return dto, nil
+}
+
+func (svc *Service) StartDeltaJob(ctx context.Context, jobID uuid.UUID) error {
+	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	_, err := svc.repo.UpdateDeltaJobStatus(ctx, db.UpdateDeltaJobStatusParams{
+		ID:        jobID,
+		Status:    "running",
+		StartedAt: now,
+	})
+	return err
+}
+
+func (svc *Service) CompleteDeltaJob(ctx context.Context, jobID uuid.UUID, deltaData []byte) error {
+	job, err := svc.repo.GetDeltaJob(ctx, jobID)
+	if err != nil {
+		return fmt.Errorf("job not found: %w", err)
+	}
+
+	targetArtifact, err := svc.repo.GetArtifact(ctx, uuid.UUID(job.TargetArtifactID.Bytes))
+	if err != nil {
+		return fmt.Errorf("target artifact not found: %w", err)
+	}
+	sourceArtifact, err := svc.repo.GetArtifact(ctx, uuid.UUID(job.SourceArtifactID.Bytes))
+	if err != nil {
+		return fmt.Errorf("source artifact not found: %w", err)
+	}
+
+	targetRelease, err := svc.repo.GetUpdateRelease(ctx, job.ReleaseID)
+	if err != nil {
+		return fmt.Errorf("release not found: %w", err)
+	}
+
+	backend, kind, err := svc.storageForProduct(ctx, targetRelease.ProductID)
+	if err != nil {
+		return fmt.Errorf("storage backend: %w", err)
+	}
+
+	artifactID := uuid.New()
+	storedFilename := artifactID.String() + ".delta.zip"
+	storageKey := artifactID.String() + "/" + storedFilename
+
+	deltaSHA := sha256.Sum256(deltaData)
+	deltaChecksum := fmt.Sprintf("%x", deltaSHA)
+	sizeBytes, err := backend.Put(ctx, storageKey, bytes.NewReader(deltaData))
+	if err != nil {
+		return fmt.Errorf("store delta: %w", err)
+	}
+
+	downloadURL := svc.artifactDownloadURL(artifactID)
+	backendName := string(kind)
+
+	sourceSHA := ""
+	if sourceArtifact.ChecksumSha256 != nil {
+		sourceSHA = *sourceArtifact.ChecksumSha256
+	}
+	targetSHA := ""
+	if targetArtifact.ChecksumSha256 != nil {
+		targetSHA = *targetArtifact.ChecksumSha256
+	}
+
+	sourceRelease, _ := svc.repo.GetUpdateRelease(ctx, job.SourceReleaseID)
+
+	md := map[string]any{
+		"format":             "clave.delta/v1",
+		"fromVersion":        sourceRelease.Version,
+		"fromArtifactSha256": sourceSHA,
+		"toVersion":          targetRelease.Version,
+		"toArtifactSha256":   targetSHA,
+	}
+	if sourceRelease.BuildNumber != nil {
+		md["fromBuild"] = *sourceRelease.BuildNumber
+	}
+	if targetRelease.BuildNumber != nil {
+		md["toBuild"] = *targetRelease.BuildNumber
+	}
+	mdJSON, _ := json.Marshal(md)
+
+	mime := "application/zip"
+	_, err = svc.repo.InsertUpdateArtifact(ctx, db.InsertUpdateArtifactParams{
+		ID:                   artifactID,
+		ReleaseID:            job.ReleaseID,
+		ArtifactType:         "delta",
+		Os:                   targetArtifact.Os,
+		Arch:                 targetArtifact.Arch,
+		Url:                  downloadURL,
+		SizeBytes:            &sizeBytes,
+		ChecksumSha256:       &deltaChecksum,
+		Metadata:             mdJSON,
+		Filename:             &storedFilename,
+		MimeType:             &mime,
+		MinimumSystemVersion: nil,
+		StorageBackend:       &backendName,
+		StorageKey:           &storageKey,
+	})
+	if err != nil {
+		_ = backend.Delete(ctx, storageKey)
+		return fmt.Errorf("insert delta artifact: %w", err)
+	}
+
+	pgDelta := pgtype.UUID{Bytes: artifactID, Valid: true}
+	completedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	_, err = svc.repo.UpdateDeltaJobStatus(ctx, db.UpdateDeltaJobStatusParams{
+		ID:               jobID,
+		Status:           "succeeded",
+		DeltaArtifactID:  pgDelta,
+		CompletedAt:      completedAt,
+	})
+	return err
+}
+
+func (svc *Service) FailDeltaJob(ctx context.Context, jobID uuid.UUID, errorMsg string) error {
+	completedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	_, err := svc.repo.UpdateDeltaJobStatus(ctx, db.UpdateDeltaJobStatusParams{
+		ID:           jobID,
+		Status:       "failed",
+		ErrorMessage: &errorMsg,
+		CompletedAt:  completedAt,
+	})
+	return err
 }

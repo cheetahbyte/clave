@@ -158,6 +158,53 @@ func (q *Queries) DeleteUpdateRelease(ctx context.Context, id uuid.UUID) (Update
 	return i, err
 }
 
+const findPreviousPublishedRelease = `-- name: FindPreviousPublishedRelease :one
+SELECT id, organization_id, product_id, channel_id, platform, version, build_number, status, release_notes, published_at, created_at, updated_at, changelog, changelog_id
+FROM update_releases
+WHERE product_id = $1
+  AND platform = $2
+  AND channel_id = $3
+  AND status = 'published'
+  AND published_at <= now()
+  AND id != $4
+ORDER BY published_at DESC
+LIMIT 1
+`
+
+type FindPreviousPublishedReleaseParams struct {
+	ProductID uuid.UUID `json:"product_id"`
+	Platform  string    `json:"platform"`
+	ChannelID uuid.UUID `json:"channel_id"`
+	ID        uuid.UUID `json:"id"`
+}
+
+func (q *Queries) FindPreviousPublishedRelease(ctx context.Context, arg FindPreviousPublishedReleaseParams) (UpdateRelease, error) {
+	row := q.db.QueryRow(ctx, findPreviousPublishedRelease,
+		arg.ProductID,
+		arg.Platform,
+		arg.ChannelID,
+		arg.ID,
+	)
+	var i UpdateRelease
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProductID,
+		&i.ChannelID,
+		&i.Platform,
+		&i.Version,
+		&i.BuildNumber,
+		&i.Status,
+		&i.ReleaseNotes,
+		&i.PublishedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Changelog,
+		&i.ChangelogID,
+	)
+	return i, err
+}
+
 const getChangelogsByReleaseIDs = `-- name: GetChangelogsByReleaseIDs :many
 SELECT r.id AS release_id, c.body AS changelog_body
 FROM update_releases r
@@ -272,6 +319,30 @@ func (q *Queries) GetDefaultChannelForProduct(ctx context.Context, productID uui
 		&i.UpdatedAt,
 		&i.RequiredFeatures,
 		&i.Description,
+	)
+	return i, err
+}
+
+const getDeltaJob = `-- name: GetDeltaJob :one
+SELECT id, organization_id, release_id, source_release_id, source_artifact_id, target_artifact_id, delta_artifact_id, status, error_message, created_at, started_at, completed_at FROM update_delta_jobs WHERE id = $1
+`
+
+func (q *Queries) GetDeltaJob(ctx context.Context, id uuid.UUID) (UpdateDeltaJob, error) {
+	row := q.db.QueryRow(ctx, getDeltaJob, id)
+	var i UpdateDeltaJob
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ReleaseID,
+		&i.SourceReleaseID,
+		&i.SourceArtifactID,
+		&i.TargetArtifactID,
+		&i.DeltaArtifactID,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
@@ -457,6 +528,50 @@ func (q *Queries) GetUpdateRelease(ctx context.Context, id uuid.UUID) (UpdateRel
 		&i.UpdatedAt,
 		&i.Changelog,
 		&i.ChangelogID,
+	)
+	return i, err
+}
+
+const insertDeltaJob = `-- name: InsertDeltaJob :one
+INSERT INTO update_delta_jobs (
+    organization_id, release_id, source_release_id, source_artifact_id, target_artifact_id, status
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, organization_id, release_id, source_release_id, source_artifact_id, target_artifact_id, delta_artifact_id, status, error_message, created_at, started_at, completed_at
+`
+
+type InsertDeltaJobParams struct {
+	OrganizationID   uuid.UUID   `json:"organization_id"`
+	ReleaseID        uuid.UUID   `json:"release_id"`
+	SourceReleaseID  uuid.UUID   `json:"source_release_id"`
+	SourceArtifactID pgtype.UUID `json:"source_artifact_id"`
+	TargetArtifactID pgtype.UUID `json:"target_artifact_id"`
+	Status           string      `json:"status"`
+}
+
+func (q *Queries) InsertDeltaJob(ctx context.Context, arg InsertDeltaJobParams) (UpdateDeltaJob, error) {
+	row := q.db.QueryRow(ctx, insertDeltaJob,
+		arg.OrganizationID,
+		arg.ReleaseID,
+		arg.SourceReleaseID,
+		arg.SourceArtifactID,
+		arg.TargetArtifactID,
+		arg.Status,
+	)
+	var i UpdateDeltaJob
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ReleaseID,
+		&i.SourceReleaseID,
+		&i.SourceArtifactID,
+		&i.TargetArtifactID,
+		&i.DeltaArtifactID,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
@@ -766,6 +881,45 @@ func (q *Queries) ListArtifactsForReleases(ctx context.Context, dollar_1 []uuid.
 	return items, nil
 }
 
+const listDeltaJobsForRelease = `-- name: ListDeltaJobsForRelease :many
+SELECT id, organization_id, release_id, source_release_id, source_artifact_id, target_artifact_id, delta_artifact_id, status, error_message, created_at, started_at, completed_at FROM update_delta_jobs
+WHERE release_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListDeltaJobsForRelease(ctx context.Context, releaseID uuid.UUID) ([]UpdateDeltaJob, error) {
+	rows, err := q.db.Query(ctx, listDeltaJobsForRelease, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UpdateDeltaJob{}
+	for rows.Next() {
+		var i UpdateDeltaJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ReleaseID,
+			&i.SourceReleaseID,
+			&i.SourceArtifactID,
+			&i.TargetArtifactID,
+			&i.DeltaArtifactID,
+			&i.Status,
+			&i.ErrorMessage,
+			&i.CreatedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublishedReleasesForFeed = `-- name: ListPublishedReleasesForFeed :many
 SELECT id, organization_id, product_id, channel_id, platform, version, build_number, status, release_notes, published_at, created_at, updated_at, changelog, changelog_id
 FROM update_releases
@@ -994,6 +1148,49 @@ func (q *Queries) PublishUpdateRelease(ctx context.Context, id uuid.UUID) (Updat
 		&i.UpdatedAt,
 		&i.Changelog,
 		&i.ChangelogID,
+	)
+	return i, err
+}
+
+const updateDeltaJobStatus = `-- name: UpdateDeltaJobStatus :one
+UPDATE update_delta_jobs
+SET status = $2, error_message = $3, started_at = $4, completed_at = $5, delta_artifact_id = $6
+WHERE id = $1
+RETURNING id, organization_id, release_id, source_release_id, source_artifact_id, target_artifact_id, delta_artifact_id, status, error_message, created_at, started_at, completed_at
+`
+
+type UpdateDeltaJobStatusParams struct {
+	ID              uuid.UUID          `json:"id"`
+	Status          string             `json:"status"`
+	ErrorMessage    *string            `json:"error_message"`
+	StartedAt       pgtype.Timestamptz `json:"started_at"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	DeltaArtifactID pgtype.UUID        `json:"delta_artifact_id"`
+}
+
+func (q *Queries) UpdateDeltaJobStatus(ctx context.Context, arg UpdateDeltaJobStatusParams) (UpdateDeltaJob, error) {
+	row := q.db.QueryRow(ctx, updateDeltaJobStatus,
+		arg.ID,
+		arg.Status,
+		arg.ErrorMessage,
+		arg.StartedAt,
+		arg.CompletedAt,
+		arg.DeltaArtifactID,
+	)
+	var i UpdateDeltaJob
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ReleaseID,
+		&i.SourceReleaseID,
+		&i.SourceArtifactID,
+		&i.TargetArtifactID,
+		&i.DeltaArtifactID,
+		&i.Status,
+		&i.ErrorMessage,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
 	)
 	return i, err
 }
