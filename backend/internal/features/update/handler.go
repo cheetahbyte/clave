@@ -2,6 +2,7 @@ package update
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -496,7 +497,12 @@ func (h *Handler) AdminUploadArtifact(w http.ResponseWriter, r *http.Request) {
 		arch = "universal"
 	}
 
-	artifact, err := h.svc.UploadArtifact(r.Context(), releaseID, file, artifactType, osName, arch, header.Filename)
+	var metadata json.RawMessage
+	if raw := r.FormValue("metadata"); raw != "" {
+		metadata = json.RawMessage(raw)
+	}
+
+	artifact, err := h.svc.UploadArtifact(r.Context(), releaseID, file, artifactType, osName, arch, header.Filename, metadata)
 	if err != nil {
 		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

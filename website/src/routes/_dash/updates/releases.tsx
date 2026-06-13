@@ -309,13 +309,14 @@ function UploadArtifactDialog({
   const [artifactType, setArtifactType] = useState("dmg");
   const [os, setOs] = useState("macos");
   const [arch, setArch] = useState("universal");
+  const [metadata, setMetadata] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const mutation = useMutation({
     mutationFn: () => {
       const file = fileRef.current?.files?.[0];
       if (!file || !releaseId) throw new Error("No file selected");
-      return uploadArtifact(releaseId, file, artifactType, os, arch);
+      return uploadArtifact(releaseId, file, artifactType, os, arch, metadata || undefined);
     },
     onSuccess: () => {
       toast.success("Artifact uploaded");
@@ -380,6 +381,18 @@ function UploadArtifactDialog({
               </Select>
             </div>
           </div>
+          {artifactType === "delta" && (
+            <div className="space-y-2">
+              <Label htmlFor="artifact-metadata">Metadata (JSON)</Label>
+              <textarea
+                id="artifact-metadata"
+                className="flex min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                placeholder={`{\n  "fromVersion": "1.0.0",\n  "fromBuild": "42",\n  "fromManifestSha256": "...",\n  "fromArtifactSha256": "...",\n  "toVersion": "1.1.0",\n  "toBuild": "43",\n  "toManifestSha256": "...",\n  "toArtifactSha256": "...",\n  "format": "clave.delta/v1"\n}`}
+                value={metadata}
+                onChange={(e) => setMetadata(e.target.value)}
+              />
+            </div>
+          )}
         </div>
         <DialogFooter className="mt-4">
           <Button

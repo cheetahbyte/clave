@@ -607,12 +607,16 @@ export function uploadArtifact(
   artifactType: string,
   os: string,
   arch: string,
+  metadata?: string,
 ): Promise<ArtifactFullDTO> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("artifactType", artifactType);
   formData.append("os", os);
   formData.append("arch", arch);
+  if (metadata) {
+    formData.append("metadata", metadata);
+  }
 
   return adminFetch<ArtifactFullDTO>(
     `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}/artifacts`,

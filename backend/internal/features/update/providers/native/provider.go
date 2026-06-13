@@ -130,7 +130,7 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 			dto.Signature = *a.Signature
 		}
 
-		if a.ArtifactType == "full" && fullArtifact == nil {
+		if a.ArtifactType != "delta" && fullArtifact == nil {
 			copy1 := dto
 			fullArtifact = &copy1
 			continue

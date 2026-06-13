@@ -632,7 +632,7 @@ func (svc *Service) CreateRelease(ctx context.Context, orgID uuid.UUID, req Crea
 	return dto, nil
 }
 
-func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, reader io.Reader, artifactType, osName, arch string, originalFilename string) (*ArtifactDTOFull, error) {
+func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, reader io.Reader, artifactType, osName, arch string, originalFilename string, metadata []byte) (*ArtifactDTOFull, error) {
 	release, err := svc.repo.GetUpdateRelease(ctx, releaseID)
 	if err != nil {
 		return nil, fmt.Errorf("release not found: %w", err)
@@ -661,6 +661,10 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 	downloadURL := svc.artifactDownloadURL(artifactID)
 	mimeType := mimeTypeForArtifact(artifactType)
 	backendName := string(kind)
+	md := metadata
+	if len(md) == 0 {
+		md = []byte(`{}`)
+	}
 	artifact, err := svc.repo.InsertUpdateArtifact(ctx, db.InsertUpdateArtifactParams{
 		ID:                   artifactID,
 		ReleaseID:            releaseID,
@@ -670,7 +674,7 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 		Url:                  downloadURL,
 		SizeBytes:            &sizeBytes,
 		ChecksumSha256:       &checksum,
-		Metadata:             []byte(`{}`),
+		Metadata:             md,
 		Filename:             &storedFilename,
 		MimeType:             &mimeType,
 		MinimumSystemVersion: nil,
@@ -861,6 +865,8 @@ func mimeTypeForArtifact(artifactType string) string {
 		return "application/zip"
 	case "pkg":
 		return "application/x-apple-installer"
+	case "delta":
+		return "application/zip"
 	case "exe":
 		return "application/x-msdownload"
 	case "msi":
