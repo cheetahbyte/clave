@@ -9,7 +9,7 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/features/audit"
 	"github.com/cheetahbyte/clave/internal/observability"
-	"github.com/cheetahbyte/clave/internal/shared/email"
+	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/go-chi/chi/v5"
@@ -34,14 +34,14 @@ func optionalProductID(r *http.Request) pgtype.UUID {
 }
 
 type Handler struct {
-	svc      *Service
-	auditSvc *audit.Service
-	mailer   *email.Sender
-	appURL   string
+	svc       *Service
+	auditSvc  *audit.Service
+	publisher *events.Publisher
+	appURL    string
 }
 
-func NewHandler(svc *Service, auditSvc *audit.Service, mailer *email.Sender, appURL string) *Handler {
-	return &Handler{svc: svc, auditSvc: auditSvc, mailer: mailer, appURL: strings.TrimRight(appURL, "/")}
+func NewHandler(svc *Service, auditSvc *audit.Service, publisher *events.Publisher, appURL string) *Handler {
+	return &Handler{svc: svc, auditSvc: auditSvc, publisher: publisher, appURL: strings.TrimRight(appURL, "/")}
 }
 
 func (h *Handler) audit(r *http.Request, action, resourceType string, resourceID *uuid.UUID) {
@@ -93,17 +93,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "license.created", "license", nil)
 	observability.CountLicenseCreated(r.Context(), "success")
 
-	if h.mailer != nil && data.SendEmail {
+	if h.publisher != nil && data.SendEmail {
 		var portalLink string
 		if h.appURL != "" {
 			if slug := h.svc.OrgSlug(r.Context(), orgID); slug != "" {
 				portalLink = h.appURL + "/selfservice/" + slug
 			}
 		}
-		msg, terr := email.LicenseCreatedEmail(result.ProductName, result.LicenseKey, portalLink, result.IsTrial)
-		if terr == nil {
-			to := data.CustomerEmail
-			h.mailer.Enqueue(to, msg)
+		if perr := h.publisher.PublishLicenseCreated(r.Context(), data.CustomerEmail, result.LicenseKey, result.ProductName, portalLink, result.IsTrial); perr != nil {
+			slog.Error("failed to publish license.created event", "err", perr.Error())
 		}
 	}
 

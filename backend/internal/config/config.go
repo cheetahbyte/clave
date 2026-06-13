@@ -33,6 +33,8 @@ type Config struct {
 	SMTPPass string
 	MailFrom string
 
+	RabbitMQURL string
+
 	PublicAppURL string
 	Port         string
 
@@ -78,6 +80,7 @@ func Load() (*Config, error) {
 		SMTPUser:        os.Getenv("SMTP_USER"),
 		SMTPPass:        os.Getenv("SMTP_PASS"),
 		MailFrom:        getEnv("MAIL_FROM", "noreply@clave.app"),
+		RabbitMQURL:     os.Getenv("RABBITMQ_URL"),
 		PublicAppURL:    os.Getenv("PUBLIC_APP_URL"),
 		Port:            getEnv("PORT", "8000"),
 		TrustProxyHeaders: truthy(os.Getenv("TRUST_PROXY_HEADERS")),

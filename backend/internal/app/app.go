@@ -24,6 +24,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/features/update/providers/sparkle"
 	"github.com/cheetahbyte/clave/internal/features/validation"
 	"github.com/cheetahbyte/clave/internal/shared/email"
+	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
@@ -34,12 +35,18 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-var pool *pgxpool.Pool
+var (
+	pool      *pgxpool.Pool
+	publisher *events.Publisher
+)
 
 func Close() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	observability.Shutdown(ctx)
+	if publisher != nil {
+		publisher.Close()
+	}
 	if pool != nil {
 		pool.Close()
 	}
@@ -110,10 +117,14 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 		mailer = email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.MailFrom)
 	}
 
+	if cfg.RabbitMQURL != "" {
+		publisher = events.NewPublisher(cfg.RabbitMQURL)
+	}
+
 	appURL := cfg.PublicAppURL
 	auditRepo := audit.NewRepository(q)
 	auditSvc := audit.NewService(auditRepo)
-	licenseH := license.NewHandler(licenseSvc, auditSvc, mailer, appURL)
+	licenseH := license.NewHandler(licenseSvc, auditSvc, publisher, appURL)
 	activationH := activation.NewHandler(activationSvc)
 	validationH := validation.NewHandler(validationSvc)
 	updateH := update.NewHandler(updateSvc, auditSvc)
