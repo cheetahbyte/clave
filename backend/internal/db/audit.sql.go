@@ -14,12 +14,42 @@ import (
 )
 
 const countAuditLogsByOrganization = `-- name: CountAuditLogsByOrganization :one
-SELECT count(*) FROM admin_audit_log
-WHERE organization_id = $1::uuid
+SELECT count(*)
+FROM admin_audit_log a
+LEFT JOIN admin_users au ON a.admin_user_id = au.id
+WHERE a.organization_id = $1::uuid
+  AND ($2::text IS NULL
+       OR a.action ILIKE '%' || $2::text || '%'
+       OR a.resource_type ILIKE '%' || $2::text || '%'
+       OR a.resource_id::text ILIKE '%' || $2::text || '%'
+       OR au.email ILIKE '%' || $2::text || '%')
+  AND ($3::text IS NULL OR a.action ILIKE $3::text || '%')
+  AND ($4::text IS NULL OR a.resource_type = $4::text)
+  AND ($5::text IS NULL OR au.email ILIKE '%' || $5::text || '%')
+  AND ($6::timestamptz IS NULL OR a.created_at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL OR a.created_at <= $7::timestamptz)
 `
 
-func (q *Queries) CountAuditLogsByOrganization(ctx context.Context, organizationID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countAuditLogsByOrganization, organizationID)
+type CountAuditLogsByOrganizationParams struct {
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	Q              *string            `json:"q"`
+	Action         *string            `json:"action"`
+	ResourceType   *string            `json:"resource_type"`
+	AdminEmail     *string            `json:"admin_email"`
+	FromTs         pgtype.Timestamptz `json:"from_ts"`
+	ToTs           pgtype.Timestamptz `json:"to_ts"`
+}
+
+func (q *Queries) CountAuditLogsByOrganization(ctx context.Context, arg CountAuditLogsByOrganizationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAuditLogsByOrganization,
+		arg.OrganizationID,
+		arg.Q,
+		arg.Action,
+		arg.ResourceType,
+		arg.AdminEmail,
+		arg.FromTs,
+		arg.ToTs,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -39,14 +69,30 @@ SELECT
 FROM admin_audit_log a
 LEFT JOIN admin_users au ON a.admin_user_id = au.id
 WHERE a.organization_id = $1::uuid
+  AND ($2::text IS NULL
+       OR a.action ILIKE '%' || $2::text || '%'
+       OR a.resource_type ILIKE '%' || $2::text || '%'
+       OR a.resource_id::text ILIKE '%' || $2::text || '%'
+       OR au.email ILIKE '%' || $2::text || '%')
+  AND ($3::text IS NULL OR a.action ILIKE $3::text || '%')
+  AND ($4::text IS NULL OR a.resource_type = $4::text)
+  AND ($5::text IS NULL OR au.email ILIKE '%' || $5::text || '%')
+  AND ($6::timestamptz IS NULL OR a.created_at >= $6::timestamptz)
+  AND ($7::timestamptz IS NULL OR a.created_at <= $7::timestamptz)
 ORDER BY a.created_at DESC
-LIMIT $3 OFFSET $2
+LIMIT $9 OFFSET $8
 `
 
 type ListAuditLogsByOrganizationParams struct {
-	OrganizationID uuid.UUID `json:"organization_id"`
-	Offset         int32     `json:"offset"`
-	Limit          int32     `json:"limit"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	Q              *string            `json:"q"`
+	Action         *string            `json:"action"`
+	ResourceType   *string            `json:"resource_type"`
+	AdminEmail     *string            `json:"admin_email"`
+	FromTs         pgtype.Timestamptz `json:"from_ts"`
+	ToTs           pgtype.Timestamptz `json:"to_ts"`
+	Offset         int32              `json:"offset"`
+	Limit          int32              `json:"limit"`
 }
 
 type ListAuditLogsByOrganizationRow struct {
@@ -62,7 +108,17 @@ type ListAuditLogsByOrganizationRow struct {
 }
 
 func (q *Queries) ListAuditLogsByOrganization(ctx context.Context, arg ListAuditLogsByOrganizationParams) ([]ListAuditLogsByOrganizationRow, error) {
-	rows, err := q.db.Query(ctx, listAuditLogsByOrganization, arg.OrganizationID, arg.Offset, arg.Limit)
+	rows, err := q.db.Query(ctx, listAuditLogsByOrganization,
+		arg.OrganizationID,
+		arg.Q,
+		arg.Action,
+		arg.ResourceType,
+		arg.AdminEmail,
+		arg.FromTs,
+		arg.ToTs,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}

@@ -296,9 +296,31 @@ export interface AuditLogListResponse {
   pageSize: number;
 }
 
-export function listAuditLogs(page = 1, pageSize = 50): Promise<AuditLogListResponse> {
+export interface AuditLogFilters {
+  q?: string;
+  action?: string;
+  resourceType?: string;
+  adminEmail?: string;
+  from?: string;
+  to?: string;
+}
+
+export function listAuditLogs(
+  page = 1,
+  pageSize = 50,
+  filters?: AuditLogFilters,
+): Promise<AuditLogListResponse> {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  if (filters?.q) params.set("q", filters.q);
+  if (filters?.action) params.set("action", filters.action);
+  if (filters?.resourceType) params.set("resourceType", filters.resourceType);
+  if (filters?.adminEmail) params.set("adminEmail", filters.adminEmail);
+  if (filters?.from) params.set("from", filters.from);
+  if (filters?.to) params.set("to", filters.to);
   return adminFetch<AuditLogListResponse>(
-    `/api/v1/admin/audit-logs?page=${page}&pageSize=${pageSize}`,
+    `/api/v1/admin/audit-logs?${params.toString()}`,
   );
 }
 

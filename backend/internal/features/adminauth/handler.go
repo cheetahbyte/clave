@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/alexedwards/scs/v2"
+	"github.com/cheetahbyte/clave/internal/features/audit"
 	"github.com/cheetahbyte/clave/internal/shared/encryption"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
@@ -17,10 +18,29 @@ type Handler struct {
 	svc      *Service
 	sessions *scs.SessionManager
 	totpKey  []byte
+	auditSvc *audit.Service
 }
 
-func NewHandler(svc *Service, sessions *scs.SessionManager, totpKey []byte) *Handler {
-	return &Handler{svc: svc, sessions: sessions, totpKey: totpKey}
+func NewHandler(svc *Service, sessions *scs.SessionManager, totpKey []byte, auditSvc *audit.Service) *Handler {
+	return &Handler{svc: svc, sessions: sessions, totpKey: totpKey, auditSvc: auditSvc}
+}
+
+func (h *Handler) audit(r *http.Request, action, resourceType string, adminID, orgID uuid.UUID) {
+	ip := helpers.ClientIP(r)
+	var ipStr *string
+	if ip != nil {
+		s := ip.String()
+		ipStr = &s
+	}
+	ua := r.UserAgent()
+	h.auditSvc.Write(r.Context(), audit.AuditEntry{
+		AdminID:      adminID,
+		OrgID:        orgID,
+		Action:       action,
+		ResourceType: resourceType,
+		IP:           ipStr,
+		UserAgent:    &ua,
+	})
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -32,14 +52,17 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Login(r.Context(), body.Email, body.Password)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
+			h.audit(r, "admin.login_failed", "admin", uuid.Nil, uuid.Nil)
 			helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 			return
 		}
 		if errors.Is(err, ErrAdminInactive) {
+			h.audit(r, "admin.login_failed", "admin", uuid.Nil, uuid.Nil)
 			helpers.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "account is inactive"})
 			return
 		}
 		if errors.Is(err, ErrNoOrganization) {
+			h.audit(r, "admin.login_failed", "admin", uuid.Nil, uuid.Nil)
 			helpers.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "admin has no organization"})
 			return
 		}
@@ -60,10 +83,15 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	h.sessions.Put(r.Context(), "admin_organization_id", resp.OrganizationID.String())
 	h.sessions.Put(r.Context(), "admin_mfa_verified", false)
 
+	h.audit(r, "admin.login", "admin", resp.ID, resp.OrganizationID)
 	helpers.WriteJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	adminID, _ := middleware.AdminIDFromContext(r.Context())
+	orgID, _ := middleware.AdminOrganizationIDFromContext(r.Context())
+	h.audit(r, "admin.logout", "admin", adminID, orgID)
+
 	if err := h.sessions.Destroy(r.Context()); err != nil {
 		slog.Error("failed to destroy session", "err", err)
 	}
@@ -108,6 +136,7 @@ func (h *Handler) SetupStart(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+	orgID, _ := middleware.AdminOrganizationIDFromContext(r.Context())
 
 	resp, err := h.svc.SetupStart(r.Context(), adminID)
 	if err != nil {
@@ -134,6 +163,7 @@ func (h *Handler) SetupStart(w http.ResponseWriter, r *http.Request) {
 	h.sessions.Put(r.Context(), "admin_pending_totp_secret_enc", enc)
 	h.sessions.Put(r.Context(), "admin_pending_totp_secret_nonce", nonce)
 
+	h.audit(r, "admin.2fa_setup_started", "admin", adminID, orgID)
 	helpers.WriteJSON(w, http.StatusOK, resp)
 }
 
@@ -143,6 +173,7 @@ func (h *Handler) SetupVerify(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+	orgID, _ := middleware.AdminOrganizationIDFromContext(r.Context())
 
 	var body SetupVerifyRequest
 	if !helpers.DecodeValidated(w, r, &body) {
@@ -179,6 +210,7 @@ func (h *Handler) SetupVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	h.sessions.Put(r.Context(), "admin_mfa_verified", true)
 
+	h.audit(r, "admin.2fa_enabled", "admin", adminID, orgID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -188,6 +220,7 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+	orgID, _ := middleware.AdminOrganizationIDFromContext(r.Context())
 
 	var body TOTPVerifyRequest
 	if !helpers.DecodeValidated(w, r, &body) {
@@ -214,6 +247,7 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	}
 	h.sessions.Put(r.Context(), "admin_mfa_verified", true)
 
+	h.audit(r, "admin.2fa_verified", "admin", adminID, orgID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

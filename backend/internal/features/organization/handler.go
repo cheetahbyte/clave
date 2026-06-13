@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/alexedwards/scs/v2"
+	"github.com/cheetahbyte/clave/internal/features/audit"
 	"github.com/cheetahbyte/clave/internal/shared/email"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
@@ -19,10 +20,30 @@ type Handler struct {
 	sessions *scs.SessionManager
 	mailer   *email.Sender
 	appURL   string
+	auditSvc *audit.Service
 }
 
-func NewHandler(svc *Service, sessions *scs.SessionManager, mailer *email.Sender, appURL string) *Handler {
-	return &Handler{svc: svc, sessions: sessions, mailer: mailer, appURL: strings.TrimRight(appURL, "/")}
+func NewHandler(svc *Service, sessions *scs.SessionManager, mailer *email.Sender, appURL string, auditSvc *audit.Service) *Handler {
+	return &Handler{svc: svc, sessions: sessions, mailer: mailer, appURL: strings.TrimRight(appURL, "/"), auditSvc: auditSvc}
+}
+
+func (h *Handler) audit(r *http.Request, action, resourceType string, adminID, orgID uuid.UUID, resourceID *uuid.UUID) {
+	ip := helpers.ClientIP(r)
+	var ipStr *string
+	if ip != nil {
+		s := ip.String()
+		ipStr = &s
+	}
+	ua := r.UserAgent()
+	h.auditSvc.Write(r.Context(), audit.AuditEntry{
+		AdminID:      adminID,
+		OrgID:        orgID,
+		Action:       action,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		IP:           ipStr,
+		UserAgent:    &ua,
+	})
 }
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +84,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// Switch the active org to the newly created one.
 	h.sessions.Put(r.Context(), "admin_organization_id", item.ID.String())
 
+	h.audit(r, "organization.created", "organization", adminID, item.ID, &item.ID)
 	helpers.WriteJSON(w, http.StatusCreated, item)
 }
 
@@ -91,6 +113,7 @@ func (h *Handler) Switch(w http.ResponseWriter, r *http.Request) {
 
 	h.sessions.Put(r.Context(), "admin_organization_id", item.ID.String())
 
+	h.audit(r, "organization.switched", "organization", adminID, item.ID, nil)
 	helpers.WriteJSON(w, http.StatusOK, item)
 }
 
@@ -143,6 +166,7 @@ func (h *Handler) Invite(w http.ResponseWriter, r *http.Request) {
 		resp.Token = rawToken
 	}
 
+	h.audit(r, "organization.invite_created", "organization", adminID, orgID, nil)
 	helpers.WriteJSON(w, http.StatusCreated, resp)
 }
 
@@ -152,6 +176,7 @@ func (h *Handler) DeleteInvite(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+	adminID, _ := middleware.AdminIDFromContext(r.Context())
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid invite id"})
@@ -162,6 +187,7 @@ func (h *Handler) DeleteInvite(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}
+	h.audit(r, "organization.invite_deleted", "organization", adminID, orgID, &id)
 	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -186,6 +212,7 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}
+	h.audit(r, "organization.member_removed", "organization", adminID, orgID, &targetID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

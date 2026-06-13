@@ -92,10 +92,12 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	}
 
 	appURL := cfg.PublicAppURL
-	licenseH := license.NewHandler(licenseSvc, mailer, appURL)
+	auditRepo := audit.NewRepository(q)
+	auditSvc := audit.NewService(auditRepo)
+	licenseH := license.NewHandler(licenseSvc, auditSvc, mailer, appURL)
 	activationH := activation.NewHandler(activationSvc)
 	validationH := validation.NewHandler(validationSvc)
-	updateH := update.NewHandler(updateSvc)
+	updateH := update.NewHandler(updateSvc, auditSvc)
 	selfserviceH := selfservice.NewHandler(selfserviceSvc, mailer, appURL, cfg.SelfServiceReturnToken, cfg.Dev)
 
 	sessionManager := scs.New()
@@ -109,14 +111,12 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	sessionManager.Cookie.Path = "/"
 	sessionManager.Cookie.Persist = true
 
-	adminAuthH := adminauth.NewHandler(adminAuthSvc, sessionManager, cfg.AdminTOTPEncryptionKey)
+	adminAuthH := adminauth.NewHandler(adminAuthSvc, sessionManager, cfg.AdminTOTPEncryptionKey, auditSvc)
 
 	orgRepo := organization.NewRepository(q)
 	orgSvc := organization.NewService(orgRepo, []byte(cfg.SelfServiceTokenPepper))
-	orgH := organization.NewHandler(orgSvc, sessionManager, mailer, appURL)
+	orgH := organization.NewHandler(orgSvc, sessionManager, mailer, appURL, auditSvc)
 
-	auditRepo := audit.NewRepository(q)
-	auditSvc := audit.NewService(auditRepo)
 	auditH := audit.NewHandler(auditSvc)
 
 	csrfMW := csrf.Protect(

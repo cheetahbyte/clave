@@ -265,21 +265,6 @@ func (r *Repository) UpdateProduct(ctx context.Context, orgID, id uuid.UUID, nam
 	return p, nil
 }
 
-func (r *Repository) InsertAuditLog(ctx context.Context, adminID, orgID uuid.UUID, action, resourceType string, resourceID *uuid.UUID, userAgent *string) error {
-	rid := pgtype.UUID{}
-	if resourceID != nil {
-		rid = pgtype.UUID{Bytes: *resourceID, Valid: true}
-	}
-	return r.q.InsertAuditLog(ctx, db.InsertAuditLogParams{
-		AdminUserID:    pgtype.UUID{Bytes: adminID, Valid: true},
-		OrganizationID: pgtype.UUID{Bytes: orgID, Valid: true},
-		Action:         action,
-		ResourceType:   resourceType,
-		ResourceID:     rid,
-		UserAgent:      userAgent,
-	})
-}
-
 func uuidToPG(id uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: [16]byte(id), Valid: true}
 }

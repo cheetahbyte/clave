@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cheetahbyte/clave/internal/features/audit"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/go-chi/chi/v5"
@@ -15,11 +16,33 @@ import (
 )
 
 type Handler struct {
-	svc *Service
+	svc      *Service
+	auditSvc *audit.Service
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, auditSvc *audit.Service) *Handler {
+	return &Handler{svc: svc, auditSvc: auditSvc}
+}
+
+func (h *Handler) audit(r *http.Request, action, resourceType string, resourceID *uuid.UUID) {
+	adminID, _ := middleware.AdminIDFromContext(r.Context())
+	orgID, _ := middleware.AdminOrganizationIDFromContext(r.Context())
+	ip := helpers.ClientIP(r)
+	var ipStr *string
+	if ip != nil {
+		s := ip.String()
+		ipStr = &s
+	}
+	ua := r.UserAgent()
+	h.auditSvc.Write(r.Context(), audit.AuditEntry{
+		AdminID:      adminID,
+		OrgID:        orgID,
+		Action:       action,
+		ResourceType: resourceType,
+		ResourceID:   resourceID,
+		IP:           ipStr,
+		UserAgent:    &ua,
+	})
 }
 
 func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +121,8 @@ func (h *Handler) AdminSaveProductUpdateConfig(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	configUUID, _ := uuid.Parse(result.ID)
+	h.audit(r, "update_config.saved", "update_config", &configUUID)
 	helpers.WriteJSON(w, http.StatusOK, result)
 }
 
@@ -119,6 +144,7 @@ func (h *Handler) AdminDeleteProductUpdateConfig(w http.ResponseWriter, r *http.
 		return
 	}
 
+	h.audit(r, "update_config.deleted", "update_config", &configID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
@@ -177,6 +203,7 @@ func (h *Handler) AdminTestStorageConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	h.audit(r, "storage_config.tested", "storage_config", nil)
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -209,6 +236,7 @@ func (h *Handler) AdminSaveStorageConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	h.audit(r, "storage_config.saved", "storage_config", nil)
 	helpers.WriteJSON(w, http.StatusOK, cfg)
 }
 
@@ -339,6 +367,8 @@ func (h *Handler) AdminCreateChannel(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	chUUID, _ := uuid.Parse(ch.ID)
+	h.audit(r, "channel.created", "channel", &chUUID)
 	helpers.WriteJSON(w, http.StatusCreated, ch)
 }
 
@@ -362,6 +392,7 @@ func (h *Handler) AdminUpdateChannel(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	h.audit(r, "channel.updated", "channel", &channelID)
 	helpers.WriteJSON(w, http.StatusOK, ch)
 }
 
@@ -380,6 +411,7 @@ func (h *Handler) AdminDeleteChannel(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
+	h.audit(r, "channel.deleted", "channel", &channelID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
@@ -435,6 +467,8 @@ func (h *Handler) AdminCreateRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	releaseUUID, _ := uuid.Parse(release.ID)
+	h.audit(r, "release.created", "release", &releaseUUID)
 	helpers.WriteJSON(w, http.StatusCreated, release)
 }
 
@@ -487,6 +521,7 @@ func (h *Handler) AdminUploadArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "release.artifact_uploaded", "release", &releaseID)
 	helpers.WriteJSON(w, http.StatusCreated, artifact)
 }
 
@@ -514,6 +549,7 @@ func (h *Handler) AdminPublishRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "release.published", "release", &releaseID)
 	helpers.WriteJSON(w, http.StatusOK, release)
 }
 
@@ -541,6 +577,7 @@ func (h *Handler) AdminYankRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "release.yanked", "release", &releaseID)
 	helpers.WriteJSON(w, http.StatusOK, release)
 }
 
@@ -567,6 +604,7 @@ func (h *Handler) AdminDeleteRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.audit(r, "release.deleted", "release", &releaseID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
@@ -651,6 +689,8 @@ func (h *Handler) AdminCreateChangelog(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	clUUID, _ := uuid.Parse(cl.ID)
+	h.audit(r, "changelog.created", "changelog", &clUUID)
 	helpers.WriteJSON(w, http.StatusCreated, cl)
 }
 
@@ -674,6 +714,7 @@ func (h *Handler) AdminUpdateChangelog(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	h.audit(r, "changelog.updated", "changelog", &changelogID)
 	helpers.WriteJSON(w, http.StatusOK, cl)
 }
 
@@ -692,6 +733,7 @@ func (h *Handler) AdminDeleteChangelog(w http.ResponseWriter, r *http.Request) {
 		helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
+	h.audit(r, "changelog.deleted", "changelog", &changelogID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
@@ -736,6 +778,11 @@ func (h *Handler) AdminAttachReleaseChangelog(w http.ResponseWriter, r *http.Req
 		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	action := "release.changelog_attached"
+	if changelogID == nil {
+		action = "release.changelog_detached"
+	}
+	h.audit(r, action, "release", &releaseID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 

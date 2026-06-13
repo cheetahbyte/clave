@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cheetahbyte/clave/internal/features/audit"
 	"github.com/cheetahbyte/clave/internal/shared/email"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
@@ -15,25 +16,34 @@ import (
 )
 
 type Handler struct {
-	svc    *Service
-	mailer *email.Sender
-	appURL string
+	svc     *Service
+	auditSvc *audit.Service
+	mailer  *email.Sender
+	appURL  string
 }
 
-func NewHandler(svc *Service, mailer *email.Sender, appURL string) *Handler {
-	return &Handler{svc: svc, mailer: mailer, appURL: strings.TrimRight(appURL, "/")}
+func NewHandler(svc *Service, auditSvc *audit.Service, mailer *email.Sender, appURL string) *Handler {
+	return &Handler{svc: svc, auditSvc: auditSvc, mailer: mailer, appURL: strings.TrimRight(appURL, "/")}
 }
 
 func (h *Handler) audit(r *http.Request, action, resourceType string, resourceID *uuid.UUID) {
 	adminID, _ := middleware.AdminIDFromContext(r.Context())
 	orgID, _ := middleware.AdminOrganizationIDFromContext(r.Context())
-	h.svc.WriteAudit(r.Context(), AuditEntry{
+	ip := helpers.ClientIP(r)
+	var ipStr *string
+	if ip != nil {
+		s := ip.String()
+		ipStr = &s
+	}
+	ua := r.UserAgent()
+	h.auditSvc.Write(r.Context(), audit.AuditEntry{
 		AdminID:      adminID,
 		OrgID:        orgID,
 		Action:       action,
 		ResourceType: resourceType,
 		ResourceID:   resourceID,
-		UserAgent:    r.UserAgent(),
+		IP:           ipStr,
+		UserAgent:    &ua,
 	})
 }
 
