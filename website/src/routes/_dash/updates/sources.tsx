@@ -292,7 +292,7 @@ function ProductCard({
                     </TableCell>
                     <TableCell>
                       <span className="text-sm">
-                        {cfg.providerKey === "sparkle" ? "Sparkle" : "Clave Native"}
+                        Clave Native
                       </span>
                     </TableCell>
                     <TableCell>

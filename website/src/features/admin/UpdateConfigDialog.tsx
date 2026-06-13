@@ -53,7 +53,7 @@ export function UpdateConfigDialog({
   );
   const [platform, setPlatform] = useState(editingConfig?.platform ?? "macos");
   const [channel, setChannel] = useState(editingConfig?.channel ?? "stable");
-  const [providerKey, setProviderKey] = useState(editingConfig?.providerKey ?? "sparkle");
+  const [providerKey, setProviderKey] = useState(editingConfig?.providerKey ?? "clave_native");
   const [enabled, setEnabled] = useState(editingConfig?.enabled ?? true);
 
   const effectiveProductId = productId ?? selectedProductId;
@@ -141,10 +141,9 @@ export function UpdateConfigDialog({
           </div>
           <div className="space-y-2">
             <Label>Delivery protocol</Label>
-            <Select value={providerKey} onValueChange={setProviderKey}>
-              <SelectTrigger><SelectValue placeholder="Select a protocol" /></SelectTrigger>
+            <Select value="clave_native" disabled>
+              <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="sparkle">Sparkle (Appcast XML)</SelectItem>
                 <SelectItem value="clave_native">Clave Native (JSON API)</SelectItem>
               </SelectContent>
             </Select>
@@ -158,15 +157,6 @@ export function UpdateConfigDialog({
             </div>
             <Switch checked={enabled} onCheckedChange={setEnabled} />
           </div>
-          {providerKey === "sparkle" && (
-            <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-              <p className="text-xs font-medium">Sparkle appcast</p>
-              <p className="text-xs text-muted-foreground">
-                The appcast XML is generated automatically by Clave. Point your Sparkle
-                client to the URL shown on the Updates page.
-              </p>
-            </div>
-          )}
           {providerKey === "clave_native" && (
             <div className="rounded-lg bg-muted/50 p-3 space-y-1">
               <p className="text-xs font-medium">Clave Native</p>

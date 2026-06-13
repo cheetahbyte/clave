@@ -387,7 +387,7 @@ func (q *Queries) GetReleasePolicy(ctx context.Context, releaseID uuid.UUID) (Up
 }
 
 const getUpdateArtifact = `-- name: GetUpdateArtifact :one
-SELECT id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata, created_at, filename, mime_type, minimum_system_version, sparkle_ed_signature, storage_backend, storage_key FROM update_artifacts WHERE id = $1
+SELECT id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata, created_at, filename, mime_type, minimum_system_version, storage_backend, storage_key FROM update_artifacts WHERE id = $1
 `
 
 func (q *Queries) GetUpdateArtifact(ctx context.Context, id uuid.UUID) (UpdateArtifact, error) {
@@ -408,7 +408,6 @@ func (q *Queries) GetUpdateArtifact(ctx context.Context, id uuid.UUID) (UpdateAr
 		&i.Filename,
 		&i.MimeType,
 		&i.MinimumSystemVersion,
-		&i.SparkleEdSignature,
 		&i.StorageBackend,
 		&i.StorageKey,
 	)
@@ -465,10 +464,10 @@ func (q *Queries) GetUpdateRelease(ctx context.Context, id uuid.UUID) (UpdateRel
 const insertUpdateArtifact = `-- name: InsertUpdateArtifact :one
 INSERT INTO update_artifacts (
     id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata,
-    filename, mime_type, minimum_system_version, sparkle_ed_signature, storage_backend, storage_key
+    filename, mime_type, minimum_system_version, storage_backend, storage_key
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-RETURNING id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata, created_at, filename, mime_type, minimum_system_version, sparkle_ed_signature, storage_backend, storage_key
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+RETURNING id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata, created_at, filename, mime_type, minimum_system_version, storage_backend, storage_key
 `
 
 type InsertUpdateArtifactParams struct {
@@ -485,7 +484,6 @@ type InsertUpdateArtifactParams struct {
 	Filename             *string   `json:"filename"`
 	MimeType             *string   `json:"mime_type"`
 	MinimumSystemVersion *string   `json:"minimum_system_version"`
-	SparkleEdSignature   *string   `json:"sparkle_ed_signature"`
 	StorageBackend       *string   `json:"storage_backend"`
 	StorageKey           *string   `json:"storage_key"`
 }
@@ -505,7 +503,6 @@ func (q *Queries) InsertUpdateArtifact(ctx context.Context, arg InsertUpdateArti
 		arg.Filename,
 		arg.MimeType,
 		arg.MinimumSystemVersion,
-		arg.SparkleEdSignature,
 		arg.StorageBackend,
 		arg.StorageKey,
 	)
@@ -525,7 +522,6 @@ func (q *Queries) InsertUpdateArtifact(ctx context.Context, arg InsertUpdateArti
 		&i.Filename,
 		&i.MimeType,
 		&i.MinimumSystemVersion,
-		&i.SparkleEdSignature,
 		&i.StorageBackend,
 		&i.StorageKey,
 	)
@@ -687,7 +683,7 @@ func (q *Queries) LatestPublishedUpdateRelease(ctx context.Context, arg LatestPu
 }
 
 const listArtifactsForRelease = `-- name: ListArtifactsForRelease :many
-SELECT id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata, created_at, filename, mime_type, minimum_system_version, sparkle_ed_signature, storage_backend, storage_key FROM update_artifacts
+SELECT id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata, created_at, filename, mime_type, minimum_system_version, storage_backend, storage_key FROM update_artifacts
 WHERE release_id = $1
 `
 
@@ -715,7 +711,6 @@ func (q *Queries) ListArtifactsForRelease(ctx context.Context, releaseID uuid.UU
 			&i.Filename,
 			&i.MimeType,
 			&i.MinimumSystemVersion,
-			&i.SparkleEdSignature,
 			&i.StorageBackend,
 			&i.StorageKey,
 		); err != nil {
@@ -730,7 +725,7 @@ func (q *Queries) ListArtifactsForRelease(ctx context.Context, releaseID uuid.UU
 }
 
 const listArtifactsForReleases = `-- name: ListArtifactsForReleases :many
-SELECT id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata, created_at, filename, mime_type, minimum_system_version, sparkle_ed_signature, storage_backend, storage_key FROM update_artifacts
+SELECT id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata, created_at, filename, mime_type, minimum_system_version, storage_backend, storage_key FROM update_artifacts
 WHERE release_id = ANY($1::uuid[])
 `
 
@@ -758,7 +753,6 @@ func (q *Queries) ListArtifactsForReleases(ctx context.Context, dollar_1 []uuid.
 			&i.Filename,
 			&i.MimeType,
 			&i.MinimumSystemVersion,
-			&i.SparkleEdSignature,
 			&i.StorageBackend,
 			&i.StorageKey,
 		); err != nil {
@@ -772,7 +766,7 @@ func (q *Queries) ListArtifactsForReleases(ctx context.Context, dollar_1 []uuid.
 	return items, nil
 }
 
-const listPublishedReleasesForAppcast = `-- name: ListPublishedReleasesForAppcast :many
+const listPublishedReleasesForFeed = `-- name: ListPublishedReleasesForFeed :many
 SELECT id, organization_id, product_id, channel_id, platform, version, build_number, status, release_notes, published_at, created_at, updated_at, changelog, changelog_id
 FROM update_releases
 WHERE product_id = $1
@@ -784,14 +778,14 @@ ORDER BY published_at DESC
 LIMIT 20
 `
 
-type ListPublishedReleasesForAppcastParams struct {
+type ListPublishedReleasesForFeedParams struct {
 	ProductID uuid.UUID `json:"product_id"`
 	Platform  string    `json:"platform"`
 	ChannelID uuid.UUID `json:"channel_id"`
 }
 
-func (q *Queries) ListPublishedReleasesForAppcast(ctx context.Context, arg ListPublishedReleasesForAppcastParams) ([]UpdateRelease, error) {
-	rows, err := q.db.Query(ctx, listPublishedReleasesForAppcast, arg.ProductID, arg.Platform, arg.ChannelID)
+func (q *Queries) ListPublishedReleasesForFeed(ctx context.Context, arg ListPublishedReleasesForFeedParams) ([]UpdateRelease, error) {
+	rows, err := q.db.Query(ctx, listPublishedReleasesForFeed, arg.ProductID, arg.Platform, arg.ChannelID)
 	if err != nil {
 		return nil, err
 	}

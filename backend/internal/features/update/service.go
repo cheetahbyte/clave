@@ -249,7 +249,7 @@ func (svc *Service) GetProductUpdateConfigs(ctx context.Context, productID uuid.
 }
 
 func (svc *Service) SaveProductUpdateConfig(ctx context.Context, orgID, productID uuid.UUID, req SaveProductUpdateConfigRequest) (*ProductUpdateConfigDTO, error) {
-	if req.ProviderKey != string(ProviderSparkle) && req.ProviderKey != string(ProviderClaveNative) {
+	if req.ProviderKey != string(ProviderClaveNative) {
 		return nil, fmt.Errorf("unsupported provider key: %s", req.ProviderKey)
 	}
 
@@ -266,14 +266,7 @@ func (svc *Service) SaveProductUpdateConfig(ctx context.Context, orgID, productI
 		return nil, err
 	}
 
-	// Normalize config for Clave-managed providers
-	normalizedConfig := map[string]any{}
-	switch ProviderKey(req.ProviderKey) {
-	case ProviderSparkle:
-		normalizedConfig = map[string]any{"delivery": "sparkle"}
-	case ProviderClaveNative:
-		normalizedConfig = map[string]any{"delivery": "clave_native"}
-	}
+	normalizedConfig := map[string]any{"delivery": "clave_native"}
 
 	raw, _ := json.Marshal(normalizedConfig)
 
@@ -308,21 +301,10 @@ func (svc *Service) DeleteProductUpdateConfig(ctx context.Context, orgID, config
 	return err
 }
 
-func (svc *Service) AppcastURL(productID uuid.UUID, platform, channel string) string {
-	if svc.publicAppURL == "" {
-		return fmt.Sprintf("/api/v1/updates/products/%s/%s/%s/appcast.xml", productID, platform, channel)
-	}
-	return fmt.Sprintf("%s/api/v1/updates/products/%s/%s/%s/appcast.xml", strings.TrimRight(svc.publicAppURL, "/"), productID, platform, channel)
-}
 
-// FeedURL returns the public feed URL for a configured source, dependent on
-// the delivery protocol: Sparkle serves the appcast XML, Clave Native serves
-// the custom JSON feed.
+// FeedURL returns the public feed URL for the Clave Native JSON feed.
 func (svc *Service) FeedURL(providerKey string, productID uuid.UUID, platform, channel string) string {
-	if providerKey == string(ProviderClaveNative) {
-		return svc.nativeFeedURL(productID, platform, channel)
-	}
-	return svc.AppcastURL(productID, platform, channel)
+	return svc.nativeFeedURL(productID, platform, channel)
 }
 
 func (svc *Service) nativeFeedURL(productID uuid.UUID, platform, channel string) string {
@@ -421,63 +403,6 @@ func (svc *Service) RenderReleaseChangelog(ctx context.Context, releaseID uuid.U
 	return RenderChangelogHTML(title, body)
 }
 
-func (svc *Service) GenerateAppcast(ctx context.Context, productID uuid.UUID, platform, channel, token string) ([]byte, error) {
-	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
-		ProductID: productID,
-		Name:      channel,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	releases, err := svc.repo.ListPublishedReleasesForAppcast(ctx, productID, platform, ch.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	slog.Debug("generating appcast",
-		"product", productID,
-		"platform", platform,
-		"channel", channel,
-		"channelID", ch.ID,
-		"numReleases", len(releases),
-	)
-	for _, r := range releases {
-		slog.Debug("appcast release", "id", r.ID, "version", r.Version, "status", r.Status, "publishedAt", r.PublishedAt)
-	}
-
-	appcastReleases := make([]AppcastRelease, len(releases))
-	releaseIDs := make([]uuid.UUID, len(releases))
-	for i, rel := range releases {
-		releaseIDs[i] = rel.ID
-	}
-
-	allArtifacts, _ := svc.repo.ListArtifactsForReleases(ctx, releaseIDs)
-	artifactMap := make(map[uuid.UUID][]db.UpdateArtifact)
-	for _, a := range allArtifacts {
-		artifactMap[a.ReleaseID] = append(artifactMap[a.ReleaseID], a)
-	}
-
-	for i, rel := range releases {
-		artifacts := artifactMap[rel.ID]
-		for j := range artifacts {
-			artifacts[j].Url = appendDownloadToken(artifacts[j].Url, token)
-		}
-		changelogURL := ""
-		if rel.ChangelogID.Valid {
-			changelogURL = svc.ChangelogURL(rel.ID)
-		}
-		appcastReleases[i] = AppcastRelease{Release: rel, Artifacts: artifacts, ChangelogURL: changelogURL}
-	}
-
-	product, err := svc.licenses.GetProductByID(ctx, productID)
-	if err != nil {
-		return nil, err
-	}
-
-	return GenerateAppcastXML(product, platform, channel, appcastReleases, svc.AppcastURL(productID, platform, channel))
-}
-
 func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID, platform, channel, token string) ([]byte, error) {
 	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
 		ProductID: productID,
@@ -487,7 +412,7 @@ func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID,
 		return nil, err
 	}
 
-	releases, err := svc.repo.ListPublishedReleasesForAppcast(ctx, productID, platform, ch.ID)
+	releases, err := svc.repo.ListPublishedReleasesForFeed(ctx, productID, platform, ch.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -740,7 +665,6 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 		Filename:             &storedFilename,
 		MimeType:             &mimeType,
 		MinimumSystemVersion: nil,
-		SparkleEdSignature:   nil,
 		StorageBackend:       &backendName,
 		StorageKey:           &storageKey,
 	})
@@ -911,6 +835,34 @@ func appendDownloadToken(rawURL, token string) string {
 		sep = "&"
 	}
 	return rawURL + sep + "token=" + url.QueryEscape(token)
+}
+
+func safeString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func mimeTypeForArtifact(artifactType string) string {
+	switch artifactType {
+	case "dmg":
+		return "application/x-apple-diskimage"
+	case "zip":
+		return "application/zip"
+	case "pkg":
+		return "application/x-apple-installer"
+	case "exe":
+		return "application/x-msdownload"
+	case "msi":
+		return "application/x-msi"
+	case "deb":
+		return "application/vnd.debian.binary-package"
+	case "appimage":
+		return "application/x-executable"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 func (svc *Service) artifactDownloadURL(artifactID uuid.UUID) string {

@@ -135,8 +135,8 @@ func (r *Repository) LatestPublishedUpdateRelease(ctx context.Context, params db
 	return r.q.LatestPublishedUpdateRelease(ctx, params)
 }
 
-func (r *Repository) ListPublishedReleasesForAppcast(ctx context.Context, productID uuid.UUID, platform string, channelID uuid.UUID) ([]db.UpdateRelease, error) {
-	return r.q.ListPublishedReleasesForAppcast(ctx, db.ListPublishedReleasesForAppcastParams{
+func (r *Repository) ListPublishedReleasesForFeed(ctx context.Context, productID uuid.UUID, platform string, channelID uuid.UUID) ([]db.UpdateRelease, error) {
+	return r.q.ListPublishedReleasesForFeed(ctx, db.ListPublishedReleasesForFeedParams{
 		ProductID: productID,
 		Platform:  platform,
 		ChannelID: channelID,

@@ -243,28 +243,6 @@ func (h *Handler) AdminSaveStorageConfig(w http.ResponseWriter, r *http.Request)
 	helpers.WriteJSON(w, http.StatusOK, cfg)
 }
 
-func (h *Handler) Appcast(w http.ResponseWriter, r *http.Request) {
-	productID, err := uuid.Parse(chi.URLParam(r, "productId"))
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("<error>Invalid product ID</error>"))
-		return
-	}
-
-	platform := chi.URLParam(r, "platform")
-	channel := chi.URLParam(r, "channel")
-
-	appcast, err := h.svc.GenerateAppcast(r.Context(), productID, platform, channel, feedToken(r))
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("<error>Appcast not found</error>"))
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write(appcast)
-}
 
 func (h *Handler) NativeFeed(w http.ResponseWriter, r *http.Request) {
 	productID, err := uuid.Parse(chi.URLParam(r, "productId"))

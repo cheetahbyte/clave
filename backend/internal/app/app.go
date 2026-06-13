@@ -21,7 +21,6 @@ import (
 	"github.com/cheetahbyte/clave/internal/features/selfservice"
 	"github.com/cheetahbyte/clave/internal/features/update"
 	"github.com/cheetahbyte/clave/internal/features/update/providers/native"
-	"github.com/cheetahbyte/clave/internal/features/update/providers/sparkle"
 	"github.com/cheetahbyte/clave/internal/features/validation"
 	"github.com/cheetahbyte/clave/internal/shared/email"
 	"github.com/cheetahbyte/clave/internal/shared/events"
@@ -101,7 +100,6 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	updateRepo := update.NewRepository(q, pool)
 
 	updateRegistry := update.NewProviderRegistry(
-		sparkle.New(updateRepo),
 		native.New(updateRepo),
 	)
 
@@ -225,7 +223,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 			ListConfigs:      updateH.AdminListProductUpdateConfigs,
 			SaveConfig:       updateH.AdminSaveProductUpdateConfig,
 			DeleteConfig:     updateH.AdminDeleteProductUpdateConfig,
-			Appcast:          updateH.Appcast,
+	
 			NativeFeed:       updateH.NativeFeed,
 			Changelog:        updateH.Changelog,
 			ListChannels:     updateH.AdminListChannels,

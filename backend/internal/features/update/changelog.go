@@ -15,7 +15,7 @@ var (
 )
 
 // RenderChangelogHTML converts a Markdown changelog into a sanitized, minimal
-// standalone HTML document suitable for Sparkle's release notes link.
+// standalone HTML document suitable for the release notes link.
 func RenderChangelogHTML(title, markdown string) ([]byte, error) {
 	var body bytes.Buffer
 	if err := changelogMarkdown.Convert([]byte(markdown), &body); err != nil {

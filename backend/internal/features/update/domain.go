@@ -10,7 +10,6 @@ import (
 type ProviderKey string
 
 const (
-	ProviderSparkle     ProviderKey = "sparkle"
 	ProviderClaveNative ProviderKey = "clave_native"
 )
 

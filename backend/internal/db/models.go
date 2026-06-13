@@ -180,7 +180,6 @@ type UpdateArtifact struct {
 	Filename             *string            `json:"filename"`
 	MimeType             *string            `json:"mime_type"`
 	MinimumSystemVersion *string            `json:"minimum_system_version"`
-	SparkleEdSignature   *string            `json:"sparkle_ed_signature"`
 	StorageBackend       *string            `json:"storage_backend"`
 	StorageKey           *string            `json:"storage_key"`
 }

@@ -71,7 +71,6 @@ type UpdateAdminHandlers struct {
 	ListConfigs         http.HandlerFunc
 	SaveConfig          http.HandlerFunc
 	DeleteConfig        http.HandlerFunc
-	Appcast             http.HandlerFunc
 	NativeFeed          http.HandlerFunc
 	Changelog           http.HandlerFunc
 	ListChannels        http.HandlerFunc
@@ -284,8 +283,7 @@ func Register(r *chi.Mux, cfg Config) {
 				ss.With(mw.SSAuth).Post("/licenses/{licenseId}/revoke", sv.RevokeLicense)
 			})
 
-			v1.Get("/updates/products/{productId}/{platform}/{channel}/appcast.xml", ua.Appcast)
-				v1.Get("/updates/products/{productId}/{platform}/{channel}/feed.json", ua.NativeFeed)
+		v1.Get("/updates/products/{productId}/{platform}/{channel}/feed.json", ua.NativeFeed)
 				v1.Get("/updates/releases/{releaseId}/changelog.html", ua.Changelog)
 
 			v1.Get("/updates/artifacts/{artifactId}/download", ua.DownloadArtifact)

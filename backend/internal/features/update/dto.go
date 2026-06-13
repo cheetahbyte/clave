@@ -130,5 +130,4 @@ type ArtifactDTOFull struct {
 	Filename             *string `json:"filename,omitempty"`
 	MimeType             *string `json:"mimeType,omitempty"`
 	MinimumSystemVersion *string `json:"minimumSystemVersion,omitempty"`
-	SparkleEdSignature   *string `json:"sparkleEdSignature,omitempty"`
 }

@@ -79,7 +79,7 @@ function ChangelogsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Changelogs</h1>
           <p className="text-muted-foreground text-sm">
             Reusable changelog entries that can be attached to releases. Content is
-            written in Markdown and rendered for Sparkle and Clave Native clients.
+            written in Markdown and rendered for Clave Native clients.
           </p>
         </div>
         {product ? (

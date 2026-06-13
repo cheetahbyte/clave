@@ -529,7 +529,6 @@ export interface ArtifactFullDTO {
   filename?: string;
   mimeType?: string;
   minimumSystemVersion?: string;
-  sparkleEdSignature?: string;
 }
 
 export function listReleases(params?: {

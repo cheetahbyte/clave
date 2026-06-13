@@ -149,9 +149,9 @@ SELECT * FROM update_artifacts WHERE id = $1;
 -- name: InsertUpdateArtifact :one
 INSERT INTO update_artifacts (
     id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata,
-    filename, mime_type, minimum_system_version, sparkle_ed_signature, storage_backend, storage_key
+    filename, mime_type, minimum_system_version, storage_backend, storage_key
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING *;
 
 -- name: GetReleasePolicy :one
@@ -166,7 +166,7 @@ INSERT INTO update_checks (
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 RETURNING *;
 
--- name: ListPublishedReleasesForAppcast :many
+-- name: ListPublishedReleasesForFeed :many
 SELECT *
 FROM update_releases
 WHERE product_id = $1

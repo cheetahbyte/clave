@@ -7,8 +7,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/db"
 )
 
-// NativeFeed is the Clave Native update feed. Unlike the Sparkle appcast (RSS
-// XML), this is a custom JSON document describing all published releases for a
+// NativeFeed is the Clave Native update feed: a custom JSON document describing all published releases for a
 // product/platform/channel, including full artifact and rollout metadata.
 type NativeFeed struct {
 	Schema      string              `json:"schema"`

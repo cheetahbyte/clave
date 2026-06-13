@@ -314,7 +314,7 @@ function ChannelDialog({
               </div>
             )}
             <p className="text-muted-foreground text-xs">
-              Leave empty for a public channel. Sparkle appcasts stay public regardless.
+              Leave empty for a public channel.
             </p>
           </div>
 
