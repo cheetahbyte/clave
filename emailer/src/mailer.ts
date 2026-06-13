@@ -8,7 +8,13 @@ if (!SMTP_URL) {
 }
 
 // SMTP_URL form: smtp://user:pass@host:587  (or smtps:// for implicit TLS)
-const transport = nodemailer.createTransport(SMTP_URL)
+// Explicit timeouts so an unreachable host fails fast and visibly instead of
+// hanging the worker.
+const transport = nodemailer.createTransport(SMTP_URL, {
+  connectionTimeout: 10_000,
+  greetingTimeout: 10_000,
+  socketTimeout: 20_000,
+})
 
 export async function sendEmail(opts: {
   to: string
