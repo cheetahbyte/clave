@@ -2,17 +2,19 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
 import {
   getCurrentAdmin,
-  listAdminProducts,
   listReleases,
+  listChannels,
+  listChangelogs,
   createRelease,
   publishRelease,
   yankRelease,
   deleteRelease,
   uploadArtifact,
-  type AdminProductItem,
 } from "@/features/admin/api";
+import { useCurrentProduct } from "@/features/admin/product-context";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -83,17 +85,14 @@ function statusLabel(status: string): string {
 
 function ReleasesPage() {
   const queryClient = useQueryClient();
+  const { product } = useCurrentProduct();
   const [newReleaseOpen, setNewReleaseOpen] = useState(false);
   const [uploadReleaseId, setUploadReleaseId] = useState<string | null>(null);
 
-  const { data: products } = useQuery({
-    queryKey: ["adminProducts"],
-    queryFn: listAdminProducts,
-  });
-
   const { data: releases, isLoading: releasesLoading } = useQuery({
-    queryKey: ["updateReleases"],
-    queryFn: () => listReleases({ limit: 50 }),
+    queryKey: ["updateReleases", product?.id],
+    queryFn: () => listReleases({ limit: 50, productId: product?.id }),
+    enabled: !!product,
   });
 
   const publishMut = useMutation({
@@ -131,15 +130,17 @@ function ReleasesPage() {
     <AdminShell
       title="Releases"
       actions={
-        <Button onClick={() => setNewReleaseOpen(true)}>
-          <Plus className="size-4" /> New release
-        </Button>
+        product ? (
+          <Button onClick={() => setNewReleaseOpen(true)}>
+            <Plus className="size-4" /> New release
+          </Button>
+        ) : null
       }
     >
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Releases</h1>
         <p className="text-muted-foreground text-sm">
-          Manage releases across your products.
+          Manage releases for {product ? product.name : "the selected product"}.
         </p>
       </div>
 
@@ -147,11 +148,11 @@ function ReleasesPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Product</TableHead>
               <TableHead>Channel</TableHead>
               <TableHead>Platform</TableHead>
               <TableHead>Version</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="hidden md:table-cell">Changelog</TableHead>
               <TableHead className="hidden md:table-cell">Artifacts</TableHead>
               <TableHead className="w-40" />
             </TableRow>
@@ -160,11 +161,11 @@ function ReleasesPage() {
             {releasesLoading ? (
               [{ id: "sk1" }, { id: "sk2" }].map((s) => (
                 <TableRow key={s.id}>
-                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-12" /></TableCell>
                   <TableCell />
                 </TableRow>
@@ -178,7 +179,6 @@ function ReleasesPage() {
             ) : (
               releases.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="font-medium">{r.productName}</TableCell>
                   <TableCell className="text-muted-foreground">
                     <Badge variant="secondary" className="text-xs">{r.channel}</Badge>
                   </TableCell>
@@ -199,6 +199,13 @@ function ReleasesPage() {
                     >
                       {statusLabel(r.status)}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    {r.changelogId ? (
+                      <Badge variant="secondary" className="text-xs">Attached</Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
                     {r.artifacts?.length ? (
@@ -268,7 +275,7 @@ function ReleasesPage() {
 
       <NewReleaseDialog
         open={newReleaseOpen}
-        products={products ?? []}
+        productId={product?.id ?? ""}
         onOpenChange={setNewReleaseOpen}
         onSaved={invalidate}
       />
@@ -384,21 +391,33 @@ function UploadArtifactDialog({
 
 function NewReleaseDialog({
   open,
-  products,
+  productId,
   onOpenChange,
   onSaved,
 }: {
   open: boolean;
-  products: AdminProductItem[];
+  productId: string;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
-  const [productId, setProductId] = useState("");
   const [platform, setPlatform] = useState("macos");
   const [channel, setChannel] = useState("stable");
   const [version, setVersion] = useState("");
   const [buildNumber, setBuildNumber] = useState("");
   const [releaseNotes, setReleaseNotes] = useState("");
+  const [changelogId, setChangelogId] = useState("__none__");
+
+  const { data: channels } = useQuery({
+    queryKey: ["productChannels", productId],
+    queryFn: () => listChannels(productId),
+    enabled: open && !!productId,
+  });
+
+  const { data: changelogs } = useQuery({
+    queryKey: ["productChangelogs", productId],
+    queryFn: () => listChangelogs(productId),
+    enabled: open && !!productId,
+  });
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -409,6 +428,7 @@ function NewReleaseDialog({
         version: version.trim(),
         buildNumber: buildNumber.trim() || undefined,
         releaseNotes: releaseNotes.trim() || undefined,
+        changelogId: changelogId === "__none__" ? undefined : changelogId,
       }),
     onSuccess: () => {
       toast.success("Release draft created");
@@ -428,17 +448,6 @@ function NewReleaseDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Product</Label>
-            <Select value={productId} onValueChange={setProductId}>
-              <SelectTrigger><SelectValue placeholder="Select a product" /></SelectTrigger>
-              <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Platform</Label>
@@ -454,11 +463,14 @@ function NewReleaseDialog({
             <div className="space-y-2">
               <Label>Channel</Label>
               <Select value={channel} onValueChange={setChannel}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select a channel" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="stable">Stable</SelectItem>
-                  <SelectItem value="beta">Beta</SelectItem>
-                  <SelectItem value="nightly">Nightly</SelectItem>
+                  {(channels?.length
+                    ? channels.map((c) => c.name)
+                    : ["stable", "beta", "nightly"]
+                  ).map((name) => (
+                    <SelectItem key={name} value={name} className="capitalize">{name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -476,6 +488,24 @@ function NewReleaseDialog({
           <div className="space-y-2">
             <Label htmlFor="release-notes">Release notes</Label>
             <Input id="release-notes" value={releaseNotes} placeholder="Bug fixes and improvements" onChange={(e) => setReleaseNotes(e.target.value)} />
+            <p className="text-muted-foreground text-xs">Short one-line summary.</p>
+          </div>
+          <div className="space-y-2">
+            <Label>Changelog</Label>
+            <Select value={changelogId} onValueChange={setChangelogId}>
+              <SelectTrigger><SelectValue placeholder="No changelog" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {changelogs?.map((cl) => (
+                  <SelectItem key={cl.id} value={cl.id}>{cl.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              <Link to="/updates/changelogs" className="underline hover:text-foreground">
+                Manage changelogs
+              </Link>
+            </p>
           </div>
         </div>
         <DialogFooter className="mt-4">

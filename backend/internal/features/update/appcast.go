@@ -9,8 +9,9 @@ import (
 )
 
 type AppcastRelease struct {
-	Release   db.UpdateRelease
-	Artifacts []db.UpdateArtifact
+	Release      db.UpdateRelease
+	Artifacts    []db.UpdateArtifact
+	ChangelogURL string
 }
 
 type AppcastEnclosure struct {
@@ -28,6 +29,7 @@ type AppcastItem struct {
 	PubDate            string            `xml:"pubDate"`
 	BuildNumber        string            `xml:"sparkle:version"`
 	ShortVersionString string            `xml:"sparkle:shortVersionString"`
+	ReleaseNotesLink   string            `xml:"sparkle:releaseNotesLink,omitempty"`
 	Enclosure          *AppcastEnclosure `xml:"enclosure,omitempty"`
 }
 
@@ -98,6 +100,12 @@ func GenerateAppcastXML(product db.Product, platform, channel string, releases [
 
 		if rel.Release.ReleaseNotes != nil && *rel.Release.ReleaseNotes != "" {
 			item.Description = *rel.Release.ReleaseNotes
+		}
+
+		// Sparkle fetches and renders the changelog from this link instead of
+		// inlining it; richer than the plain-text <description> summary.
+		if rel.ChangelogURL != "" {
+			item.ReleaseNotesLink = rel.ChangelogURL
 		}
 
 		for _, a := range rel.Artifacts {

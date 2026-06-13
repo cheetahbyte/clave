@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   listAdminProducts,
+  listChannels,
   saveProductUpdateConfig,
   type ProductUpdateConfigDTO,
 } from "@/features/admin/api";
@@ -56,6 +57,12 @@ export function UpdateConfigDialog({
   const [enabled, setEnabled] = useState(editingConfig?.enabled ?? true);
 
   const effectiveProductId = productId ?? selectedProductId;
+
+  const { data: channels } = useQuery({
+    queryKey: ["productChannels", effectiveProductId],
+    queryFn: () => listChannels(effectiveProductId),
+    enabled: isOpen && !!effectiveProductId,
+  });
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -120,11 +127,14 @@ export function UpdateConfigDialog({
             <div className="space-y-2">
               <Label>Channel</Label>
               <Select value={channel} onValueChange={setChannel}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select a channel" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="stable">Stable</SelectItem>
-                  <SelectItem value="beta">Beta</SelectItem>
-                  <SelectItem value="nightly">Nightly</SelectItem>
+                  {(channels?.length
+                    ? channels.map((c) => c.name)
+                    : ["stable", "beta", "nightly"]
+                  ).map((name) => (
+                    <SelectItem key={name} value={name} className="capitalize">{name}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -161,8 +171,9 @@ export function UpdateConfigDialog({
             <div className="rounded-lg bg-muted/50 p-3 space-y-1">
               <p className="text-xs font-medium">Clave Native</p>
               <p className="text-xs text-muted-foreground">
-                Clients poll the Clave update API directly with their license token. Staged
-                rollouts, mandatory updates, and artifact selection are handled server-side.
+                Clients poll the Clave update API directly with their license token, or read the
+                custom JSON feed (feed.json) shown on the Sources page. Staged rollouts, mandatory
+                updates, and artifact selection are handled server-side.
               </p>
             </div>
           )}

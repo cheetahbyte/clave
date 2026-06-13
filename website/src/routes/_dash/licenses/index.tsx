@@ -1,8 +1,9 @@
 import { createFileRoute, redirect, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getCurrentAdmin } from "@/features/admin/api";
+import { useCurrentProduct } from "@/features/admin/product-context";
 import {
   listAdminLicenses,
   listAdminProducts,
@@ -68,6 +69,14 @@ function LicensesPage() {
   const [status, setStatus] = useState("all");
   const [type, setType] = useState("all");
   const [productId, setProductId] = useState("");
+  const { product: currentProduct } = useCurrentProduct();
+  const seededProduct = useRef(false);
+  useEffect(() => {
+    if (!seededProduct.current && currentProduct) {
+      setProductId(currentProduct.id);
+      seededProduct.current = true;
+    }
+  }, [currentProduct]);
   const [page, setPage] = useState(1);
   const pageSize = 20;
   const [dialogOpen, setDialogOpen] = useState(false);

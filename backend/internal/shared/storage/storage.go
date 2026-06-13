@@ -21,6 +21,21 @@ type Backend interface {
 	Delete(ctx context.Context, key string) error
 }
 
+// Verifier is an optional interface for backends that can check connectivity
+// and credentials without storing an object.
+type Verifier interface {
+	Verify(ctx context.Context) error
+}
+
+// Verify runs a backend's connectivity check if it implements Verifier.
+// Backends without a check are treated as reachable.
+func Verify(ctx context.Context, b Backend) error {
+	if v, ok := b.(Verifier); ok {
+		return v.Verify(ctx)
+	}
+	return nil
+}
+
 // Kind identifies a storage backend implementation.
 type Kind string
 

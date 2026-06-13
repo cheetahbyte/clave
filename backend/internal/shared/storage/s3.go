@@ -115,6 +115,16 @@ func (s *s3Backend) Open(ctx context.Context, key string) (io.ReadCloser, error)
 	return out.Body, nil
 }
 
+func (s *s3Backend) Verify(ctx context.Context) error {
+	_, err := s.client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(s.bucket),
+	})
+	if err != nil {
+		return fmt.Errorf("s3 connection failed: %w", err)
+	}
+	return nil
+}
+
 func (s *s3Backend) Delete(ctx context.Context, key string) error {
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),

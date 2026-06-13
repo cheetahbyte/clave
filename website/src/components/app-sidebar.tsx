@@ -1,5 +1,5 @@
 import * as React from "react"
-import { FlaskConical, Key, LayoutDashboard, Package, Radio, Rocket, ScrollText, Settings, Users } from "lucide-react"
+import { FlaskConical, GitBranch, Key, LayoutDashboard, Radio, Rocket, ScrollText, Settings, Users } from "lucide-react"
 import { Link, useLocation, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { useQuery } from "@tanstack/react-query"
@@ -7,6 +7,7 @@ import { getCurrentAdmin, logoutAdmin } from "@/features/admin/api"
 import { fetchCsrfToken } from "@/lib/api"
 import { NavUser } from "@/components/nav-user"
 import { OrgSwitcher } from "@/components/org-switcher"
+import { ProductSwitcher } from "@/components/product-switcher"
 import {
   Sidebar,
   SidebarContent,
@@ -47,6 +48,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
         <OrgSwitcher />
+        <ProductSwitcher />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
@@ -68,11 +70,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <Link to="/trials"><FlaskConical /><span>Trials</span></Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive("/products")} tooltip="Products">
-                  <Link to="/products"><Package /><span>Products</span></Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -89,6 +86,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive("/updates/sources")} tooltip="Sources">
                   <Link to="/updates/sources"><Radio /><span>Sources</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/updates/channels")} tooltip="Channels">
+                  <Link to="/updates/channels"><GitBranch /><span>Channels</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/updates/changelogs")} tooltip="Changelogs">
+                  <Link to="/updates/changelogs"><ScrollText /><span>Changelogs</span></Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

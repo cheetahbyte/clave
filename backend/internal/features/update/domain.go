@@ -94,6 +94,8 @@ type UpdateDecision struct {
 	UpdateAvailable bool          `json:"updateAvailable"`
 	DownloadURL     string        `json:"downloadUrl,omitempty"`
 	ReleaseNotes    string        `json:"releaseNotes,omitempty"`
+	Changelog       string        `json:"changelog,omitempty"`
+	ChangelogURL    string        `json:"changelogUrl,omitempty"`
 	Artifacts       []ArtifactDTO `json:"artifacts,omitempty"`
 	Metadata        map[string]any `json:"metadata,omitempty"`
 }

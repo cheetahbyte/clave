@@ -430,7 +430,7 @@ export interface ProductUpdateConfigDTO {
   providerKey: string;
   enabled: boolean;
   config: Record<string, unknown>;
-  appcastUrl?: string;
+  feedUrl?: string;
 }
 
 export function listUpdateProviders(): Promise<UpdateProviderInfo[]> {
@@ -488,6 +488,19 @@ export function saveProductStorageConfig(
   );
 }
 
+export function testProductStorageConfig(
+  productId: string,
+  data: { backend: string; config: Record<string, unknown> },
+): Promise<{ ok: boolean; error?: string }> {
+  return adminFetch<{ ok: boolean; error?: string }>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/storage-config/test`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
 export interface ReleaseArtifactDTO {
   type: string;
   url: string;
@@ -510,6 +523,7 @@ export interface ReleaseDTO {
   buildNumber?: string;
   status: string;
   releaseNotes?: string;
+  changelogId?: string;
   publishedAt?: string;
   createdAt?: string;
   artifacts: ReleaseArtifactDTO[];
@@ -534,10 +548,12 @@ export interface ArtifactFullDTO {
 export function listReleases(params?: {
   limit?: number;
   offset?: number;
+  productId?: string;
 }): Promise<ReleaseDTO[]> {
   const searchParams = new URLSearchParams();
   if (params?.limit) searchParams.set("limit", String(params.limit));
   if (params?.offset) searchParams.set("offset", String(params.offset));
+  if (params?.productId) searchParams.set("productId", params.productId);
   const qs = searchParams.toString();
   return adminFetch<ReleaseDTO[]>(`/api/v1/admin/update-releases${qs ? `?${qs}` : ""}`);
 }
@@ -549,11 +565,54 @@ export function createRelease(data: {
   version: string;
   buildNumber?: string;
   releaseNotes?: string;
+  changelogId?: string;
 }): Promise<ReleaseDTO> {
   return adminFetch<ReleaseDTO>("/api/v1/admin/update-releases", {
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+export interface ChannelDTO {
+  id: string;
+  productId: string;
+  name: string;
+  isDefault: boolean;
+  requiredFeatures: string[];
+  description?: string;
+}
+
+export function listChannels(productId: string): Promise<ChannelDTO[]> {
+  return adminFetch<ChannelDTO[]>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/channels`,
+  );
+}
+
+export function createChannel(
+  productId: string,
+  data: { name: string; isDefault: boolean; requiredFeatures: string[]; description?: string },
+): Promise<ChannelDTO> {
+  return adminFetch<ChannelDTO>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/channels`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
+
+export function updateChannel(
+  channelId: string,
+  data: { name: string; isDefault: boolean; requiredFeatures: string[]; description?: string },
+): Promise<ChannelDTO> {
+  return adminFetch<ChannelDTO>(
+    `/api/v1/admin/channels/${encodeURIComponent(channelId)}`,
+    { method: "PATCH", body: JSON.stringify(data) },
+  );
+}
+
+export function deleteChannel(channelId: string): Promise<{ ok: string }> {
+  return adminFetch<{ ok: string }>(
+    `/api/v1/admin/channels/${encodeURIComponent(channelId)}`,
+    { method: "DELETE" },
+  );
 }
 
 export function uploadArtifact(
@@ -596,5 +655,60 @@ export function deleteRelease(releaseId: string): Promise<{ ok: string }> {
   return adminFetch<{ ok: string }>(
     `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}`,
     { method: "DELETE" },
+  );
+}
+
+export interface ChangelogDTO {
+  id: string;
+  productId: string;
+  title: string;
+  body: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export function listChangelogs(productId: string): Promise<ChangelogDTO[]> {
+  return adminFetch<ChangelogDTO[]>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/changelogs`,
+  );
+}
+
+export function createChangelog(
+  productId: string,
+  data: { title: string; body: string },
+): Promise<ChangelogDTO> {
+  return adminFetch<ChangelogDTO>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/changelogs`,
+    { method: "POST", body: JSON.stringify(data) },
+  );
+}
+
+export function updateChangelog(
+  changelogId: string,
+  data: { title: string; body: string },
+): Promise<ChangelogDTO> {
+  return adminFetch<ChangelogDTO>(
+    `/api/v1/admin/changelogs/${encodeURIComponent(changelogId)}`,
+    { method: "PATCH", body: JSON.stringify(data) },
+  );
+}
+
+export function deleteChangelog(changelogId: string): Promise<{ ok: string }> {
+  return adminFetch<{ ok: string }>(
+    `/api/v1/admin/changelogs/${encodeURIComponent(changelogId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function attachReleaseChangelog(
+  releaseId: string,
+  changelogId: string | null,
+): Promise<{ ok: string }> {
+  return adminFetch<{ ok: string }>(
+    `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}/changelog`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ changelogId }),
+    },
   );
 }

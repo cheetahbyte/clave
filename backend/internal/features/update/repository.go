@@ -70,8 +70,69 @@ func (r *Repository) GetChannelsForProduct(ctx context.Context, productID uuid.U
 	return r.q.GetChannelsForProduct(ctx, productID)
 }
 
+func (r *Repository) GetUpdateChannelByID(ctx context.Context, id uuid.UUID) (db.UpdateChannel, error) {
+	return r.q.GetUpdateChannelByID(ctx, id)
+}
+
 func (r *Repository) UpsertUpdateChannel(ctx context.Context, params db.UpsertUpdateChannelParams) (db.UpdateChannel, error) {
 	return r.q.UpsertUpdateChannel(ctx, params)
+}
+
+func (r *Repository) CreateUpdateChannel(ctx context.Context, params db.CreateUpdateChannelParams) (db.UpdateChannel, error) {
+	return r.q.CreateUpdateChannel(ctx, params)
+}
+
+func (r *Repository) UpdateUpdateChannel(ctx context.Context, params db.UpdateUpdateChannelParams) (db.UpdateChannel, error) {
+	return r.q.UpdateUpdateChannel(ctx, params)
+}
+
+func (r *Repository) DeleteUpdateChannel(ctx context.Context, channelID, orgID uuid.UUID) (db.UpdateChannel, error) {
+	return r.q.DeleteUpdateChannel(ctx, db.DeleteUpdateChannelParams{ID: channelID, OrganizationID: orgID})
+}
+
+func (r *Repository) CountReleasesForChannel(ctx context.Context, channelID uuid.UUID) (int64, error) {
+	return r.q.CountReleasesForChannel(ctx, channelID)
+}
+
+func (r *Repository) CountConfigsForChannel(ctx context.Context, channelID uuid.UUID) (int64, error) {
+	return r.q.CountConfigsForChannel(ctx, channelID)
+}
+
+func (r *Repository) UpdateReleaseChangelog(ctx context.Context, params db.UpdateReleaseChangelogParams) (db.UpdateRelease, error) {
+	return r.q.UpdateReleaseChangelog(ctx, params)
+}
+
+func (r *Repository) ListChangelogsForProduct(ctx context.Context, productID uuid.UUID) ([]db.Changelog, error) {
+	return r.q.ListChangelogsForProduct(ctx, productID)
+}
+
+func (r *Repository) GetChangelog(ctx context.Context, id uuid.UUID) (db.Changelog, error) {
+	return r.q.GetChangelog(ctx, id)
+}
+
+func (r *Repository) CreateChangelog(ctx context.Context, params db.CreateChangelogParams) (db.Changelog, error) {
+	return r.q.CreateChangelog(ctx, params)
+}
+
+func (r *Repository) UpdateChangelog(ctx context.Context, params db.UpdateChangelogParams) (db.Changelog, error) {
+	return r.q.UpdateChangelog(ctx, params)
+}
+
+func (r *Repository) DeleteChangelog(ctx context.Context, id, orgID uuid.UUID) (db.Changelog, error) {
+	return r.q.DeleteChangelog(ctx, db.DeleteChangelogParams{ID: id, OrganizationID: orgID})
+}
+
+func (r *Repository) CountReleasesForChangelog(ctx context.Context, changelogID uuid.UUID) (int64, error) {
+	pg := pgtype.UUID{Bytes: changelogID, Valid: true}
+	return r.q.CountReleasesForChangelog(ctx, pg)
+}
+
+func (r *Repository) SetReleaseChangelog(ctx context.Context, releaseID uuid.UUID, changelogID *uuid.UUID) (db.UpdateRelease, error) {
+	pg := pgtype.UUID{}
+	if changelogID != nil {
+		pg = pgtype.UUID{Bytes: *changelogID, Valid: true}
+	}
+	return r.q.SetReleaseChangelog(ctx, db.SetReleaseChangelogParams{ID: releaseID, ChangelogID: pg})
 }
 
 func (r *Repository) LatestPublishedUpdateRelease(ctx context.Context, params db.LatestPublishedUpdateReleaseParams) (db.UpdateRelease, error) {
@@ -86,12 +147,29 @@ func (r *Repository) ListPublishedReleasesForAppcast(ctx context.Context, produc
 	})
 }
 
-func (r *Repository) ListReleasesForOrganization(ctx context.Context, orgID uuid.UUID, limit, offset int32) ([]db.ListReleasesForOrganizationRow, error) {
-	return r.q.ListReleasesForOrganization(ctx, db.ListReleasesForOrganizationParams{
+func (r *Repository) ListReleasesForOrganization(ctx context.Context, orgID uuid.UUID, productID *uuid.UUID, limit, offset int32) ([]db.ListReleasesForOrganizationRow, error) {
+	if productID == nil {
+		return r.q.ListReleasesForOrganization(ctx, db.ListReleasesForOrganizationParams{
+			OrganizationID: orgID,
+			Limit:          limit,
+			Offset:         offset,
+		})
+	}
+
+	rows, err := r.q.ListReleasesForOrganizationByProduct(ctx, db.ListReleasesForOrganizationByProductParams{
 		OrganizationID: orgID,
+		ProductID:      *productID,
 		Limit:          limit,
 		Offset:         offset,
 	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]db.ListReleasesForOrganizationRow, len(rows))
+	for i, r := range rows {
+		out[i] = db.ListReleasesForOrganizationRow(r)
+	}
+	return out, nil
 }
 
 func (r *Repository) InsertUpdateRelease(ctx context.Context, params db.InsertUpdateReleaseParams) (db.UpdateRelease, error) {

@@ -18,6 +18,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/cheetahbyte/clave/internal/shared/storage"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const defaultChannel = "stable"
@@ -115,6 +116,20 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 		channel = defaultChannel
 	}
 
+	// Feature-gated channels: a license may only pull updates from a channel
+	// when it holds every feature the channel requires.
+	if ch, chErr := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
+		ProductID: claims.ProductID,
+		Name:      channel,
+	}); chErr == nil {
+		if !hasAllFeatures(lic.Features, ch.RequiredFeatures) {
+			return CheckResponse{}, problem.Of(403).
+				Append(problem.Title("Channel not available")).
+				Append(problem.Detail("This license does not have access to the requested update channel.")).
+				Append(problem.Instance(instance))
+		}
+	}
+
 	updateReq := UpdateRequest{
 		LicenseID:      licenseID.String(),
 		ProductID:      claims.ProductID,
@@ -169,6 +184,10 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 		}
 	}
 
+	if releaseID != nil && decision.Changelog != "" {
+		decision.ChangelogURL = svc.ChangelogURL(*releaseID)
+	}
+
 	_ = svc.repo.InsertUpdateCheck(ctx, dbConfig.OrganizationID, claims.ProductID, licenseID,
 		platform, channel, string(provider.Key()),
 		data.Version, data.Build, data.Arch, data.OSVersion,
@@ -182,6 +201,8 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 		DownloadURL:     decision.DownloadURL,
 		Kind:            string(decision.Kind),
 		ReleaseNotes:    decision.ReleaseNotes,
+		Changelog:       decision.Changelog,
+		ChangelogURL:    decision.ChangelogURL,
 		Artifacts:       decision.Artifacts,
 		Metadata:        decision.Metadata,
 	}, nil
@@ -213,7 +234,7 @@ func (svc *Service) GetProductUpdateConfigs(ctx context.Context, productID uuid.
 			ProviderKey: r.ProviderKey,
 			Enabled:     r.Enabled,
 			Config:      MustParseProviderConfig(r.Config),
-			AppcastURL:  svc.AppcastURL(r.ProductID, r.Platform, r.ChannelName),
+			FeedURL:     svc.FeedURL(r.ProviderKey, r.ProductID, r.Platform, r.ChannelName),
 		}
 	}
 	return result, nil
@@ -270,7 +291,7 @@ func (svc *Service) SaveProductUpdateConfig(ctx context.Context, orgID, productI
 		ProviderKey: cfg.ProviderKey,
 		Enabled:     cfg.Enabled,
 		Config:      MustParseProviderConfig(cfg.Config),
-		AppcastURL:  svc.AppcastURL(cfg.ProductID, cfg.Platform, ch.Name),
+		FeedURL:     svc.FeedURL(cfg.ProviderKey, cfg.ProductID, cfg.Platform, ch.Name),
 	}, nil
 }
 
@@ -286,11 +307,85 @@ func (svc *Service) AppcastURL(productID uuid.UUID, platform, channel string) st
 	return fmt.Sprintf("%s/api/v1/updates/products/%s/%s/%s/appcast.xml", strings.TrimRight(svc.publicAppURL, "/"), productID, platform, channel)
 }
 
+// FeedURL returns the public feed URL for a configured source, dependent on
+// the delivery protocol: Sparkle serves the appcast XML, Clave Native serves
+// the custom JSON feed.
+func (svc *Service) FeedURL(providerKey string, productID uuid.UUID, platform, channel string) string {
+	if providerKey == string(ProviderClaveNative) {
+		return svc.nativeFeedURL(productID, platform, channel)
+	}
+	return svc.AppcastURL(productID, platform, channel)
+}
+
+func (svc *Service) nativeFeedURL(productID uuid.UUID, platform, channel string) string {
+	path := fmt.Sprintf("/api/v1/updates/products/%s/%s/%s/feed.json", productID, platform, channel)
+	if svc.publicAppURL == "" {
+		return path
+	}
+	return strings.TrimRight(svc.publicAppURL, "/") + path
+}
+
 func (svc *Service) NativeUpdateURL() string {
 	if svc.publicAppURL == "" {
 		return "/api/v1/client/updates/check"
 	}
 	return fmt.Sprintf("%s/api/v1/client/updates/check", strings.TrimRight(svc.publicAppURL, "/"))
+}
+
+func (svc *Service) ChangelogURL(releaseID uuid.UUID) string {
+	path := fmt.Sprintf("/api/v1/updates/releases/%s/changelog.html", releaseID)
+	if svc.publicAppURL == "" {
+		return path
+	}
+	return strings.TrimRight(svc.publicAppURL, "/") + path
+}
+
+// AuthorizeChannelAccess gates the public native feed for feature-gated
+// channels. Open channels are always allowed; gated channels require a valid
+// license token whose features satisfy the channel's requirements.
+func (svc *Service) AuthorizeChannelAccess(ctx context.Context, productID uuid.UUID, channel, token string) error {
+	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
+		ProductID: productID,
+		Name:      channel,
+	})
+	if err != nil {
+		// Unknown channel: nothing to gate, let feed generation 404.
+		return nil
+	}
+	if len(ch.RequiredFeatures) == 0 {
+		return nil
+	}
+	if token == "" {
+		return fmt.Errorf("license token required for this channel")
+	}
+	claims, err := svc.signer.ParseJWT(token)
+	if err != nil {
+		return fmt.Errorf("invalid license token")
+	}
+	if claims.ProductID != productID {
+		return fmt.Errorf("token not valid for this product")
+	}
+	if !hasAllFeatures(claims.Features, ch.RequiredFeatures) {
+		return fmt.Errorf("license lacks required features for this channel")
+	}
+	return nil
+}
+
+// RenderReleaseChangelog returns the sanitized HTML changelog for a release.
+func (svc *Service) RenderReleaseChangelog(ctx context.Context, releaseID uuid.UUID) ([]byte, error) {
+	release, err := svc.repo.GetUpdateRelease(ctx, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	body, _ := svc.releaseChangelog(ctx, release)
+	if body == "" {
+		return nil, fmt.Errorf("no changelog for release")
+	}
+	title := release.Version
+	if product, perr := svc.licenses.GetProductByID(ctx, release.ProductID); perr == nil {
+		title = product.Name + " " + release.Version
+	}
+	return RenderChangelogHTML(title, body)
 }
 
 func (svc *Service) GenerateAppcast(ctx context.Context, productID uuid.UUID, platform, channel string) ([]byte, error) {
@@ -321,7 +416,8 @@ func (svc *Service) GenerateAppcast(ctx context.Context, productID uuid.UUID, pl
 	appcastReleases := make([]AppcastRelease, len(releases))
 	for i, rel := range releases {
 		artifacts, _ := svc.repo.ListArtifactsForRelease(ctx, rel.ID)
-		appcastReleases[i] = AppcastRelease{Release: rel, Artifacts: artifacts}
+		_, changelogURL := svc.releaseChangelog(ctx, rel)
+		appcastReleases[i] = AppcastRelease{Release: rel, Artifacts: artifacts, ChangelogURL: changelogURL}
 	}
 
 	product, err := svc.licenses.GetProductByID(ctx, productID)
@@ -332,8 +428,38 @@ func (svc *Service) GenerateAppcast(ctx context.Context, productID uuid.UUID, pl
 	return GenerateAppcastXML(product, platform, channel, appcastReleases, svc.AppcastURL(productID, platform, channel))
 }
 
-func (svc *Service) ListReleases(ctx context.Context, orgID uuid.UUID, limit, offset int32) ([]ReleaseDTO, error) {
-	rows, err := svc.repo.ListReleasesForOrganization(ctx, orgID, limit, offset)
+func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID, platform, channel string) ([]byte, error) {
+	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
+		ProductID: productID,
+		Name:      channel,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	releases, err := svc.repo.ListPublishedReleasesForAppcast(ctx, productID, platform, ch.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	inputs := make([]NativeFeedReleaseInput, len(releases))
+	for i, rel := range releases {
+		artifacts, _ := svc.repo.ListArtifactsForRelease(ctx, rel.ID)
+		policy, _ := svc.repo.GetReleasePolicy(ctx, rel.ID)
+		changelogBody, changelogURL := svc.releaseChangelog(ctx, rel)
+		inputs[i] = NativeFeedReleaseInput{Release: rel, Artifacts: artifacts, Policy: policy, Changelog: changelogBody, ChangelogURL: changelogURL}
+	}
+
+	product, err := svc.licenses.GetProductByID(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+
+	return GenerateNativeFeed(product, platform, channel, inputs)
+}
+
+func (svc *Service) ListReleases(ctx context.Context, orgID uuid.UUID, productID *uuid.UUID, limit, offset int32) ([]ReleaseDTO, error) {
+	rows, err := svc.repo.ListReleasesForOrganization(ctx, orgID, productID, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -389,6 +515,11 @@ func (svc *Service) ListReleases(ctx context.Context, orgID uuid.UUID, limit, of
 			buildNum = *r.BuildNumber
 		}
 
+		var changelogID string
+		if r.ChangelogID.Valid {
+			changelogID = uuid.UUID(r.ChangelogID.Bytes).String()
+		}
+
 		result[i] = ReleaseDTO{
 			ID:           r.ID.String(),
 			ProductID:    r.ProductID.String(),
@@ -400,6 +531,7 @@ func (svc *Service) ListReleases(ctx context.Context, orgID uuid.UUID, limit, of
 			BuildNumber:  buildNum,
 			Status:       r.Status,
 			ReleaseNotes: notes,
+			ChangelogID:  changelogID,
 			PublishedAt:  pubAt,
 			CreatedAt:    createdAtStr,
 			Artifacts:    artifactDTOs,
@@ -439,6 +571,18 @@ func (svc *Service) CreateRelease(ctx context.Context, orgID uuid.UUID, req Crea
 	if req.ReleaseNotes != "" {
 		notes = &req.ReleaseNotes
 	}
+	changelogID := pgtype.UUID{}
+	if req.ChangelogID != "" {
+		parsed, perr := uuid.Parse(req.ChangelogID)
+		if perr != nil {
+			return nil, fmt.Errorf("invalid changelog id")
+		}
+		cl, cerr := svc.repo.GetChangelog(ctx, parsed)
+		if cerr != nil || cl.ProductID != productID {
+			return nil, fmt.Errorf("changelog not found for this product")
+		}
+		changelogID = pgtype.UUID{Bytes: parsed, Valid: true}
+	}
 
 	release, err := svc.repo.InsertUpdateRelease(ctx, db.InsertUpdateReleaseParams{
 		OrganizationID: orgID,
@@ -449,6 +593,7 @@ func (svc *Service) CreateRelease(ctx context.Context, orgID uuid.UUID, req Crea
 		BuildNumber:    buildNum,
 		Status:         "draft",
 		ReleaseNotes:   notes,
+		ChangelogID:    changelogID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("insert release: %w", err)
@@ -498,6 +643,7 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 	mimeType := mimeTypeForArtifact(artifactType)
 	backendName := string(kind)
 	artifact, err := svc.repo.InsertUpdateArtifact(ctx, db.InsertUpdateArtifactParams{
+		ID:                   artifactID,
 		ReleaseID:            releaseID,
 		ArtifactType:         artifactType,
 		Os:                   osName,

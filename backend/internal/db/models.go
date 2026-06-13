@@ -54,6 +54,16 @@ type AdminUser struct {
 	TotpSecretNonce []byte             `json:"totp_secret_nonce"`
 }
 
+type Changelog struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	ProductID      uuid.UUID          `json:"product_id"`
+	Title          string             `json:"title"`
+	Body           string             `json:"body"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Device struct {
 	ID        uuid.UUID          `json:"id"`
 	HwidHash  []byte             `json:"hwid_hash"`
@@ -176,13 +186,15 @@ type UpdateArtifact struct {
 }
 
 type UpdateChannel struct {
-	ID             uuid.UUID          `json:"id"`
-	OrganizationID uuid.UUID          `json:"organization_id"`
-	ProductID      uuid.UUID          `json:"product_id"`
-	Name           string             `json:"name"`
-	IsDefault      bool               `json:"is_default"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ID               uuid.UUID          `json:"id"`
+	OrganizationID   uuid.UUID          `json:"organization_id"`
+	ProductID        uuid.UUID          `json:"product_id"`
+	Name             string             `json:"name"`
+	IsDefault        bool               `json:"is_default"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	RequiredFeatures []string           `json:"required_features"`
+	Description      *string            `json:"description"`
 }
 
 type UpdateCheck struct {
@@ -215,6 +227,8 @@ type UpdateRelease struct {
 	PublishedAt    pgtype.Timestamptz `json:"published_at"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	Changelog      *string            `json:"changelog"`
+	ChangelogID    pgtype.UUID        `json:"changelog_id"`
 }
 
 type UpdateReleasePolicy struct {

@@ -59,6 +59,13 @@ func (l *localBackend) Put(ctx context.Context, key string, r io.Reader) (int64,
 	return n, nil
 }
 
+func (l *localBackend) Verify(ctx context.Context) error {
+	if err := os.MkdirAll(l.base, 0o755); err != nil {
+		return fmt.Errorf("local storage path not writable: %w", err)
+	}
+	return nil
+}
+
 func (l *localBackend) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 	return os.Open(l.path(key))
 }

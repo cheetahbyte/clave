@@ -105,6 +105,10 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 	if release.ReleaseNotes != nil {
 		releaseNotes = *release.ReleaseNotes
 	}
+	var changelog string
+	if release.Changelog != nil {
+		changelog = *release.Changelog
+	}
 
 	metadata := map[string]any{
 		"release_id": release.ID.String(),
@@ -119,6 +123,7 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 		UpdateAvailable: true,
 		DownloadURL:     selectedArtifact.Url,
 		ReleaseNotes:    releaseNotes,
+		Changelog:       changelog,
 		Artifacts:       artifactsDTO,
 		Metadata:        metadata,
 	}, nil

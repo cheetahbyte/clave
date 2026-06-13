@@ -19,8 +19,26 @@ type CheckResponse struct {
 	DownloadURL     string        `json:"downloadUrl,omitempty"`
 	Kind            string        `json:"kind,omitempty"`
 	ReleaseNotes    string        `json:"releaseNotes,omitempty"`
+	Changelog       string        `json:"changelog,omitempty"`
+	ChangelogURL    string        `json:"changelogUrl,omitempty"`
 	Artifacts       []ArtifactDTO `json:"artifacts,omitempty"`
 	Metadata        map[string]any `json:"metadata,omitempty"`
+}
+
+type ChannelDTO struct {
+	ID               string   `json:"id"`
+	ProductID        string   `json:"productId"`
+	Name             string   `json:"name"`
+	IsDefault        bool     `json:"isDefault"`
+	RequiredFeatures []string `json:"requiredFeatures"`
+	Description      string   `json:"description,omitempty"`
+}
+
+type SaveChannelRequest struct {
+	Name             string   `json:"name" validate:"required"`
+	IsDefault        bool     `json:"isDefault"`
+	RequiredFeatures []string `json:"requiredFeatures"`
+	Description      string   `json:"description,omitempty"`
 }
 
 type SaveProductUpdateConfigRequest struct {
@@ -40,7 +58,7 @@ type ProductUpdateConfigDTO struct {
 	ProviderKey string                 `json:"providerKey"`
 	Enabled     bool                   `json:"enabled"`
 	Config      map[string]interface{} `json:"config"`
-	AppcastURL  string                 `json:"appcastUrl,omitempty"`
+	FeedURL     string                 `json:"feedUrl,omitempty"`
 }
 
 type StorageConfigDTO struct {
@@ -61,6 +79,25 @@ type CreateReleaseRequest struct {
 	Version      string `json:"version" validate:"required"`
 	BuildNumber  string `json:"buildNumber,omitempty"`
 	ReleaseNotes string `json:"releaseNotes,omitempty"`
+	ChangelogID  string `json:"changelogId,omitempty"`
+}
+
+type ChangelogDTO struct {
+	ID        string  `json:"id"`
+	ProductID string  `json:"productId"`
+	Title     string  `json:"title"`
+	Body      string  `json:"body"`
+	CreatedAt *string `json:"createdAt,omitempty"`
+	UpdatedAt *string `json:"updatedAt,omitempty"`
+}
+
+type SaveChangelogRequest struct {
+	Title string `json:"title" validate:"required"`
+	Body  string `json:"body"`
+}
+
+type AttachChangelogRequest struct {
+	ChangelogID *string `json:"changelogId"`
 }
 
 type ReleaseDTO struct {
@@ -74,6 +111,7 @@ type ReleaseDTO struct {
 	BuildNumber  string         `json:"buildNumber,omitempty"`
 	Status       string         `json:"status"`
 	ReleaseNotes string         `json:"releaseNotes,omitempty"`
+	ChangelogID  string         `json:"changelogId,omitempty"`
 	PublishedAt  *string        `json:"publishedAt,omitempty"`
 	CreatedAt    *string        `json:"createdAt,omitempty"`
 	Artifacts    []ArtifactDTO  `json:"artifacts,omitempty"`

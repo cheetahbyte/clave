@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   getProductStorageConfig,
   saveProductStorageConfig,
+  testProductStorageConfig,
 } from "@/features/admin/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,16 @@ export function StorageConfigDialog({
     },
     onError: (e) =>
       toast.error(e instanceof Error ? e.message : "Failed to save storage config"),
+  });
+
+  const testMutation = useMutation({
+    mutationFn: () => testProductStorageConfig(productId, { backend, config }),
+    onSuccess: (res) => {
+      if (res.ok) toast.success("Connection successful");
+      else toast.error(res.error || "Connection failed");
+    },
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : "Connection test failed"),
   });
 
   return (
@@ -169,7 +180,19 @@ export function StorageConfigDialog({
               </div>
             )}
 
-            <DialogFooter className="mt-2">
+            <DialogFooter className="mt-2 sm:justify-between">
+              {backend === "s3" ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={testMutation.isPending}
+                  onClick={() => testMutation.mutate()}
+                >
+                  {testMutation.isPending ? "Testing…" : "Test connection"}
+                </Button>
+              ) : (
+                <span />
+              )}
               <Button type="submit" disabled={mutation.isPending}>
                 {mutation.isPending ? "Saving…" : "Save"}
               </Button>

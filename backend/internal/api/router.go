@@ -70,15 +70,27 @@ type UpdateAdminHandlers struct {
 	SaveConfig          http.HandlerFunc
 	DeleteConfig        http.HandlerFunc
 	Appcast             http.HandlerFunc
+	NativeFeed          http.HandlerFunc
+	Changelog           http.HandlerFunc
+	ListChannels        http.HandlerFunc
+	CreateChannel       http.HandlerFunc
+	UpdateChannel       http.HandlerFunc
+	DeleteChannel       http.HandlerFunc
 	ListReleases        http.HandlerFunc
 	CreateRelease       http.HandlerFunc
 	UploadArtifact      http.HandlerFunc
 	PublishRelease      http.HandlerFunc
 	YankRelease         http.HandlerFunc
-	DeleteRelease       http.HandlerFunc
-	DownloadArtifact    http.HandlerFunc
+	DeleteRelease        http.HandlerFunc
+	AdminListChangelogs  http.HandlerFunc
+	AdminCreateChangelog http.HandlerFunc
+	AdminUpdateChangelog http.HandlerFunc
+	AdminDeleteChangelog http.HandlerFunc
+	AdminAttachReleaseChangelog http.HandlerFunc
+	DownloadArtifact     http.HandlerFunc
 	GetStorageConfig    http.HandlerFunc
 	SaveStorageConfig   http.HandlerFunc
+	TestStorageConfig   http.HandlerFunc
 }
 
 type OrganizationHandlers struct {
@@ -217,6 +229,11 @@ func Register(r *chi.Mux, cfg Config) {
 					protected.Delete("/update-configs/{configId}", ua.DeleteConfig)
 					protected.Get("/products/{id}/storage-config", ua.GetStorageConfig)
 					protected.Put("/products/{id}/storage-config", ua.SaveStorageConfig)
+					protected.Post("/products/{id}/storage-config/test", ua.TestStorageConfig)
+					protected.Get("/products/{id}/channels", ua.ListChannels)
+					protected.Post("/products/{id}/channels", ua.CreateChannel)
+					protected.Patch("/channels/{channelId}", ua.UpdateChannel)
+					protected.Delete("/channels/{channelId}", ua.DeleteChannel)
 					protected.Get("/products/{id}", la.GetProduct)
 					protected.Patch("/products/{id}", la.UpdateProduct)
 					protected.Delete("/products/{id}", la.DeleteProduct)
@@ -227,6 +244,11 @@ func Register(r *chi.Mux, cfg Config) {
 					protected.Post("/update-releases/{id}/publish", ua.PublishRelease)
 					protected.Post("/update-releases/{id}/yank", ua.YankRelease)
 					protected.Delete("/update-releases/{id}", ua.DeleteRelease)
+					protected.Get("/products/{id}/changelogs", ua.AdminListChangelogs)
+					protected.Post("/products/{id}/changelogs", ua.AdminCreateChangelog)
+					protected.Patch("/changelogs/{changelogId}", ua.AdminUpdateChangelog)
+					protected.Delete("/changelogs/{changelogId}", ua.AdminDeleteChangelog)
+					protected.Patch("/update-releases/{id}/changelog", ua.AdminAttachReleaseChangelog)
 					protected.Get("/audit-logs", cfg.AdminAuditLogs)
 
 					protected.Get("/organizations", org.List)
@@ -260,6 +282,8 @@ func Register(r *chi.Mux, cfg Config) {
 			v1.Get("/pubkey", cfg.Public)
 
 			v1.Get("/updates/products/{productId}/{platform}/{channel}/appcast.xml", ua.Appcast)
+				v1.Get("/updates/products/{productId}/{platform}/{channel}/feed.json", ua.NativeFeed)
+				v1.Get("/updates/releases/{releaseId}/changelog.html", ua.Changelog)
 
 			v1.Get("/updates/artifacts/{artifactId}/download", ua.DownloadArtifact)
 

@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -18,10 +19,14 @@ type Querier interface {
 	CountActivations(ctx context.Context, licenseID uuid.UUID) (int64, error)
 	CountAdminLicensesByOrganization(ctx context.Context, arg CountAdminLicensesByOrganizationParams) (int64, error)
 	CountAuditLogsByOrganization(ctx context.Context, organizationID uuid.UUID) (int64, error)
+	CountConfigsForChannel(ctx context.Context, channelID uuid.UUID) (int64, error)
 	CountLicensesByProduct(ctx context.Context, arg CountLicensesByProductParams) (int64, error)
+	CountReleasesForChangelog(ctx context.Context, changelogID pgtype.UUID) (int64, error)
+	CountReleasesForChannel(ctx context.Context, channelID uuid.UUID) (int64, error)
 	CountTrialsByEmailProduct(ctx context.Context, arg CountTrialsByEmailProductParams) (int64, error)
 	CountTrialsByHwidProduct(ctx context.Context, arg CountTrialsByHwidProductParams) (int64, error)
 	CreateAdmin(ctx context.Context, arg CreateAdminParams) (AdminUser, error)
+	CreateChangelog(ctx context.Context, arg CreateChangelogParams) (Changelog, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
 	CreateInvite(ctx context.Context, arg CreateInviteParams) (OrganizationInvite, error)
 	CreateLicense(ctx context.Context, arg CreateLicenseParams) (License, error)
@@ -29,14 +34,17 @@ type Querier interface {
 	CreateOrganizationMember(ctx context.Context, arg CreateOrganizationMemberParams) error
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateSelfServiceLink(ctx context.Context, arg CreateSelfServiceLinkParams) (SelfServiceToken, error)
+	CreateUpdateChannel(ctx context.Context, arg CreateUpdateChannelParams) (UpdateChannel, error)
 	DeactivateActiveTrialsByEmailProduct(ctx context.Context, arg DeactivateActiveTrialsByEmailProductParams) error
 	DeleteAdminLicense(ctx context.Context, arg DeleteAdminLicenseParams) (uuid.UUID, error)
+	DeleteChangelog(ctx context.Context, arg DeleteChangelogParams) (Changelog, error)
 	DeleteInvite(ctx context.Context, arg DeleteInviteParams) error
 	DeleteOrganizationMember(ctx context.Context, arg DeleteOrganizationMemberParams) error
 	DeletePendingInvitesByEmail(ctx context.Context, arg DeletePendingInvitesByEmailParams) error
 	DeleteProduct(ctx context.Context, arg DeleteProductParams) (uuid.UUID, error)
 	DeleteProductUpdateConfig(ctx context.Context, arg DeleteProductUpdateConfigParams) (ProductUpdateConfig, error)
 	DeleteSelfServiceDevice(ctx context.Context, arg DeleteSelfServiceDeviceParams) (uuid.UUID, error)
+	DeleteUpdateChannel(ctx context.Context, arg DeleteUpdateChannelParams) (UpdateChannel, error)
 	DeleteUpdateRelease(ctx context.Context, id uuid.UUID) (UpdateRelease, error)
 	DisableTOTP(ctx context.Context, id uuid.UUID) error
 	EnableTOTP(ctx context.Context, arg EnableTOTPParams) error
@@ -49,6 +57,7 @@ type Querier interface {
 	GetAdminOrganizations(ctx context.Context, adminUserID uuid.UUID) ([]GetAdminOrganizationsRow, error)
 	GetAdminOverviewStatsByOrganization(ctx context.Context, organizationID uuid.UUID) (GetAdminOverviewStatsByOrganizationRow, error)
 	GetAdminTimeseriesByOrganization(ctx context.Context, arg GetAdminTimeseriesByOrganizationParams) ([]GetAdminTimeseriesByOrganizationRow, error)
+	GetChangelog(ctx context.Context, id uuid.UUID) (Changelog, error)
 	GetChannelByProductAndName(ctx context.Context, arg GetChannelByProductAndNameParams) (UpdateChannel, error)
 	GetChannelsForProduct(ctx context.Context, productID uuid.UUID) ([]UpdateChannel, error)
 	GetDefaultChannelForProduct(ctx context.Context, productID uuid.UUID) (UpdateChannel, error)
@@ -68,6 +77,7 @@ type Querier interface {
 	GetProductsByOrganization(ctx context.Context, organizationID uuid.UUID) ([]Product, error)
 	GetReleasePolicy(ctx context.Context, releaseID uuid.UUID) (UpdateReleasePolicy, error)
 	GetUpdateArtifact(ctx context.Context, id uuid.UUID) (UpdateArtifact, error)
+	GetUpdateChannelByID(ctx context.Context, id uuid.UUID) (UpdateChannel, error)
 	GetUpdateRelease(ctx context.Context, id uuid.UUID) (UpdateRelease, error)
 	InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) error
 	InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCodeParams) error
@@ -84,18 +94,24 @@ type Querier interface {
 	ListAuditLogsByOrganization(ctx context.Context, arg ListAuditLogsByOrganizationParams) ([]ListAuditLogsByOrganizationRow, error)
 	ListByCustomerEmail(ctx context.Context, customerEmail string) ([]ListByCustomerEmailRow, error)
 	ListByCustomerEmailAndOrganization(ctx context.Context, arg ListByCustomerEmailAndOrganizationParams) ([]ListByCustomerEmailAndOrganizationRow, error)
+	ListChangelogsForProduct(ctx context.Context, productID uuid.UUID) ([]Changelog, error)
 	ListOrganizationMembers(ctx context.Context, organizationID uuid.UUID) ([]ListOrganizationMembersRow, error)
 	ListPendingInvites(ctx context.Context, organizationID uuid.UUID) ([]ListPendingInvitesRow, error)
 	ListPublishedReleasesForAppcast(ctx context.Context, arg ListPublishedReleasesForAppcastParams) ([]UpdateRelease, error)
 	ListReleasesForOrganization(ctx context.Context, arg ListReleasesForOrganizationParams) ([]ListReleasesForOrganizationRow, error)
+	ListReleasesForOrganizationByProduct(ctx context.Context, arg ListReleasesForOrganizationByProductParams) ([]ListReleasesForOrganizationByProductRow, error)
 	ListReleasesForProductChannel(ctx context.Context, arg ListReleasesForProductChannelParams) ([]UpdateRelease, error)
 	ListSelfServiceDevices(ctx context.Context, arg ListSelfServiceDevicesParams) ([]ListSelfServiceDevicesRow, error)
 	PublishUpdateRelease(ctx context.Context, id uuid.UUID) (UpdateRelease, error)
 	RevokeSelfServiceLicense(ctx context.Context, arg RevokeSelfServiceLicenseParams) (uuid.UUID, error)
+	SetReleaseChangelog(ctx context.Context, arg SetReleaseChangelogParams) (UpdateRelease, error)
 	TransferActiveTrialActivationsByEmailProduct(ctx context.Context, arg TransferActiveTrialActivationsByEmailProductParams) error
 	UpdateAdminLicense(ctx context.Context, arg UpdateAdminLicenseParams) (License, error)
+	UpdateChangelog(ctx context.Context, arg UpdateChangelogParams) (Changelog, error)
 	UpdateLastLogin(ctx context.Context, id uuid.UUID) error
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
+	UpdateReleaseChangelog(ctx context.Context, arg UpdateReleaseChangelogParams) (UpdateRelease, error)
+	UpdateUpdateChannel(ctx context.Context, arg UpdateUpdateChannelParams) (UpdateChannel, error)
 	UpsertProductStorageConfig(ctx context.Context, arg UpsertProductStorageConfigParams) (ProductStorageConfig, error)
 	UpsertProductUpdateConfig(ctx context.Context, arg UpsertProductUpdateConfigParams) (ProductUpdateConfig, error)
 	UpsertReleasePolicy(ctx context.Context, arg UpsertReleasePolicyParams) (UpdateReleasePolicy, error)

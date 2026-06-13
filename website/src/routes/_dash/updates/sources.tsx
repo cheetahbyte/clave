@@ -4,13 +4,13 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   getCurrentAdmin,
-  listAdminProducts,
   listProductUpdateConfigs,
   getProductStorageConfig,
   deleteProductUpdateConfig,
   type AdminProductItem,
   type ProductUpdateConfigDTO,
 } from "@/features/admin/api";
+import { useCurrentProduct } from "@/features/admin/product-context";
 import { UpdateConfigDialog } from "@/features/admin/UpdateConfigDialog";
 import { StorageConfigDialog } from "@/features/admin/StorageConfigDialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -98,16 +98,11 @@ type StorageTarget = { id: string; name: string };
 
 function SourcesPage() {
   const queryClient = useQueryClient();
-  const [addForProduct, setAddForProduct] = useState<string | undefined>(undefined);
+  const { product, isLoading: productsLoading } = useCurrentProduct();
   const [newConfigOpen, setNewConfigOpen] = useState(false);
   const [editingConfig, setEditingConfig] = useState<ProductUpdateConfigDTO | null>(null);
   const [deletingConfig, setDeletingConfig] = useState<ProductUpdateConfigDTO | null>(null);
   const [storageTarget, setStorageTarget] = useState<StorageTarget | null>(null);
-
-  const { data: products, isLoading: productsLoading } = useQuery({
-    queryKey: ["adminProducts"],
-    queryFn: listAdminProducts,
-  });
 
   function invalidateSources() {
     queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
@@ -128,69 +123,55 @@ function SourcesPage() {
     <AdminShell
       title="Sources"
       actions={
-        <Button
-          onClick={() => {
-            setAddForProduct(undefined);
-            setNewConfigOpen(true);
-          }}
-        >
-          <Plus className="size-4" /> Add source
-        </Button>
+        product ? (
+          <Button onClick={() => setNewConfigOpen(true)}>
+            <Plus className="size-4" /> Add source
+          </Button>
+        ) : null
       }
     >
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Sources</h1>
         <p className="text-muted-foreground text-sm">
-          Configure update sources per product, platform, and channel — and where each product's
-          release artifacts are stored.
+          Configure update sources per platform and channel — and where this product's release
+          artifacts are stored.
         </p>
       </div>
 
       {productsLoading ? (
         <div className="space-y-4">
           <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-40 w-full" />
         </div>
-      ) : !products?.length ? (
+      ) : !product ? (
         <Card>
           <CardContent className="text-muted-foreground flex flex-col items-center gap-2 py-12 text-sm">
             <Globe className="size-6 opacity-40" />
-            No products yet. Create a product first.
+            No product selected. Create or pick a product from the sidebar.
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-10">
-          {products.map((p) => (
-            <ProductCard
-              key={p.id}
-              product={p}
-              onAddSource={(productId) => {
-                setAddForProduct(productId);
-                setNewConfigOpen(true);
-              }}
-              onEditConfig={setEditingConfig}
-              onDeleteConfig={setDeletingConfig}
-              onEditStorage={() => setStorageTarget({ id: p.id, name: p.name })}
-            />
-          ))}
-        </div>
+        <ProductCard
+          product={product}
+          onAddSource={() => setNewConfigOpen(true)}
+          onEditConfig={setEditingConfig}
+          onDeleteConfig={setDeletingConfig}
+          onEditStorage={() => setStorageTarget({ id: product.id, name: product.name })}
+        />
       )}
 
       <UpdateConfigDialog
-        productId={addForProduct}
+        productId={product?.id}
         open={newConfigOpen}
         editingConfig={editingConfig}
         onOpenChange={(open) => {
           if (!open) {
             setNewConfigOpen(false);
             setEditingConfig(null);
-            setAddForProduct(undefined);
           }
         }}
         onSaved={() => {
           setNewConfigOpen(false);
           setEditingConfig(null);
-          setAddForProduct(undefined);
           invalidateSources();
         }}
       />
@@ -308,12 +289,12 @@ function ProductCard({
                   <TableHead>Channel</TableHead>
                   <TableHead>Protocol</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="hidden md:table-cell">Appcast URL</TableHead>
+                  <TableHead className="hidden md:table-cell">Feed URL</TableHead>
                   <TableHead className="w-20" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {configs.map((cfg) => (
+                {configs?.map((cfg) => (
                   <TableRow key={cfg.id}>
                     <TableCell>
                       <span className="inline-flex items-center gap-2">
@@ -333,9 +314,9 @@ function ProductCard({
                       <StatusBadge enabled={cfg.enabled} />
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {cfg.appcastUrl ? (
+                      {cfg.feedUrl ? (
                         <code className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-xs truncate block max-w-[320px]">
-                          {cfg.appcastUrl}
+                          {cfg.feedUrl}
                         </code>
                       ) : (
                         <span className="text-muted-foreground text-xs">—</span>

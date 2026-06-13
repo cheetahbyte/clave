@@ -100,6 +100,40 @@ func (svc *Service) SaveProductStorageConfig(ctx context.Context, orgID, product
 	}, nil
 }
 
+// TestProductStorageConfig builds a backend from the supplied config (merging
+// in any preserved secrets) and runs its connectivity check without persisting
+// anything.
+func (svc *Service) TestProductStorageConfig(ctx context.Context, productID uuid.UUID, req SaveStorageConfigRequest) error {
+	kind := storage.Kind(req.Backend)
+	if !knownStorageKind(kind) {
+		return fmt.Errorf("unsupported storage backend: %s", req.Backend)
+	}
+
+	config := req.Config
+	if config == nil {
+		config = map[string]any{}
+	}
+	if existing, err := svc.repo.GetProductStorageConfig(ctx, productID); err == nil {
+		preserveSecrets(config, MustParseProviderConfig(existing.Config))
+	}
+
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal storage config: %w", err)
+	}
+
+	// Local without an explicit base_path uses the server default backend.
+	if kind == storage.KindLocal && len(raw) <= 2 {
+		return storage.Verify(ctx, svc.defaultStorage)
+	}
+
+	backend, err := storage.New(kind, raw)
+	if err != nil {
+		return err
+	}
+	return storage.Verify(ctx, backend)
+}
+
 func knownStorageKind(kind storage.Kind) bool {
 	for _, k := range storage.Kinds() {
 		if k == kind {

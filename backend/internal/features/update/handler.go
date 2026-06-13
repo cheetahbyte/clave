@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
@@ -148,6 +149,37 @@ func (h *Handler) AdminGetStorageConfig(w http.ResponseWriter, r *http.Request) 
 	helpers.WriteJSON(w, http.StatusOK, cfg)
 }
 
+func (h *Handler) AdminTestStorageConfig(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	productID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+
+	if err := h.svc.VerifyProductOwnership(r.Context(), orgID, productID); err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "product not found"})
+		return
+	}
+
+	var req SaveStorageConfigRequest
+	if !helpers.DecodeValidated(w, r, &req) {
+		return
+	}
+
+	if err := h.svc.TestProductStorageConfig(r.Context(), productID, req); err != nil {
+		helpers.WriteJSON(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 func (h *Handler) AdminSaveStorageConfig(w http.ResponseWriter, r *http.Request) {
 	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
 	if !ok {
@@ -203,6 +235,154 @@ func (h *Handler) Appcast(w http.ResponseWriter, r *http.Request) {
 	w.Write(appcast)
 }
 
+func (h *Handler) NativeFeed(w http.ResponseWriter, r *http.Request) {
+	productID, err := uuid.Parse(chi.URLParam(r, "productId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+
+	platform := chi.URLParam(r, "platform")
+	channel := chi.URLParam(r, "channel")
+
+	if err := h.svc.AuthorizeChannelAccess(r.Context(), productID, channel, feedToken(r)); err != nil {
+		helpers.WriteJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
+		return
+	}
+
+	feed, err := h.svc.GenerateNativeFeed(r.Context(), productID, platform, channel)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "feed not found"})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(feed)
+}
+
+// feedToken extracts a license token from the query string (?token=) or an
+// Authorization: Bearer header, used to gate feature-restricted channels.
+func feedToken(r *http.Request) string {
+	if t := strings.TrimSpace(r.URL.Query().Get("token")); t != "" {
+		return t
+	}
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+	}
+	return ""
+}
+
+func (h *Handler) Changelog(w http.ResponseWriter, r *http.Request) {
+	releaseID, err := uuid.Parse(chi.URLParam(r, "releaseId"))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	html, err := h.svc.RenderReleaseChangelog(r.Context(), releaseID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(html)
+}
+
+func (h *Handler) AdminListChannels(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	productID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+	if err := h.svc.VerifyProductOwnership(r.Context(), orgID, productID); err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "product not found"})
+		return
+	}
+	channels, err := h.svc.ListChannels(r.Context(), productID)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list channels"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, channels)
+}
+
+func (h *Handler) AdminCreateChannel(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	productID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+	if err := h.svc.VerifyProductOwnership(r.Context(), orgID, productID); err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "product not found"})
+		return
+	}
+	var req SaveChannelRequest
+	if !helpers.DecodeValidated(w, r, &req) {
+		return
+	}
+	ch, err := h.svc.CreateChannel(r.Context(), orgID, productID, req)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusCreated, ch)
+}
+
+func (h *Handler) AdminUpdateChannel(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	channelID, err := uuid.Parse(chi.URLParam(r, "channelId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid channel id"})
+		return
+	}
+	var req SaveChannelRequest
+	if !helpers.DecodeValidated(w, r, &req) {
+		return
+	}
+	ch, err := h.svc.UpdateChannel(r.Context(), orgID, channelID, req)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, ch)
+}
+
+func (h *Handler) AdminDeleteChannel(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	channelID, err := uuid.Parse(chi.URLParam(r, "channelId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid channel id"})
+		return
+	}
+	if err := h.svc.DeleteChannel(r.Context(), orgID, channelID); err != nil {
+		helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
 func (h *Handler) AdminListReleases(w http.ResponseWriter, r *http.Request) {
 	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
 	if !ok {
@@ -221,7 +401,14 @@ func (h *Handler) AdminListReleases(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	releases, err := h.svc.ListReleases(r.Context(), orgID, int32(limit), int32(offset))
+	var productID *uuid.UUID
+	if pid := r.URL.Query().Get("productId"); pid != "" {
+		if parsed, err := uuid.Parse(pid); err == nil {
+			productID = &parsed
+		}
+	}
+
+	releases, err := h.svc.ListReleases(r.Context(), orgID, productID, int32(limit), int32(offset))
 	if err != nil {
 		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list releases"})
 		return
@@ -403,6 +590,141 @@ func (h *Handler) DownloadArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 	io.Copy(w, rc)
+}
+
+func (h *Handler) AdminListChangelogs(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	productID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+	if err := h.svc.VerifyProductOwnership(r.Context(), orgID, productID); err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "product not found"})
+		return
+	}
+	changelogs, err := h.svc.ListChangelogs(r.Context(), productID)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list changelogs"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, changelogs)
+}
+
+func (h *Handler) AdminCreateChangelog(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	productID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+	if err := h.svc.VerifyProductOwnership(r.Context(), orgID, productID); err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "product not found"})
+		return
+	}
+	var req SaveChangelogRequest
+	if !helpers.DecodeValidated(w, r, &req) {
+		return
+	}
+	cl, err := h.svc.CreateChangelog(r.Context(), orgID, productID, req)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusCreated, cl)
+}
+
+func (h *Handler) AdminUpdateChangelog(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	changelogID, err := uuid.Parse(chi.URLParam(r, "changelogId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid changelog id"})
+		return
+	}
+	var req SaveChangelogRequest
+	if !helpers.DecodeValidated(w, r, &req) {
+		return
+	}
+	cl, err := h.svc.UpdateChangelog(r.Context(), orgID, changelogID, req)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, cl)
+}
+
+func (h *Handler) AdminDeleteChangelog(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	changelogID, err := uuid.Parse(chi.URLParam(r, "changelogId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid changelog id"})
+		return
+	}
+	if err := h.svc.DeleteChangelog(r.Context(), orgID, changelogID); err != nil {
+		helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+}
+
+func (h *Handler) AdminAttachReleaseChangelog(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	releaseID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid release id"})
+		return
+	}
+	if err := h.verifyReleaseOwnership(r.Context(), orgID, releaseID); err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "release not found"})
+		return
+	}
+	var req AttachChangelogRequest
+	if !helpers.DecodeValidated(w, r, &req) {
+		return
+	}
+	var changelogID *uuid.UUID
+	if req.ChangelogID != nil && *req.ChangelogID != "" {
+		parsed, err := uuid.Parse(*req.ChangelogID)
+		if err != nil {
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid changelog id"})
+			return
+		}
+		cl, err := h.svc.repo.GetChangelog(r.Context(), parsed)
+		if err != nil {
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "changelog not found"})
+			return
+		}
+		if cl.OrganizationID != orgID {
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "changelog not found"})
+			return
+		}
+		changelogID = &parsed
+	}
+	if err := h.svc.AttachReleaseChangelog(r.Context(), releaseID, changelogID); err != nil {
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 }
 
 func (h *Handler) verifyReleaseOwnership(ctx context.Context, orgID, releaseID uuid.UUID) error {

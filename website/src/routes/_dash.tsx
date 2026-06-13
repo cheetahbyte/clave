@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import { ProductProvider } from "@/features/admin/product-context";
 
 export const Route = createFileRoute("/_dash")({
   component: DashLayout,
@@ -8,9 +9,11 @@ export const Route = createFileRoute("/_dash")({
 
 function DashLayout() {
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <Outlet />
-    </SidebarProvider>
+    <ProductProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <Outlet />
+      </SidebarProvider>
+    </ProductProvider>
   );
 }

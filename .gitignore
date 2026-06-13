@@ -5,3 +5,4 @@
 .envrc
 .env
 backend/tmp
+backend/data/update-artifacts/

@@ -12,11 +12,40 @@ ORDER BY name;
 SELECT * FROM update_channels
 WHERE product_id = $1 AND name = $2;
 
+-- name: GetUpdateChannelByID :one
+SELECT * FROM update_channels WHERE id = $1;
+
 -- name: UpsertUpdateChannel :one
 INSERT INTO update_channels (organization_id, product_id, name, is_default)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (product_id, name)
 DO UPDATE SET is_default = EXCLUDED.is_default, updated_at = now()
+RETURNING *;
+
+-- name: CreateUpdateChannel :one
+INSERT INTO update_channels (organization_id, product_id, name, is_default, required_features, description)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING *;
+
+-- name: UpdateUpdateChannel :one
+UPDATE update_channels
+SET name = $3,
+    is_default = $4,
+    required_features = $5,
+    description = $6,
+    updated_at = now()
+WHERE id = $1 AND organization_id = $2
+RETURNING *;
+
+-- name: CountReleasesForChannel :one
+SELECT count(*) FROM update_releases WHERE channel_id = $1;
+
+-- name: CountConfigsForChannel :one
+SELECT count(*) FROM product_update_configs WHERE channel_id = $1;
+
+-- name: DeleteUpdateChannel :one
+DELETE FROM update_channels
+WHERE id = $1 AND organization_id = $2
 RETURNING *;
 
 -- name: GetProductUpdateConfig :one
@@ -70,9 +99,17 @@ SELECT * FROM update_releases WHERE id = $1;
 -- name: InsertUpdateRelease :one
 INSERT INTO update_releases (
     organization_id, product_id, channel_id, platform,
-    version, build_number, status, release_notes, published_at
+    version, build_number, status, release_notes, published_at, changelog_id
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING *;
+
+-- name: UpdateReleaseChangelog :one
+UPDATE update_releases
+SET release_notes = $2,
+    changelog = $3,
+    updated_at = now()
+WHERE id = $1
 RETURNING *;
 
 -- name: PublishUpdateRelease :one
@@ -109,6 +146,15 @@ WHERE ur.organization_id = $1
 ORDER BY ur.created_at DESC
 LIMIT $2 OFFSET $3;
 
+-- name: ListReleasesForOrganizationByProduct :many
+SELECT ur.*, p.name AS product_name, c.name AS channel_name
+FROM update_releases ur
+JOIN products p ON p.id = ur.product_id
+JOIN update_channels c ON c.id = ur.channel_id
+WHERE ur.organization_id = $1 AND ur.product_id = $2
+ORDER BY ur.created_at DESC
+LIMIT $3 OFFSET $4;
+
 -- name: ListArtifactsForRelease :many
 SELECT * FROM update_artifacts
 WHERE release_id = $1;
@@ -118,10 +164,10 @@ SELECT * FROM update_artifacts WHERE id = $1;
 
 -- name: InsertUpdateArtifact :one
 INSERT INTO update_artifacts (
-    release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata,
+    id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata,
     filename, mime_type, minimum_system_version, sparkle_ed_signature, storage_backend, storage_key
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 RETURNING *;
 
 -- name: GetReleasePolicy :one
