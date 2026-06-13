@@ -28,6 +28,7 @@ export default function LicenseCreated({
       preview={preview}
       heading={heading}
       footer="Didn't expect this email? You can safely ignore it."
+      brandName={productName}
     >
       <Text style={body}>{intro}</Text>
       <Text style={body}>

@@ -18,6 +18,7 @@ interface EmailLayoutProps {
   heading: string
   children: React.ReactNode
   footer?: string
+  brandName?: string
 }
 
 export function EmailLayout({
@@ -25,7 +26,9 @@ export function EmailLayout({
   heading,
   children,
   footer,
+  brandName = "Clave",
 }: EmailLayoutProps) {
+  const badge = brandName.trim().charAt(0).toUpperCase() || "C"
   return (
     <Html lang="en">
       <Head />
@@ -36,8 +39,8 @@ export function EmailLayout({
             <Section style={logoRow}>
               <table>
                 <tr>
-                  <td style={logoBadge}>C</td>
-                  <td style={logoText}>Clave</td>
+                  <td style={logoBadge}>{badge}</td>
+                  <td style={logoText}>{brandName}</td>
                 </tr>
               </table>
             </Section>
@@ -54,7 +57,7 @@ export function EmailLayout({
               ) : null}
             </Section>
           </Section>
-          <Text style={sentBy}>Sent by Clave · License management</Text>
+          <Text style={sentBy}>Sent by {brandName} · License management</Text>
         </Container>
       </Body>
     </Html>
