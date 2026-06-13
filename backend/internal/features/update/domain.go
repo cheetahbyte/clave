@@ -13,6 +13,22 @@ const (
 	ProviderClaveNative ProviderKey = "clave_native"
 )
 
+type DeliveryProtocol string
+
+const (
+	DeliveryClaveNative DeliveryProtocol = "clave_native"
+	DeliverySparkle     DeliveryProtocol = "sparkle"
+)
+
+func ValidDeliveryProtocol(s string) bool {
+	switch DeliveryProtocol(s) {
+	case DeliveryClaveNative, DeliverySparkle:
+		return true
+	default:
+		return false
+	}
+}
+
 type Platform string
 
 const (
@@ -40,7 +56,6 @@ const (
 )
 
 type CapabilityMatrix struct {
-	DeltaUpdates     CapabilitySupport `json:"deltaUpdates"`
 	CodeSigning      CapabilitySupport `json:"codeSigning"`
 	StagedRollouts   CapabilitySupport `json:"stagedRollouts"`
 	MandatoryUpdates CapabilitySupport `json:"mandatoryUpdates"`
@@ -64,17 +79,15 @@ type ProviderConfig struct {
 }
 
 type UpdateRequest struct {
-	LicenseID               string
-	ProductID               uuid.UUID
-	Platform                Platform
-	Channel                 string
-	CurrentVersion          string
-	CurrentBuild            string
-	Arch                    string
-	OSVersion               string
-	ClientID                string
-	CurrentManifestSHA256   string
-	CurrentArtifactSHA256   string
+	LicenseID      string
+	ProductID      uuid.UUID
+	Platform       Platform
+	Channel        string
+	CurrentVersion string
+	CurrentBuild   string
+	Arch           string
+	OSVersion      string
+	ClientID       string
 }
 
 type ArtifactDTO struct {

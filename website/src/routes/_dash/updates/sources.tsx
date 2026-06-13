@@ -292,7 +292,7 @@ function ProductCard({
                     </TableCell>
                     <TableCell>
                       <span className="text-sm">
-                        Clave Native
+                        {cfg.config?.delivery === "sparkle" ? "Sparkle Appcast" : "Clave Native"}
                       </span>
                     </TableCell>
                     <TableCell>

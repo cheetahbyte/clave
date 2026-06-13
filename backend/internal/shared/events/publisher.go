@@ -129,35 +129,3 @@ func (p *Publisher) Close() error {
 	}
 	return nil
 }
-
-type DeltaGenerateEvent struct {
-	Type              string `json:"type"`
-	JobID             string `json:"jobId"`
-	OrganizationID    string `json:"organizationId"`
-	ReleaseID         string `json:"releaseId"`
-	SourceReleaseID   string `json:"sourceReleaseId"`
-	SourceArtifactID  string `json:"sourceArtifactId"`
-	TargetArtifactID  string `json:"targetArtifactId"`
-}
-
-func (p *Publisher) PublishDeltaGenerate(ctx context.Context, ev DeltaGenerateEvent) error {
-	ch, err := p.channel()
-	if err != nil {
-		return err
-	}
-
-	body, err := json.Marshal(ev)
-	if err != nil {
-		return fmt.Errorf("marshal delta event: %w", err)
-	}
-
-	pubCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	return ch.PublishWithContext(pubCtx, exchange, ev.Type, false, false, amqp.Publishing{
-		ContentType:  "application/json",
-		DeliveryMode: amqp.Persistent,
-		Timestamp:    time.Now(),
-		Body:         body,
-	})
-}

@@ -31,8 +31,8 @@ services:
   mailpit:
     image: axllent/mailpit:latest
     ports:
-      - "1025:1025"   # SMTP
-      - "8025:8025"   # web UI
+      - "1025:1025" # SMTP
+      - "8025:8025" # web UI
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "true"
       MP_SMTP_AUTH_ALLOW_INSECURE: "true"
@@ -45,6 +45,18 @@ services:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
       - "4318:4318"
+
+  # RabbitMQ — message broker for emailer.
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672" # AMQP
+      - "15672:15672" # management UI
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics check_port_connectivity"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   # Prometheus — scrapes the collector, built-in web UI at http://localhost:9090
   prometheus:
@@ -68,9 +80,11 @@ services:
       DATABASE_URL: "postgres://clave@postgres:5432/clave?sslmode=disable"
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
       RUN_MIGRATIONS: "true"
       DEV: "true"
       PORT: "8000"
+      PUBLIC_APP_URL: "http://backend:8000"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
     ports:
       - "8000:8000"
@@ -79,6 +93,16 @@ services:
         condition: service_healthy
       mailpit:
         condition: service_started
-
+      rabbitmq:
+        condition: service_healthy
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
 volumes:
   pgdata:

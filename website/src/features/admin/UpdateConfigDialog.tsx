@@ -54,6 +54,9 @@ export function UpdateConfigDialog({
   const [platform, setPlatform] = useState(editingConfig?.platform ?? "macos");
   const [channel, setChannel] = useState(editingConfig?.channel ?? "stable");
   const [providerKey] = useState(editingConfig?.providerKey ?? "clave_native");
+  const [delivery, setDelivery] = useState(
+    (editingConfig?.config?.delivery as string) ?? "clave_native",
+  );
   const [enabled, setEnabled] = useState(editingConfig?.enabled ?? true);
 
   const effectiveProductId = productId ?? selectedProductId;
@@ -71,7 +74,7 @@ export function UpdateConfigDialog({
         channel,
         providerKey,
         enabled,
-        config: {},
+        config: { delivery },
       }),
     onSuccess: () => {
       toast.success(isEdit ? "Update source saved" : "Update source added");
@@ -115,7 +118,15 @@ export function UpdateConfigDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Platform</Label>
-              <Select value={platform} onValueChange={setPlatform}>
+              <Select
+                value={platform}
+                onValueChange={(value) => {
+                  setPlatform(value);
+                  if (value !== "macos" && delivery === "sparkle") {
+                    setDelivery("clave_native");
+                  }
+                }}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="macos">macOS</SelectItem>
@@ -141,10 +152,14 @@ export function UpdateConfigDialog({
           </div>
           <div className="space-y-2">
             <Label>Delivery protocol</Label>
-            <Select value="clave_native" disabled>
+            <Select
+              value={delivery}
+              onValueChange={(value) => setDelivery(value)}
+            >
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="clave_native">Clave Native (JSON API)</SelectItem>
+                <SelectItem value="sparkle" disabled={platform !== "macos"}>Sparkle Appcast (macOS)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -159,11 +174,13 @@ export function UpdateConfigDialog({
           </div>
           {providerKey === "clave_native" && (
             <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-              <p className="text-xs font-medium">Clave Native</p>
+              <p className="text-xs font-medium">
+                {delivery === "sparkle" ? "Sparkle Appcast" : "Clave Native"}
+              </p>
               <p className="text-xs text-muted-foreground">
-                Clients poll the Clave update API directly with their license token, or read the
-                custom JSON feed (feed.json) shown on the Sources page. Staged rollouts, mandatory
-                updates, and artifact selection are handled server-side.
+                {delivery === "sparkle"
+                  ? "Sparkle-based macOS clients point SUFeedURL at the generated appcast.xml. Full-file artifacts only."
+                  : "Clients poll the Clave update API directly with their license token, or read the custom JSON feed (feed.json) shown on the Sources page. Staged rollouts, mandatory updates, and artifact selection are handled server-side."}
               </p>
             </div>
           )}

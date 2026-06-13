@@ -1,8 +1,10 @@
-set dotenv-load := true
+set dotenv-load
 set shell := ["bash", "-ceu"]
 
 backend_dir := "backend"
 frontend_dir := "website"
+emailer_dir := "emailer"
+infra_services := "postgres mailpit rabbitmq"
 
 _default:
     @just --list
@@ -11,13 +13,19 @@ help:
     @just --list
 
 dev:
-    @just dev-be & just dev-fe & wait
+    @just dev-be & just dev-fe & just dev-emailer & wait
+
+dev-infra:
+    docker compose -f compose.dev.yaml up -d {{ infra_services }}
 
 dev-be:
-    cd {{backend_dir}} && air
+    cd {{ backend_dir }} && air
 
 dev-fe:
-    cd {{frontend_dir}} && pnpm dev
+    cd {{ frontend_dir }} && pnpm dev
+
+dev-emailer:
+    cd {{ emailer_dir }} && bun dev
 
 migrate:
     @echo "Running backend migrations..."

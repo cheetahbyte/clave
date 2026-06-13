@@ -284,23 +284,3 @@ func timePtr(t pgtype.Timestamptz) *time.Time {
 func uuidToPG(id uuid.UUID) pgtype.UUID {
 	return pgtype.UUID{Bytes: [16]byte(id), Valid: true}
 }
-
-func (r *Repository) FindPreviousPublishedRelease(ctx context.Context, params db.FindPreviousPublishedReleaseParams) (db.UpdateRelease, error) {
-	return r.q.FindPreviousPublishedRelease(ctx, params)
-}
-
-func (r *Repository) InsertDeltaJob(ctx context.Context, params db.InsertDeltaJobParams) (db.UpdateDeltaJob, error) {
-	return r.q.InsertDeltaJob(ctx, params)
-}
-
-func (r *Repository) GetDeltaJob(ctx context.Context, id uuid.UUID) (db.UpdateDeltaJob, error) {
-	return r.q.GetDeltaJob(ctx, id)
-}
-
-func (r *Repository) UpdateDeltaJobStatus(ctx context.Context, params db.UpdateDeltaJobStatusParams) (db.UpdateDeltaJob, error) {
-	return r.q.UpdateDeltaJobStatus(ctx, params)
-}
-
-func (r *Repository) ListDeltaJobsForRelease(ctx context.Context, releaseID uuid.UUID) ([]db.UpdateDeltaJob, error) {
-	return r.q.ListDeltaJobsForRelease(ctx, releaseID)
-}

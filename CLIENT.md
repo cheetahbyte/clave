@@ -164,17 +164,13 @@ Use your license JWT to check if a newer version is available. The server resolv
   "build": "42",
   "arch": "arm64",
   "osVersion": "15.0",
-  "clientId": "<stable device identifier>",
-  "currentManifestSha256": "<sha256 of installed app manifest>",
-  "currentArtifactSha256": "<sha256 of the artifact that was installed>"
+  "clientId": "<stable device identifier>"
 }
 ```
 
 Only `version` and `token` are required. Defaults when omitted:
 - `platform`: `"macos"`
 - `channel`: `"stable"`
-
-Send `currentManifestSha256` and `currentArtifactSha256` to enable delta updates. Without these hashes the server cannot match a delta to your exact install, so it returns only full artifacts.
 
 **You'll get back:**
 ```json
@@ -186,25 +182,6 @@ Send `currentManifestSha256` and `currentArtifactSha256` to enable delta updates
   "kind": "update_available",
   "releaseNotes": "Bug fixes and performance improvements.",
   "artifacts": [
-    {
-      "type": "delta",
-      "url": "https://releases.example.com/myapp-1.0.0-to-1.1.0-arm64.delta.zip",
-      "arch": "arm64",
-      "os": "macos",
-      "sizeBytes": 2097152,
-      "sha256": "def456...",
-      "metadata": {
-        "format": "clave.delta/v1",
-        "fromVersion": "1.0.0",
-        "fromBuild": "42",
-        "fromManifestSha256": "...",
-        "fromArtifactSha256": "...",
-        "toVersion": "1.1.0",
-        "toBuild": "43",
-        "toManifestSha256": "...",
-        "toArtifactSha256": "..."
-      }
-    },
     {
       "type": "full",
       "url": "https://releases.example.com/myapp-1.1.0-arm64.dmg",
@@ -222,21 +199,32 @@ Send `currentManifestSha256` and `currentArtifactSha256` to enable delta updates
 
 The `clientId` field enables deterministic staged rollouts. Send a stable, unique value (e.g. a hash of the machine ID) so the server can consistently bucket your client for percentage-based releases.
 
-### Delta Updates
+---
 
-When the server returns a `delta` artifact in `artifacts`, it has matched your exact install via `currentManifestSha256`. The client should:
+### Sparkle Appcast (macOS)
 
-1. Attempt to apply the delta first.
-2. If delta application fails for any reason (hash mismatch, signature failure, corrupt download), fall back to the `full` artifact.
-3. `downloadUrl` always points to the full artifact. Use it for legacy clients or when no delta exists.
+Full-file Sparkle appcast XML is available for macOS apps. Point `SUFeedURL` to:
 
-**Matching rule**: A delta is only included when ALL of these match:
-- `artifact.type` == `"delta"`
-- `artifact.arch` matches your `arch` (or `"universal"`)
-- `artifact.os` matches your `platform`
-- `artifact.metadata.fromManifestSha256` == `currentManifestSha256`
-- `artifact.metadata.fromArtifactSha256` == `currentArtifactSha256` (if you provide it)
+```
+https://your-instance/api/v1/updates/products/<productId>/macos/<channel>/appcast.xml
+```
 
-**Delta package format** (`clave.delta/v1`): The delta artifact contains a JSON manifest with per-file operations (patch, add, delete, mkdir, symlink), a `target-manifest.json` to verify the result against, and patch/add files in subdirectories. Always verify the final app manifest against `target-manifest.json` before promoting the update.
+**Architecture**: Append `?arch=arm64` or `?arch=x64` to select a specific artifact variant. The feed picks an exact arch match first, then falls back to `universal`. Omitting `arch` defaults to `universal`.
 
-**macOS-specific validation**: After applying a delta, run `codesign --verify --strict --verbose=2 YourApp.app` and `spctl --assess --type execute --verbose=2 YourApp.app` before atomically replacing the running app. Never mutate the running `.app` in place — apply to a staging copy, then swap on next launch.
+**Channel gating**: Channels with required features need a license token. Pass it via `?token=<jwt>` or `Authorization: Bearer <jwt>`.
+
+**What's included**: Only full-file downloadable artifacts (`dmg`, `zip`, `pkg`). Delta artifacts are not served.
+
+**Example**:
+```
+SUFeedURL = https://your-instance/api/v1/updates/products/<productId>/macos/stable/appcast.xml?arch=arm64
+```
+
+**Ed25519 Signing**: Set `SPARKLE_ED25519_PUBLIC_KEY` and `SPARKLE_ED25519_PRIVATE_KEY` env vars (base64 raw key bytes) on the server. Artifacts uploaded while these are configured will receive a `sparkle:edSignature` in the appcast. Retrieve the public key at `GET /api/v1/updates/sparkle/public-key` and set it as `SUPublicEDKey` in your macOS app's `Info.plist`.
+
+Generate keys via OpenSSL:
+```
+openssl genpkey -algorithm Ed25519 -out sparkle_private.pem
+openssl pkey -in sparkle_private.pem -pubout -out sparkle_public.pem
+# Extract raw base64 keys (no headers)
+```

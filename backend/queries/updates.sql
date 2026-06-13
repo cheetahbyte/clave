@@ -186,36 +186,3 @@ SELECT r.id AS release_id, c.body AS changelog_body
 FROM update_releases r
 JOIN changelogs c ON c.id = r.changelog_id
 WHERE r.id = ANY($1::uuid[]);
-
--- name: FindPreviousPublishedRelease :one
-SELECT *
-FROM update_releases
-WHERE product_id = $1
-  AND platform = $2
-  AND channel_id = $3
-  AND status = 'published'
-  AND published_at <= now()
-  AND id != $4
-ORDER BY published_at DESC
-LIMIT 1;
-
--- name: InsertDeltaJob :one
-INSERT INTO update_delta_jobs (
-    organization_id, release_id, source_release_id, source_artifact_id, target_artifact_id, status
-)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING *;
-
--- name: GetDeltaJob :one
-SELECT * FROM update_delta_jobs WHERE id = $1;
-
--- name: UpdateDeltaJobStatus :one
-UPDATE update_delta_jobs
-SET status = $2, error_message = $3, started_at = $4, completed_at = $5, delta_artifact_id = $6
-WHERE id = $1
-RETURNING *;
-
--- name: ListDeltaJobsForRelease :many
-SELECT * FROM update_delta_jobs
-WHERE release_id = $1
-ORDER BY created_at DESC;

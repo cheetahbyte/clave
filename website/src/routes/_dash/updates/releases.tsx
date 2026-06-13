@@ -244,15 +244,17 @@ function ReleasesPage() {
                           </>
                         )}
                       {r.status === "published" && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="size-8 text-destructive"
-                          onClick={() => yankMut.mutate(r.id)}
-                        >
-                          <Ban className="size-4" />
-                        </Button>
-                      )}
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="size-8 text-destructive"
+                              onClick={() => yankMut.mutate(r.id)}
+                            >
+                              <Ban className="size-4" />
+                            </Button>
+                          </>
+                        )}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -349,7 +351,6 @@ function UploadArtifactDialog({
                   <SelectItem value="dmg">DMG</SelectItem>
                   <SelectItem value="zip">ZIP</SelectItem>
                   <SelectItem value="pkg">PKG</SelectItem>
-                  <SelectItem value="delta">Delta</SelectItem>
                   <SelectItem value="exe">EXE</SelectItem>
                   <SelectItem value="msi">MSI</SelectItem>
                   <SelectItem value="appimage">AppImage</SelectItem>
@@ -381,18 +382,6 @@ function UploadArtifactDialog({
               </Select>
             </div>
           </div>
-          {artifactType === "delta" && (
-            <div className="space-y-2">
-              <Label htmlFor="artifact-metadata">Metadata (JSON)</Label>
-              <textarea
-                id="artifact-metadata"
-                className="flex min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                placeholder={`{\n  "fromVersion": "1.0.0",\n  "fromBuild": "42",\n  "fromManifestSha256": "...",\n  "fromArtifactSha256": "...",\n  "toVersion": "1.1.0",\n  "toBuild": "43",\n  "toManifestSha256": "...",\n  "toArtifactSha256": "...",\n  "format": "clave.delta/v1"\n}`}
-                value={metadata}
-                onChange={(e) => setMetadata(e.target.value)}
-              />
-            </div>
-          )}
         </div>
         <DialogFooter className="mt-4">
           <Button

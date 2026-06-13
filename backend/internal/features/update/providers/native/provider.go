@@ -40,7 +40,6 @@ func (p *Provider) Name() string {
 
 func (p *Provider) Capabilities(ctx context.Context) update.CapabilityMatrix {
 	return update.CapabilityMatrix{
-		DeltaUpdates:     update.CapabilityNative,
 		CodeSigning:      update.CapabilityNative,
 		StagedRollouts:   update.CapabilityNative,
 		MandatoryUpdates: update.CapabilityNative,
@@ -102,7 +101,6 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 	artifacts, _ := p.repo.ListArtifactsForRelease(ctx, release.ID)
 
 	var fullArtifact *update.ArtifactDTO
-	var deltaArtifact *update.ArtifactDTO
 
 	for _, a := range artifacts {
 		// Skip artifacts that don't match the requested arch/os.
@@ -130,32 +128,18 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 			dto.Signature = *a.Signature
 		}
 
-		if a.ArtifactType != "delta" && fullArtifact == nil {
+		if fullArtifact == nil {
 			copy1 := dto
 			fullArtifact = &copy1
-			continue
-		}
-
-		if a.ArtifactType == "delta" && deltaArtifact == nil {
-			if deltaApplies(md, req) {
-				copy2 := dto
-				deltaArtifact = &copy2
-			}
 		}
 	}
 
-	artifactDTOs := make([]update.ArtifactDTO, 0, 2)
+	artifactDTOs := make([]update.ArtifactDTO, 0, 1)
 	var downloadURL string
 
-	// Delta first, then full fallback — clients try delta, fall back to full.
-	if deltaArtifact != nil {
-		artifactDTOs = append(artifactDTOs, *deltaArtifact)
-	}
 	if fullArtifact != nil {
 		artifactDTOs = append(artifactDTOs, *fullArtifact)
 		downloadURL = fullArtifact.URL
-	} else if len(artifactDTOs) > 0 {
-		downloadURL = artifactDTOs[0].URL
 	}
 
 	var releaseNotes string
@@ -252,24 +236,4 @@ func parseArtifactMetadata(raw []byte) map[string]any {
 		return nil
 	}
 	return md
-}
-
-func deltaApplies(md map[string]any, req update.UpdateRequest) bool {
-	if md == nil {
-		return false
-	}
-	if req.CurrentManifestSHA256 == "" {
-		return false
-	}
-	fromManifest, _ := md["fromManifestSha256"].(string)
-	if !strings.EqualFold(fromManifest, req.CurrentManifestSHA256) {
-		return false
-	}
-	if req.CurrentArtifactSHA256 != "" {
-		fromArtifact, _ := md["fromArtifactSha256"].(string)
-		if fromArtifact != "" && !strings.EqualFold(fromArtifact, req.CurrentArtifactSHA256) {
-			return false
-		}
-	}
-	return true
 }

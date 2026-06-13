@@ -11,7 +11,6 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/features/audit"
 	"github.com/cheetahbyte/clave/internal/observability"
-	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/go-chi/chi/v5"
@@ -19,13 +18,12 @@ import (
 )
 
 type Handler struct {
-	svc       *Service
-	auditSvc  *audit.Service
-	publisher *events.Publisher
+	svc      *Service
+	auditSvc *audit.Service
 }
 
-func NewHandler(svc *Service, auditSvc *audit.Service, publisher *events.Publisher) *Handler {
-	return &Handler{svc: svc, auditSvc: auditSvc, publisher: publisher}
+func NewHandler(svc *Service, auditSvc *audit.Service) *Handler {
+	return &Handler{svc: svc, auditSvc: auditSvc}
 }
 
 func (h *Handler) audit(r *http.Request, action, resourceType string, resourceID *uuid.UUID) {
@@ -69,6 +67,13 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) AdminListProviders(w http.ResponseWriter, r *http.Request) {
 	providers := h.svc.ListProviders(r.Context())
 	helpers.WriteJSON(w, http.StatusOK, providers)
+}
+
+func (h *Handler) SparklePublicKey(w http.ResponseWriter, r *http.Request) {
+	pk := h.svc.SparklePublicEDKey()
+	helpers.WriteJSON(w, http.StatusOK, map[string]string{
+		"publicEDKey": pk,
+	})
 }
 
 func (h *Handler) AdminListProductUpdateConfigs(w http.ResponseWriter, r *http.Request) {
@@ -301,6 +306,27 @@ func (h *Handler) Changelog(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write(html)
+}
+
+func (h *Handler) SparkleFeed(w http.ResponseWriter, r *http.Request) {
+	productID, err := uuid.Parse(chi.URLParam(r, "productId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+
+	channel := chi.URLParam(r, "channel")
+	arch := strings.TrimSpace(r.URL.Query().Get("arch"))
+
+	appcast, err := h.svc.GenerateSparkleAppcast(r.Context(), productID, channel, arch, feedToken(r))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(appcast)
 }
 
 func (h *Handler) AdminListChannels(w http.ResponseWriter, r *http.Request) {
@@ -594,129 +620,6 @@ func (h *Handler) AdminDeleteRelease(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "release.deleted", "release", &releaseID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]string{"ok": "true"})
-}
-
-func (h *Handler) AdminGenerateDelta(w http.ResponseWriter, r *http.Request) {
-	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
-	if !ok {
-		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-
-	releaseID, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid release id"})
-		return
-	}
-
-	if err := h.verifyReleaseOwnership(r.Context(), orgID, releaseID); err != nil {
-		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "release not found"})
-		return
-	}
-
-	job, err := h.svc.GenerateDelta(r.Context(), orgID, releaseID, h.publisher)
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-
-	h.audit(r, "release.delta_generated", "release", &releaseID)
-	helpers.WriteJSON(w, http.StatusOK, map[string]any{
-		"jobId":  job.ID.String(),
-		"status": job.Status,
-	})
-}
-
-func (h *Handler) WorkerDownloadArtifact(w http.ResponseWriter, r *http.Request) {
-	artifactID, err := uuid.Parse(chi.URLParam(r, "artifactId"))
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	dl, err := h.svc.ResolveArtifactDownload(r.Context(), artifactID)
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	if dl.RedirectURL != "" {
-		http.Redirect(w, r, dl.RedirectURL, http.StatusFound)
-		return
-	}
-
-	defer dl.Body.Close()
-	w.Header().Set("Content-Type", dl.MimeType)
-	if dl.Size > 0 {
-		w.Header().Set("Content-Length", strconv.FormatInt(dl.Size, 10))
-	}
-	w.WriteHeader(http.StatusOK)
-	io.Copy(w, dl.Body)
-}
-
-func (h *Handler) WorkerGetDeltaJob(w http.ResponseWriter, r *http.Request) {
-	jobID, err := uuid.Parse(chi.URLParam(r, "jobId"))
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid job id"})
-		return
-	}
-	dto, err := h.svc.GetDeltaJobForWorker(r.Context(), jobID)
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
-		return
-	}
-	helpers.WriteJSON(w, http.StatusOK, dto)
-}
-
-func (h *Handler) WorkerStartDeltaJob(w http.ResponseWriter, r *http.Request) {
-	jobID, err := uuid.Parse(chi.URLParam(r, "jobId"))
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid job id"})
-		return
-	}
-	if err := h.svc.StartDeltaJob(r.Context(), jobID); err != nil {
-		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	helpers.WriteJSON(w, http.StatusOK, map[string]string{"status": "started"})
-}
-
-func (h *Handler) WorkerCompleteDeltaJob(w http.ResponseWriter, r *http.Request) {
-	jobID, err := uuid.Parse(chi.URLParam(r, "jobId"))
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid job id"})
-		return
-	}
-	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 512<<20))
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read delta data"})
-		return
-	}
-	if err := h.svc.CompleteDeltaJob(r.Context(), jobID, data); err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
-	helpers.WriteJSON(w, http.StatusOK, map[string]string{"status": "completed"})
-}
-
-func (h *Handler) WorkerFailDeltaJob(w http.ResponseWriter, r *http.Request) {
-	jobID, err := uuid.Parse(chi.URLParam(r, "jobId"))
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid job id"})
-		return
-	}
-	var body struct {
-		Error string `json:"error"`
-	}
-	_ = helpers.DecodeValidated(w, r, &body)
-	if body.Error == "" {
-		body.Error = "unknown error"
-	}
-	if err := h.svc.FailDeltaJob(r.Context(), jobID, body.Error); err != nil {
-		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	helpers.WriteJSON(w, http.StatusOK, map[string]string{"status": "failed"})
 }
 
 func (h *Handler) DownloadArtifact(w http.ResponseWriter, r *http.Request) {

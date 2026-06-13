@@ -1,10 +1,11 @@
 package update
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
-	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/cheetahbyte/clave/internal/shared/storage"
 	"github.com/google/uuid"
@@ -36,6 +36,37 @@ type Service struct {
 	publicAppURL   string
 	storagePath    string
 	defaultStorage storage.Backend
+	sparkleSigner  sparkleSigner
+}
+
+type sparkleSigner struct {
+	hasKeys    bool
+	publicKey  ed25519.PublicKey
+	privateKey ed25519.PrivateKey
+}
+
+func (s sparkleSigner) sign(data []byte) string {
+	if !s.hasKeys {
+		return ""
+	}
+	sig := ed25519.Sign(s.privateKey, data)
+	return base64.StdEncoding.EncodeToString(sig)
+}
+
+func (s sparkleSigner) publicEDKey() string {
+	if !s.hasKeys {
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(s.publicKey)
+}
+
+func newSparkleSigner(publicKey ed25519.PublicKey, privateKey ed25519.PrivateKey) sparkleSigner {
+	hasKeys := len(publicKey) == ed25519.PublicKeySize && len(privateKey) == ed25519.PrivateKeySize
+	return sparkleSigner{
+		hasKeys:    hasKeys,
+		publicKey:  publicKey,
+		privateKey: privateKey,
+	}
 }
 
 func NewService(
@@ -45,6 +76,8 @@ func NewService(
 	registry *ProviderRegistry,
 	publicAppURL string,
 	storagePath string,
+	sparklePublicKey ed25519.PublicKey,
+	sparklePrivateKey ed25519.PrivateKey,
 ) *Service {
 	return &Service{
 		licenses:       licenses,
@@ -54,6 +87,7 @@ func NewService(
 		publicAppURL:   publicAppURL,
 		storagePath:    storagePath,
 		defaultStorage: storage.NewLocal(storagePath),
+		sparkleSigner:  newSparkleSigner(sparklePublicKey, sparklePrivateKey),
 	}
 }
 
@@ -61,6 +95,19 @@ func NewService(
 // without an explicit storage config fall back to the server's default local
 // backend. The returned Kind identifies which backend was selected so it can
 // be recorded on uploaded artifacts.
+
+// SparkleSign returns the base64 Ed25519 signature of data using the configured
+// Sparkle keypair. Returns an empty string if no keypair is configured.
+func (svc *Service) SparkleSign(data []byte) string {
+	return svc.sparkleSigner.sign(data)
+}
+
+// SparklePublicEDKey returns the base64 Sparkle Ed25519 public key for
+// SUPublicEDKey, or an empty string if no keypair is configured.
+func (svc *Service) SparklePublicEDKey() string {
+	return svc.sparkleSigner.publicEDKey()
+}
+
 func (svc *Service) storageForProduct(ctx context.Context, productID uuid.UUID) (storage.Backend, storage.Kind, error) {
 	cfg, err := svc.repo.GetProductStorageConfig(ctx, productID)
 	if err != nil {
@@ -135,17 +182,15 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 	}
 
 	updateReq := UpdateRequest{
-		LicenseID:             licenseID.String(),
-		ProductID:             claims.ProductID,
-		Platform:              Platform(platform),
-		Channel:               channel,
-		CurrentVersion:        data.Version,
-		CurrentBuild:          data.Build,
-		Arch:                  data.Arch,
-		OSVersion:             data.OSVersion,
-		ClientID:              data.ClientID,
-		CurrentManifestSHA256: data.CurrentManifestSHA256,
-		CurrentArtifactSHA256: data.CurrentArtifactSHA256,
+		LicenseID:      licenseID.String(),
+		ProductID:      claims.ProductID,
+		Platform:       Platform(platform),
+		Channel:        channel,
+		CurrentVersion: data.Version,
+		CurrentBuild:   data.Build,
+		Arch:           data.Arch,
+		OSVersion:      data.OSVersion,
+		ClientID:       data.ClientID,
 	}
 
 	dbConfig, dbErr := svc.repo.GetProductUpdateConfig(ctx, claims.ProductID, platform, channel)
@@ -238,6 +283,7 @@ func (svc *Service) GetProductUpdateConfigs(ctx context.Context, productID uuid.
 
 	result := make([]ProductUpdateConfigDTO, len(rows))
 	for i, r := range rows {
+		config := MustParseProviderConfig(r.Config)
 		result[i] = ProductUpdateConfigDTO{
 			ID:          r.ID.String(),
 			ProductID:   r.ProductID.String(),
@@ -246,8 +292,8 @@ func (svc *Service) GetProductUpdateConfigs(ctx context.Context, productID uuid.
 			ChannelID:   r.ChannelID.String(),
 			ProviderKey: r.ProviderKey,
 			Enabled:     r.Enabled,
-			Config:      MustParseProviderConfig(r.Config),
-			FeedURL:     svc.FeedURL(r.ProviderKey, r.ProductID, r.Platform, r.ChannelName),
+			Config:      config,
+			FeedURL:     svc.FeedURL(r.ProviderKey, r.ProductID, r.Platform, r.ChannelName, config),
 		}
 	}
 	return result, nil
@@ -261,6 +307,14 @@ func (svc *Service) SaveProductUpdateConfig(ctx context.Context, orgID, productI
 	req.Platform = strings.ToLower(strings.TrimSpace(req.Platform))
 	req.Channel = strings.ToLower(strings.TrimSpace(req.Channel))
 
+	delivery := deliveryFromConfig(req.Config)
+	if !ValidDeliveryProtocol(delivery) {
+		return nil, fmt.Errorf("unsupported delivery protocol: %s", delivery)
+	}
+	if DeliveryProtocol(delivery) == DeliverySparkle && req.Platform != "macos" {
+		return nil, fmt.Errorf("sparkle delivery is only supported for macos")
+	}
+
 	ch, err := svc.repo.UpsertUpdateChannel(ctx, db.UpsertUpdateChannelParams{
 		OrganizationID: orgID,
 		ProductID:      productID,
@@ -271,8 +325,7 @@ func (svc *Service) SaveProductUpdateConfig(ctx context.Context, orgID, productI
 		return nil, err
 	}
 
-	normalizedConfig := map[string]any{"delivery": "clave_native"}
-
+	normalizedConfig := map[string]any{"delivery": delivery}
 	raw, _ := json.Marshal(normalizedConfig)
 
 	cfg, err := svc.repo.UpsertProductUpdateConfig(ctx, db.UpsertProductUpdateConfigParams{
@@ -288,6 +341,7 @@ func (svc *Service) SaveProductUpdateConfig(ctx context.Context, orgID, productI
 		return nil, err
 	}
 
+	config := MustParseProviderConfig(cfg.Config)
 	return &ProductUpdateConfigDTO{
 		ID:          cfg.ID.String(),
 		ProductID:   cfg.ProductID.String(),
@@ -296,8 +350,8 @@ func (svc *Service) SaveProductUpdateConfig(ctx context.Context, orgID, productI
 		ChannelID:   ch.ID.String(),
 		ProviderKey: cfg.ProviderKey,
 		Enabled:     cfg.Enabled,
-		Config:      MustParseProviderConfig(cfg.Config),
-		FeedURL:     svc.FeedURL(cfg.ProviderKey, cfg.ProductID, cfg.Platform, ch.Name),
+		Config:      config,
+		FeedURL:     svc.FeedURL(cfg.ProviderKey, cfg.ProductID, cfg.Platform, ch.Name, config),
 	}, nil
 }
 
@@ -306,9 +360,17 @@ func (svc *Service) DeleteProductUpdateConfig(ctx context.Context, orgID, config
 	return err
 }
 
-// FeedURL returns the public feed URL for the Clave Native JSON feed.
-func (svc *Service) FeedURL(providerKey string, productID uuid.UUID, platform, channel string) string {
-	return svc.nativeFeedURL(productID, platform, channel)
+// FeedURL returns the public feed URL based on the configured delivery protocol.
+func (svc *Service) FeedURL(providerKey string, productID uuid.UUID, platform, channel string, config map[string]any) string {
+	switch DeliveryProtocol(deliveryFromConfig(config)) {
+	case DeliverySparkle:
+		if platform == "macos" {
+			return svc.sparkleFeedURL(productID, channel)
+		}
+		fallthrough
+	default:
+		return svc.nativeFeedURL(productID, platform, channel)
+	}
 }
 
 func (svc *Service) nativeFeedURL(productID uuid.UUID, platform, channel string) string {
@@ -317,6 +379,25 @@ func (svc *Service) nativeFeedURL(productID uuid.UUID, platform, channel string)
 		return path
 	}
 	return strings.TrimRight(svc.publicAppURL, "/") + path
+}
+
+func (svc *Service) sparkleFeedURL(productID uuid.UUID, channel string) string {
+	path := fmt.Sprintf("/api/v1/updates/products/%s/macos/%s/appcast.xml", productID, channel)
+	if svc.publicAppURL == "" {
+		return path
+	}
+	return strings.TrimRight(svc.publicAppURL, "/") + path
+}
+
+func deliveryFromConfig(config map[string]any) string {
+	if config == nil {
+		return string(DeliveryClaveNative)
+	}
+	delivery, _ := config["delivery"].(string)
+	if delivery == "" {
+		return string(DeliveryClaveNative)
+	}
+	return delivery
 }
 
 func (svc *Service) ChangelogURL(releaseID uuid.UUID) string {
@@ -459,6 +540,64 @@ func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID,
 	}
 
 	return GenerateNativeFeed(product, platform, channel, inputs)
+}
+
+func (svc *Service) GenerateSparkleAppcast(ctx context.Context, productID uuid.UUID, channel, arch, token string) ([]byte, error) {
+	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
+		ProductID: productID,
+		Name:      channel,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := svc.authorizeChannel(ch, productID, token); err != nil {
+		return nil, err
+	}
+
+	releases, err := svc.repo.ListPublishedReleasesForFeed(ctx, productID, "macos", ch.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	inputs := make([]SparkleFeedInput, len(releases))
+	releaseIDs := make([]uuid.UUID, len(releases))
+	for i, rel := range releases {
+		releaseIDs[i] = rel.ID
+	}
+
+	allArtifacts, _ := svc.repo.ListArtifactsForReleases(ctx, releaseIDs)
+	artifactMap := make(map[uuid.UUID][]db.UpdateArtifact)
+	for _, a := range allArtifacts {
+		artifactMap[a.ReleaseID] = append(artifactMap[a.ReleaseID], a)
+	}
+
+	changelogRows, _ := svc.repo.GetChangelogsByReleaseIDs(ctx, releaseIDs)
+	changelogBodyByRelease := make(map[uuid.UUID]string)
+	for _, cl := range changelogRows {
+		changelogBodyByRelease[cl.ReleaseID] = cl.ChangelogBody
+	}
+
+	for i, rel := range releases {
+		artifacts := artifactMap[rel.ID]
+		for j := range artifacts {
+			artifacts[j].Url = appendDownloadToken(artifacts[j].Url, token)
+		}
+		policy, _ := svc.repo.GetReleasePolicy(ctx, rel.ID)
+		changelogBody := changelogBodyByRelease[rel.ID]
+		changelogURL := ""
+		if rel.ChangelogID.Valid {
+			changelogURL = svc.ChangelogURL(rel.ID)
+		}
+		inputs[i] = SparkleFeedInput{Release: rel, Artifacts: artifacts, Policy: policy, ChangelogBody: changelogBody, ChangelogURL: changelogURL}
+	}
+
+	product, err := svc.licenses.GetProductByID(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+
+	return GenerateSparkleAppcast(product, channel, inputs, arch)
 }
 
 func (svc *Service) ListReleases(ctx context.Context, orgID uuid.UUID, productID *uuid.UUID, limit, offset int32) ([]ReleaseDTO, error) {
@@ -650,15 +789,21 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 	storedFilename := artifactID.String() + ext
 	storageKey := artifactID.String() + "/" + storedFilename
 
-	// Hash the stream as it is written to the backend.
-	hasher := sha256.New()
-	tee := io.TeeReader(reader, hasher)
-
-	sizeBytes, err := backend.Put(ctx, storageKey, tee)
+	// Read the entire artifact into memory so we can both hash and sign it.
+	data, err := io.ReadAll(reader)
 	if err != nil {
-		return nil, fmt.Errorf("store artifact: %w", err)
+		return nil, fmt.Errorf("read artifact: %w", err)
 	}
-	checksum := fmt.Sprintf("%x", hasher.Sum(nil))
+
+	hash := sha256.Sum256(data)
+	checksum := fmt.Sprintf("%x", hash)
+	sizeBytes := int64(len(data))
+
+	// Sign the artifact for Sparkle if keys are configured.
+	var signature *string
+	if sig := svc.SparkleSign(data); sig != "" {
+		signature = &sig
+	}
 
 	downloadURL := svc.artifactDownloadURL(artifactID)
 	mimeType := mimeTypeForArtifact(artifactType)
@@ -676,6 +821,7 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 		Url:                  downloadURL,
 		SizeBytes:            &sizeBytes,
 		ChecksumSha256:       &checksum,
+		Signature:            signature,
 		Metadata:             md,
 		Filename:             &storedFilename,
 		MimeType:             &mimeType,
@@ -684,8 +830,13 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 		StorageKey:           &storageKey,
 	})
 	if err != nil {
-		_ = backend.Delete(ctx, storageKey)
 		return nil, fmt.Errorf("insert artifact: %w", err)
+	}
+
+	// Upload to storage after DB insert so we only store what was committed.
+	if _, putErr := backend.Put(ctx, storageKey, bytes.NewReader(data)); putErr != nil {
+		_ = backend.Delete(ctx, storageKey)
+		return nil, fmt.Errorf("store artifact: %w", putErr)
 	}
 
 	return &ArtifactDTOFull{
@@ -867,8 +1018,6 @@ func mimeTypeForArtifact(artifactType string) string {
 		return "application/zip"
 	case "pkg":
 		return "application/x-apple-installer"
-	case "delta":
-		return "application/zip"
 	case "exe":
 		return "application/x-msdownload"
 	case "msi":
@@ -892,322 +1041,4 @@ func (svc *Service) artifactDownloadURL(artifactID uuid.UUID) string {
 		return fmt.Sprintf("/api/v1/updates/artifacts/%s/download", artifactID)
 	}
 	return fmt.Sprintf("%s/api/v1/updates/artifacts/%s/download", base, artifactID)
-}
-
-func (svc *Service) workerArtifactDownloadURL(artifactID uuid.UUID) string {
-	base := svc.publicAppURL
-	if base == "" {
-		base = ""
-	}
-	base = strings.TrimRight(base, "/")
-	if base == "" {
-		return fmt.Sprintf("/api/v1/worker/artifacts/%s/download", artifactID)
-	}
-	return fmt.Sprintf("%s/api/v1/worker/artifacts/%s/download", base, artifactID)
-}
-
-func (svc *Service) GenerateDelta(ctx context.Context, orgID, releaseID uuid.UUID, publisher interface {
-	PublishDeltaGenerate(context.Context, events.DeltaGenerateEvent) error
-}) (*db.UpdateDeltaJob, error) {
-	release, err := svc.repo.GetUpdateRelease(ctx, releaseID)
-	if err != nil {
-		return nil, fmt.Errorf("release not found: %w", err)
-	}
-	if release.OrganizationID != orgID {
-		return nil, fmt.Errorf("release not found")
-	}
-
-	sourceRelease, err := svc.repo.FindPreviousPublishedRelease(ctx, db.FindPreviousPublishedReleaseParams{
-		ProductID: release.ProductID,
-		Platform:  release.Platform,
-		ChannelID: release.ChannelID,
-		ID:        releaseID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("no previous published release found for this product/platform/channel")
-	}
-
-	artifacts, err := svc.repo.ListArtifactsForRelease(ctx, releaseID)
-	if err != nil || len(artifacts) == 0 {
-		return nil, fmt.Errorf("no artifacts found for target release")
-	}
-	sourceArtifacts, err := svc.repo.ListArtifactsForRelease(ctx, sourceRelease.ID)
-	if err != nil || len(sourceArtifacts) == 0 {
-		return nil, fmt.Errorf("no artifacts found for source release")
-	}
-
-	var targetArtifact, sourceArtifact *db.UpdateArtifact
-	for i := range artifacts {
-		a := &artifacts[i]
-		if a.ArtifactType == "delta" {
-			continue
-		}
-		if targetArtifact == nil {
-			targetArtifact = a
-		}
-	}
-	for i := range sourceArtifacts {
-		a := &sourceArtifacts[i]
-		if a.ArtifactType == "delta" {
-			continue
-		}
-		if sourceArtifact == nil {
-			sourceArtifact = a
-		}
-	}
-	if targetArtifact == nil || sourceArtifact == nil {
-		return nil, fmt.Errorf("could not find full artifacts in both releases")
-	}
-
-	pgSourceArtifact := pgtype.UUID{Bytes: sourceArtifact.ID, Valid: true}
-	pgTargetArtifact := pgtype.UUID{Bytes: targetArtifact.ID, Valid: true}
-
-	job, err := svc.repo.InsertDeltaJob(ctx, db.InsertDeltaJobParams{
-		OrganizationID:   orgID,
-		ReleaseID:        releaseID,
-		SourceReleaseID:  sourceRelease.ID,
-		SourceArtifactID: pgSourceArtifact,
-		TargetArtifactID: pgTargetArtifact,
-		Status:           "queued",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create delta job: %w", err)
-	}
-
-	if publisher != nil {
-		if err := publisher.PublishDeltaGenerate(ctx, events.DeltaGenerateEvent{
-			Type:             "delta.generate",
-			JobID:            job.ID.String(),
-			OrganizationID:   orgID.String(),
-			ReleaseID:        releaseID.String(),
-			SourceReleaseID:  sourceRelease.ID.String(),
-			SourceArtifactID: sourceArtifact.ID.String(),
-			TargetArtifactID: targetArtifact.ID.String(),
-		}); err != nil {
-			errMsg := err.Error()
-			completedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
-			svc.repo.UpdateDeltaJobStatus(ctx, db.UpdateDeltaJobStatusParams{
-				ID:           job.ID,
-				Status:       "failed",
-				ErrorMessage: &errMsg,
-				CompletedAt:  completedAt,
-			})
-			return nil, fmt.Errorf("publish delta job: %w", err)
-		}
-	}
-
-	return &job, nil
-}
-
-type DeltaJobDTO struct {
-	ID                string `json:"id"`
-	Status            string `json:"status"`
-	SourceArtifactURL string `json:"sourceArtifactUrl"`
-	TargetArtifactURL string `json:"targetArtifactUrl"`
-	SourceArtifactSHA string `json:"sourceArtifactSha256"`
-	TargetArtifactSHA string `json:"targetArtifactSha256"`
-	SourceVersion     string `json:"sourceVersion"`
-	SourceBuild       string `json:"sourceBuild,omitempty"`
-	TargetVersion     string `json:"targetVersion"`
-	TargetBuild       string `json:"targetBuild,omitempty"`
-	Os                string `json:"os"`
-	Arch              string `json:"arch"`
-}
-
-func (svc *Service) GetDeltaJobForWorker(ctx context.Context, jobID uuid.UUID) (*DeltaJobDTO, error) {
-	job, err := svc.repo.GetDeltaJob(ctx, jobID)
-	if err != nil {
-		return nil, fmt.Errorf("job not found: %w", err)
-	}
-
-	sourceArtifact, err := svc.repo.GetArtifact(ctx, uuid.UUID(job.SourceArtifactID.Bytes))
-	if err != nil {
-		return nil, fmt.Errorf("source artifact not found: %w", err)
-	}
-	targetArtifact, err := svc.repo.GetArtifact(ctx, uuid.UUID(job.TargetArtifactID.Bytes))
-	if err != nil {
-		return nil, fmt.Errorf("target artifact not found: %w", err)
-	}
-
-	targetRelease, err := svc.repo.GetUpdateRelease(ctx, job.ReleaseID)
-	if err != nil {
-		return nil, fmt.Errorf("target release not found: %w", err)
-	}
-	sourceRelease, err := svc.repo.GetUpdateRelease(ctx, job.SourceReleaseID)
-	if err != nil {
-		return nil, fmt.Errorf("source release not found: %w", err)
-	}
-
-	dto := &DeltaJobDTO{
-		ID:                job.ID.String(),
-		Status:            job.Status,
-		SourceArtifactURL: svc.workerArtifactDownloadURL(sourceArtifact.ID),
-		TargetArtifactURL: svc.workerArtifactDownloadURL(targetArtifact.ID),
-		SourceVersion:     sourceRelease.Version,
-		TargetVersion:     targetRelease.Version,
-		Os:                targetArtifact.Os,
-		Arch:              targetArtifact.Arch,
-	}
-	if sourceArtifact.ChecksumSha256 != nil {
-		dto.SourceArtifactSHA = *sourceArtifact.ChecksumSha256
-	}
-	if targetArtifact.ChecksumSha256 != nil {
-		dto.TargetArtifactSHA = *targetArtifact.ChecksumSha256
-	}
-	if sourceRelease.BuildNumber != nil {
-		dto.SourceBuild = *sourceRelease.BuildNumber
-	}
-	if targetRelease.BuildNumber != nil {
-		dto.TargetBuild = *targetRelease.BuildNumber
-	}
-
-	return dto, nil
-}
-
-func (svc *Service) StartDeltaJob(ctx context.Context, jobID uuid.UUID) error {
-	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
-	_, err := svc.repo.UpdateDeltaJobStatus(ctx, db.UpdateDeltaJobStatusParams{
-		ID:        jobID,
-		Status:    "running",
-		StartedAt: now,
-	})
-	return err
-}
-
-func (svc *Service) CompleteDeltaJob(ctx context.Context, jobID uuid.UUID, deltaData []byte) error {
-	job, err := svc.repo.GetDeltaJob(ctx, jobID)
-	if err != nil {
-		return fmt.Errorf("job not found: %w", err)
-	}
-
-	targetArtifact, err := svc.repo.GetArtifact(ctx, uuid.UUID(job.TargetArtifactID.Bytes))
-	if err != nil {
-		return fmt.Errorf("target artifact not found: %w", err)
-	}
-	sourceArtifact, err := svc.repo.GetArtifact(ctx, uuid.UUID(job.SourceArtifactID.Bytes))
-	if err != nil {
-		return fmt.Errorf("source artifact not found: %w", err)
-	}
-
-	targetRelease, err := svc.repo.GetUpdateRelease(ctx, job.ReleaseID)
-	if err != nil {
-		return fmt.Errorf("release not found: %w", err)
-	}
-
-	backend, kind, err := svc.storageForProduct(ctx, targetRelease.ProductID)
-	if err != nil {
-		return fmt.Errorf("storage backend: %w", err)
-	}
-
-	artifactID := uuid.New()
-	storedFilename := artifactID.String() + ".delta.zip"
-	storageKey := artifactID.String() + "/" + storedFilename
-
-	deltaSHA := sha256.Sum256(deltaData)
-	deltaChecksum := fmt.Sprintf("%x", deltaSHA)
-	sizeBytes, err := backend.Put(ctx, storageKey, bytes.NewReader(deltaData))
-	if err != nil {
-		return fmt.Errorf("store delta: %w", err)
-	}
-
-	downloadURL := svc.artifactDownloadURL(artifactID)
-	backendName := string(kind)
-
-	sourceSHA := ""
-	if sourceArtifact.ChecksumSha256 != nil {
-		sourceSHA = *sourceArtifact.ChecksumSha256
-	}
-	targetSHA := ""
-	if targetArtifact.ChecksumSha256 != nil {
-		targetSHA = *targetArtifact.ChecksumSha256
-	}
-
-	sourceRelease, _ := svc.repo.GetUpdateRelease(ctx, job.SourceReleaseID)
-
-	var fromManifestSHA, toManifestSHA string
-	if zr, zerr := zip.NewReader(bytes.NewReader(deltaData), int64(len(deltaData))); zerr == nil {
-		for _, zf := range zr.File {
-			if zf.Name != "delta.json" {
-				continue
-			}
-			rc, rerr := zf.Open()
-			if rerr != nil {
-				break
-			}
-			var dm struct {
-				From struct {
-					ManifestSHA256 string `json:"manifestSha256"`
-				} `json:"from"`
-				To struct {
-					ManifestSHA256 string `json:"manifestSha256"`
-				} `json:"to"`
-			}
-			if json.NewDecoder(rc).Decode(&dm) == nil {
-				fromManifestSHA = dm.From.ManifestSHA256
-				toManifestSHA = dm.To.ManifestSHA256
-			}
-			rc.Close()
-			break
-		}
-	}
-
-	md := map[string]any{
-		"format":             "clave.delta/v1",
-		"fromVersion":        sourceRelease.Version,
-		"fromArtifactSha256": sourceSHA,
-		"fromManifestSha256": fromManifestSHA,
-		"toVersion":          targetRelease.Version,
-		"toArtifactSha256":   targetSHA,
-		"toManifestSha256":   toManifestSHA,
-	}
-	if sourceRelease.BuildNumber != nil {
-		md["fromBuild"] = *sourceRelease.BuildNumber
-	}
-	if targetRelease.BuildNumber != nil {
-		md["toBuild"] = *targetRelease.BuildNumber
-	}
-	mdJSON, _ := json.Marshal(md)
-
-	mime := "application/zip"
-	_, err = svc.repo.InsertUpdateArtifact(ctx, db.InsertUpdateArtifactParams{
-		ID:                   artifactID,
-		ReleaseID:            job.ReleaseID,
-		ArtifactType:         "delta",
-		Os:                   targetArtifact.Os,
-		Arch:                 targetArtifact.Arch,
-		Url:                  downloadURL,
-		SizeBytes:            &sizeBytes,
-		ChecksumSha256:       &deltaChecksum,
-		Metadata:             mdJSON,
-		Filename:             &storedFilename,
-		MimeType:             &mime,
-		MinimumSystemVersion: nil,
-		StorageBackend:       &backendName,
-		StorageKey:           &storageKey,
-	})
-	if err != nil {
-		_ = backend.Delete(ctx, storageKey)
-		return fmt.Errorf("insert delta artifact: %w", err)
-	}
-
-	pgDelta := pgtype.UUID{Bytes: artifactID, Valid: true}
-	completedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
-	_, err = svc.repo.UpdateDeltaJobStatus(ctx, db.UpdateDeltaJobStatusParams{
-		ID:              jobID,
-		Status:          "succeeded",
-		DeltaArtifactID: pgDelta,
-		CompletedAt:     completedAt,
-	})
-	return err
-}
-
-func (svc *Service) FailDeltaJob(ctx context.Context, jobID uuid.UUID, errorMsg string) error {
-	completedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
-	_, err := svc.repo.UpdateDeltaJobStatus(ctx, db.UpdateDeltaJobStatusParams{
-		ID:           jobID,
-		Status:       "failed",
-		ErrorMessage: &errorMsg,
-		CompletedAt:  completedAt,
-	})
-	return err
 }

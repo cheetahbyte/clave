@@ -10,8 +10,6 @@ type CheckRequest struct {
 	Arch                    string `json:"arch,omitempty"`
 	OSVersion               string `json:"osVersion,omitempty"`
 	ClientID                string `json:"clientId,omitempty"`
-	CurrentManifestSHA256   string `json:"currentManifestSha256,omitempty"`
-	CurrentArtifactSHA256   string `json:"currentArtifactSha256,omitempty"`
 }
 
 type CheckResponse struct {

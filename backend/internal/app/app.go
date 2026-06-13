@@ -103,7 +103,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 		native.New(updateRepo),
 	)
 
-	updateSvc := update.NewService(licenseSvc, signer, updateRepo, updateRegistry, cfg.PublicAppURL, cfg.UpdateArtifactStoragePath)
+	updateSvc := update.NewService(licenseSvc, signer, updateRepo, updateRegistry, cfg.PublicAppURL, cfg.UpdateArtifactStoragePath, cfg.SparkleEd25519PublicKey, cfg.SparkleEd25519PrivateKey)
 	selfServiceRepo := selfservice.NewRepository(q)
 	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer)
 
@@ -125,7 +125,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	licenseH := license.NewHandler(licenseSvc, auditSvc, publisher, appURL)
 	activationH := activation.NewHandler(activationSvc)
 	validationH := validation.NewHandler(validationSvc)
-	updateH := update.NewHandler(updateSvc, auditSvc, publisher)
+	updateH := update.NewHandler(updateSvc, auditSvc)
 	selfserviceH := selfservice.NewHandler(selfserviceSvc, mailer, appURL, cfg.SelfServiceReturnToken, cfg.Dev)
 
 	sessionManager := scs.New()
@@ -173,7 +173,6 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	ssAuth := middleware.RequireSelfServiceAuth(cfg.LicenseJWTPublicKey)
 	adminAuth := middleware.RequireAdmin(sessionManager)
 	adminVerified := middleware.RequireAdminVerified(sessionManager)
-	workerAuth := middleware.RequireWorkerToken(cfg.WorkerToken)
 
 	r := chi.NewRouter()
 	api.Register(r, api.Config{
@@ -226,6 +225,8 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 			DeleteConfig:  updateH.AdminDeleteProductUpdateConfig,
 
 			NativeFeed:                  updateH.NativeFeed,
+			SparkleFeed:                 updateH.SparkleFeed,
+			SparklePublicKey:            updateH.SparklePublicKey,
 			Changelog:                   updateH.Changelog,
 			ListChannels:                updateH.AdminListChannels,
 			CreateChannel:               updateH.AdminCreateChannel,
@@ -234,7 +235,6 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 			ListReleases:                updateH.AdminListReleases,
 			CreateRelease:               updateH.AdminCreateRelease,
 			UploadArtifact:              updateH.AdminUploadArtifact,
-			GenerateDelta:               updateH.AdminGenerateDelta,
 			PublishRelease:              updateH.AdminPublishRelease,
 			YankRelease:                 updateH.AdminYankRelease,
 			DeleteRelease:               updateH.AdminDeleteRelease,
@@ -247,11 +247,6 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 			GetStorageConfig:            updateH.AdminGetStorageConfig,
 			SaveStorageConfig:           updateH.AdminSaveStorageConfig,
 			TestStorageConfig:           updateH.AdminTestStorageConfig,
-			WorkerGetDeltaJob:           updateH.WorkerGetDeltaJob,
-			WorkerStartDeltaJob:         updateH.WorkerStartDeltaJob,
-			WorkerCompleteDeltaJob:      updateH.WorkerCompleteDeltaJob,
-			WorkerFailDeltaJob:          updateH.WorkerFailDeltaJob,
-			WorkerDownloadArtifact:      updateH.WorkerDownloadArtifact,
 		},
 		Organization: api.OrganizationHandlers{
 			List:          orgH.List,
@@ -273,7 +268,6 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 			CSRFAuth:     csrfMW,
 			CSRFPlain:    csrfPlaintext,
 			ForceHTTPS:   middleware.SecureTransport(cfg.IsProduction(), cfg.TrustProxyHeaders),
-			WorkerAuth:   workerAuth,
 			Verbose:      cfg.VerboseLogging,
 		},
 	})
