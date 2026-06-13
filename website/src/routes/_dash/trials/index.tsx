@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { listAdminTrials, getAdminOverview } from "@/features/admin/api";
+import { useCurrentProduct } from "@/features/admin/product-context";
 import type { AdminLicenseItem } from "@/features/admin/api";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
@@ -57,8 +58,9 @@ function fmtDate(d: string | null): string {
 function TrialsPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
+  const { product } = useCurrentProduct();
 
-  const params = { q, status };
+  const params = { q, status, productId: product?.id };
 
   const { data: trials, isLoading } = useQuery({
     queryKey: ["adminTrials", params],
@@ -66,8 +68,8 @@ function TrialsPage() {
   });
 
   const { data: overview } = useQuery({
-    queryKey: ["adminOverview"],
-    queryFn: getAdminOverview,
+    queryKey: ["adminOverview", product?.id],
+    queryFn: () => getAdminOverview(product?.id),
   });
 
   const rows = trials ?? [];

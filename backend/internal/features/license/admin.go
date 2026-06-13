@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (svc *Service) AdminOverview(ctx context.Context, orgID uuid.UUID) (*AdminOverview, error) {
-	stats, err := svc.repo.GetAdminOverviewStatsByOrganization(ctx, orgID)
+func (svc *Service) AdminOverview(ctx context.Context, orgID uuid.UUID, productID pgtype.UUID) (*AdminOverview, error) {
+	stats, err := svc.repo.GetAdminOverviewStatsByOrganization(ctx, orgID, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -40,12 +40,12 @@ func (svc *Service) AdminOverview(ctx context.Context, orgID uuid.UUID) (*AdminO
 	}, nil
 }
 
-func (svc *Service) AdminTimeseries(ctx context.Context, orgID uuid.UUID, days int) ([]AdminTimeseriesPoint, error) {
+func (svc *Service) AdminTimeseries(ctx context.Context, orgID uuid.UUID, days int, productID pgtype.UUID) ([]AdminTimeseriesPoint, error) {
 	if days < 1 || days > 365 {
 		days = 30
 	}
 
-	rows, err := svc.repo.GetAdminTimeseriesByOrganization(ctx, orgID, int32(days))
+	rows, err := svc.repo.GetAdminTimeseriesByOrganization(ctx, orgID, int32(days), productID)
 	if err != nil {
 		return nil, err
 	}
@@ -66,12 +66,12 @@ func (svc *Service) AdminTimeseries(ctx context.Context, orgID uuid.UUID, days i
 	return points, nil
 }
 
-func (svc *Service) AdminListTrials(ctx context.Context, orgID uuid.UUID, q, status string) ([]AdminLicenseItem, error) {
+func (svc *Service) AdminListTrials(ctx context.Context, orgID uuid.UUID, q, status string, productID pgtype.UUID) ([]AdminLicenseItem, error) {
 	if status != "active" && status != "expired" {
 		status = "all"
 	}
 
-	rows, err := svc.repo.ListAdminTrialsByOrganization(ctx, orgID, strings.TrimSpace(q), status)
+	rows, err := svc.repo.ListAdminTrialsByOrganization(ctx, orgID, strings.TrimSpace(q), status, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -217,4 +217,90 @@ func (svc *Service) AdminDeleteProduct(ctx context.Context, orgID, id uuid.UUID)
 		return err
 	}
 	return nil
+}
+
+func (svc *Service) AdminListDevices(ctx context.Context, orgID uuid.UUID, q string, productIDStr string, status string, page, pageSize int) (*AdminDeviceListResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 50
+	}
+	if status != "seen" && status != "never_seen" {
+		status = "all"
+	}
+	maxPage := math.MaxInt32 / pageSize
+	if page > maxPage {
+		page = maxPage
+	}
+	offset := (page - 1) * pageSize
+
+	var productID pgtype.UUID
+	if productIDStr != "" {
+		if pid, err := uuid.Parse(productIDStr); err == nil {
+			productID = pgtype.UUID{Bytes: [16]byte(pid), Valid: true}
+		}
+	}
+
+	var qp *string
+	if q = strings.TrimSpace(q); q != "" {
+		qp = &q
+	}
+
+	var sp *string
+	if status != "all" {
+		sp = &status
+	}
+
+	countParams := db.CountAdminDevicesByOrganizationParams{
+		OrganizationID: orgID,
+		Q:              qp,
+		ProductID:      productID,
+		Status:         sp,
+	}
+	total, err := svc.repo.CountAdminDevices(ctx, countParams)
+	if err != nil {
+		return nil, err
+	}
+
+	listParams := db.ListAdminDevicesByOrganizationParams{
+		OrganizationID: orgID,
+		Q:              qp,
+		ProductID:      productID,
+		Status:         sp,
+		Limit:          int32(pageSize),
+		Offset:         int32(offset),
+	}
+	rows, err := svc.repo.ListAdminDevices(ctx, listParams)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]AdminDeviceItem, len(rows))
+	for i, r := range rows {
+		items[i] = AdminDeviceItem{
+			DeviceID:      r.DeviceID.String(),
+			Hostname:      r.Hostname,
+			ActivationID:  r.ActivationID.String(),
+			ActivatedAt:   timePtr(r.ActivatedAt),
+			CheckedInAt:   timePtr(r.CheckedInAt),
+			LicenseID:     r.LicenseID.String(),
+			CustomerEmail: r.CustomerEmail,
+			LicenseActive: r.LicenseActive,
+			ProductID:     r.ProductID.String(),
+			ProductName:   r.ProductName,
+		}
+	}
+
+	return &AdminDeviceListResponse{
+		Items: items, Total: total, Page: page, PageSize: pageSize,
+	}, nil
+}
+
+func (svc *Service) AdminDeleteDevice(ctx context.Context, orgID, deviceID uuid.UUID) error {
+	_, err := svc.repo.DeleteAdminDevice(ctx, db.DeleteAdminDeviceByOrganizationParams{
+		ID:             deviceID,
+		OrganizationID: orgID,
+	})
+	return err
 }

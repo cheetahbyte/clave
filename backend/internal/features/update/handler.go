@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/cheetahbyte/clave/internal/features/audit"
+	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/go-chi/chi/v5"
@@ -53,9 +54,11 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.svc.Check(r.Context(), data)
 	if err != nil {
+		observability.CountUpdateCheck(r.Context(), "failure")
 		helpers.WriteError(w, r, err)
 		return
 	}
+	observability.CountUpdateCheck(r.Context(), "success")
 
 	helpers.WriteJSON(w, http.StatusOK, result)
 }
@@ -611,20 +614,25 @@ func (h *Handler) AdminDeleteRelease(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DownloadArtifact(w http.ResponseWriter, r *http.Request) {
 	artifactID, err := uuid.Parse(chi.URLParam(r, "artifactId"))
 	if err != nil {
+		observability.CountArtifactDownload(r.Context(), "failure")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	if err := h.svc.AuthorizeArtifactAccess(r.Context(), artifactID, feedToken(r)); err != nil {
+		observability.CountArtifactDownload(r.Context(), "failure")
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}
 
 	dl, err := h.svc.ResolveArtifactDownload(r.Context(), artifactID)
 	if err != nil {
+		observability.CountArtifactDownload(r.Context(), "failure")
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+
+	observability.CountArtifactDownload(r.Context(), "success")
 
 	// S3-backed artifacts redirect to a short-lived presigned URL so the
 	// transfer goes client->storage directly instead of through the app.

@@ -339,8 +339,9 @@ export interface CreateLicenseResponse {
   isTrial: boolean;
 }
 
-export function getAdminOverview(): Promise<AdminOverview> {
-  return adminFetch<AdminOverview>("/api/v1/admin/overview");
+export function getAdminOverview(productId?: string): Promise<AdminOverview> {
+  const qs = productId ? `?productId=${encodeURIComponent(productId)}` : "";
+  return adminFetch<AdminOverview>(`/api/v1/admin/overview${qs}`);
 }
 
 export interface TimeseriesPoint {
@@ -350,19 +351,23 @@ export interface TimeseriesPoint {
   activations: number;
 }
 
-export function getAdminTimeseries(days = 30): Promise<TimeseriesPoint[]> {
-  return adminFetch<TimeseriesPoint[]>(`/api/v1/admin/stats/timeseries?days=${days}`);
+export function getAdminTimeseries(days = 30, productId?: string): Promise<TimeseriesPoint[]> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (productId) params.set("productId", productId);
+  return adminFetch<TimeseriesPoint[]>(`/api/v1/admin/stats/timeseries?${params.toString()}`);
 }
 
 export interface ListTrialsParams {
   q?: string;
   status?: string;
+  productId?: string;
 }
 
 export function listAdminTrials(params?: ListTrialsParams): Promise<AdminLicenseItem[]> {
   const searchParams = new URLSearchParams();
   if (params?.q) searchParams.set("q", params.q);
   if (params?.status) searchParams.set("status", params.status);
+  if (params?.productId) searchParams.set("productId", params.productId);
   const qs = searchParams.toString();
   return adminFetch<AdminLicenseItem[]>(`/api/v1/admin/trials${qs ? `?${qs}` : ""}`);
 }
@@ -693,4 +698,49 @@ export function attachReleaseChangelog(
       body: JSON.stringify({ changelogId }),
     },
   );
+}
+
+export interface AdminDeviceItem {
+  deviceId: string;
+  hostname: string | null;
+  activationId: string;
+  activatedAt: string | null;
+  checkedInAt: string | null;
+  licenseId: string;
+  customerEmail: string;
+  licenseActive: boolean;
+  productId: string;
+  productName: string;
+}
+
+export interface AdminDeviceListResponse {
+  items: AdminDeviceItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ListAdminDevicesParams {
+  q?: string;
+  productId?: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export function listAdminDevices(params?: ListAdminDevicesParams): Promise<AdminDeviceListResponse> {
+  const sp = new URLSearchParams();
+  if (params?.page) sp.set("page", String(params.page));
+  if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+  if (params?.q) sp.set("q", params.q);
+  if (params?.productId) sp.set("productId", params.productId);
+  if (params?.status) sp.set("status", params.status);
+  const qs = sp.toString();
+  return adminFetch<AdminDeviceListResponse>(`/api/v1/admin/devices${qs ? `?${qs}` : ""}`);
+}
+
+export function deleteAdminDevice(deviceId: string): Promise<{ ok: boolean }> {
+  return adminFetch<{ ok: boolean }>(`/api/v1/admin/devices/${encodeURIComponent(deviceId)}`, {
+    method: "DELETE",
+  });
 }

@@ -73,22 +73,20 @@ function ChangelogsPage() {
   });
 
   return (
-    <AdminShell
-      title="Changelogs"
-      actions={
-        product ? (
+    <AdminShell title="Changelogs">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Changelogs</h1>
+          <p className="text-muted-foreground text-sm">
+            Reusable changelog entries that can be attached to releases. Content is
+            written in Markdown and rendered for Sparkle and Clave Native clients.
+          </p>
+        </div>
+        {product ? (
           <Button onClick={() => setNewOpen(true)}>
             <Plus className="size-4" /> New changelog
           </Button>
-        ) : null
-      }
-    >
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Changelogs</h1>
-        <p className="text-muted-foreground text-sm">
-          Reusable changelog entries that can be attached to releases. Content is
-          written in Markdown and rendered for Sparkle and Clave Native clients.
-        </p>
+        ) : null}
       </div>
 
       {isLoading ? (

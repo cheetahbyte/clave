@@ -1,5 +1,5 @@
 import * as React from "react"
-import { FlaskConical, GitBranch, Key, LayoutDashboard, Radio, Rocket, ScrollText, Settings, Users } from "lucide-react"
+import { FlaskConical, GitBranch, Key, LayoutDashboard, Monitor, Radio, Rocket, ScrollText, Settings, Users } from "lucide-react"
 import { Link, useLocation, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { useQuery } from "@tanstack/react-query"
@@ -58,6 +58,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <Link to="/dashboard"><LayoutDashboard /><span>Dashboard</span></Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Licenses</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive("/licenses")} tooltip="Licenses">
                   <Link to="/licenses"><Key /><span>Licenses</span></Link>
@@ -66,6 +74,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive("/trials")} tooltip="Trials">
                   <Link to="/trials"><FlaskConical /><span>Trials</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/devices")} tooltip="Devices">
+                  <Link to="/devices"><Monitor /><span>Devices</span></Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

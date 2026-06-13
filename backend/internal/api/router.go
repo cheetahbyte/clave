@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -61,6 +62,8 @@ type LicenseAdminHandlers struct {
 	DeleteProduct http.HandlerFunc
 	UpdateLicense http.HandlerFunc
 	DeleteLicense http.HandlerFunc
+	ListDevices  http.HandlerFunc
+	DeleteDevice http.HandlerFunc
 }
 
 type UpdateAdminHandlers struct {
@@ -165,6 +168,7 @@ func Register(r *chi.Mux, cfg Config) {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
+	r.Use(observability.HTTPMetrics)
 	if mw.ForceHTTPS != nil {
 		r.Use(mw.ForceHTTPS)
 	}
@@ -220,8 +224,10 @@ func Register(r *chi.Mux, cfg Config) {
 					protected.Get("/licenses/{id}", la.GetLicense)
 					protected.Post("/licenses", la.Create)
 					protected.Patch("/licenses/{id}", la.UpdateLicense)
-					protected.Delete("/licenses/{id}", la.DeleteLicense)
-					protected.Get("/products", la.ListProducts)
+				protected.Delete("/licenses/{id}", la.DeleteLicense)
+				protected.Get("/devices", la.ListDevices)
+				protected.Delete("/devices/{deviceId}", la.DeleteDevice)
+				protected.Get("/products", la.ListProducts)
 					protected.Post("/products", la.CreateProduct)
 					protected.Get("/products/{id}/update-configs", ua.ListConfigs)
 					protected.Post("/products/{id}/update-configs", ua.SaveConfig)

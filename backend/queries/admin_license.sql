@@ -1,12 +1,14 @@
 -- name: GetAdminOverviewStatsByOrganization :one
+-- When product_id is provided, license/activation/trial counts are scoped to
+-- that product; total_products always reflects the whole organization.
 SELECT
-    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid) AS total_licenses,
-    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_licenses,
-    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND expires_at IS NOT NULL AND expires_at <= now()) AS expired_licenses,
+    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR product_id = sqlc.narg('product_id')::uuid)) AS total_licenses,
+    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR product_id = sqlc.narg('product_id')::uuid) AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_licenses,
+    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR product_id = sqlc.narg('product_id')::uuid) AND expires_at IS NOT NULL AND expires_at <= now()) AS expired_licenses,
     (SELECT count(*) FROM products WHERE organization_id = sqlc.arg('organization_id')::uuid) AS total_products,
-    (SELECT count(*) FROM activations a JOIN licenses l ON a.license_id = l.id WHERE l.organization_id = sqlc.arg('organization_id')::uuid) AS total_activations,
-    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND is_trial = true) AS total_trials,
-    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND is_trial = true AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_trials;
+    (SELECT count(*) FROM activations a JOIN licenses l ON a.license_id = l.id WHERE l.organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR l.product_id = sqlc.narg('product_id')::uuid)) AS total_activations,
+    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR product_id = sqlc.narg('product_id')::uuid) AND is_trial = true) AS total_trials,
+    (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR product_id = sqlc.narg('product_id')::uuid) AND is_trial = true AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_trials;
 
 -- name: ListAdminRecentLicensesByOrganization :many
 SELECT
@@ -123,6 +125,7 @@ license_counts AS (
         COUNT(*) FILTER (WHERE l.is_trial) AS trials
     FROM licenses l
     WHERE l.organization_id = sqlc.arg('organization_id')::uuid
+      AND (sqlc.narg('product_id')::uuid IS NULL OR l.product_id = sqlc.narg('product_id')::uuid)
       AND l.created_at >= (now() - make_interval(days => sqlc.arg('days')::int))
     GROUP BY l.created_at::date
 ),
@@ -133,6 +136,7 @@ activation_counts AS (
     FROM activations a
     JOIN licenses l ON a.license_id = l.id
     WHERE l.organization_id = sqlc.arg('organization_id')::uuid
+      AND (sqlc.narg('product_id')::uuid IS NULL OR l.product_id = sqlc.narg('product_id')::uuid)
       AND a.created_at >= (now() - make_interval(days => sqlc.arg('days')::int))
     GROUP BY a.created_at::date
 )
@@ -161,6 +165,7 @@ FROM licenses lt
 JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
     AND lt.is_trial = true
+    AND (sqlc.narg('product_id')::uuid IS NULL OR lt.product_id = sqlc.narg('product_id')::uuid)
     AND (sqlc.arg('q')::text = '' OR lt.customer_email ILIKE '%' || sqlc.arg('q')::text || '%' OR p.name ILIKE '%' || sqlc.arg('q')::text || '%')
     AND (
         sqlc.arg('status')::text = 'all'

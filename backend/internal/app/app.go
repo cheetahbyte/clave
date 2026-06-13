@@ -12,6 +12,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/api"
 	"github.com/cheetahbyte/clave/internal/config"
 	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/features/activation"
 	"github.com/cheetahbyte/clave/internal/features/adminauth"
 	"github.com/cheetahbyte/clave/internal/features/audit"
@@ -36,6 +37,9 @@ import (
 var pool *pgxpool.Pool
 
 func Close() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	observability.Shutdown(ctx)
 	if pool != nil {
 		pool.Close()
 	}
@@ -63,6 +67,21 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 		return nil, err
 	}
 	pool.Config().MaxConns = 20
+
+	obsCfg := observability.Config{
+		Enabled:     cfg.OTELEnabled,
+		ServiceName: cfg.OTELServiceName,
+		Environment: "development",
+		Endpoint:    cfg.OTELExporterEndpoint,
+	}
+	if cfg.IsProduction() {
+		obsCfg.Environment = "production"
+	}
+	if _, oerr := observability.Init(context.Background(), obsCfg); oerr != nil {
+		return nil, oerr
+	}
+	observability.InitMetrics()
+	observability.StartDBPoolMetrics(context.Background(), pool, 30*time.Second)
 
 	q := db.New(pool)
 
@@ -187,6 +206,8 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 			DeleteProduct: licenseH.AdminDeleteProduct,
 			UpdateLicense: licenseH.AdminUpdateLicense,
 			DeleteLicense: licenseH.AdminDeleteLicense,
+			ListDevices:  licenseH.AdminListDevices,
+			DeleteDevice: licenseH.AdminDeleteDevice,
 		},
 		UpdateAdmin: api.UpdateAdminHandlers{
 			ListProviders:    updateH.AdminListProviders,

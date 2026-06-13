@@ -158,12 +158,15 @@ function OrganizationPage() {
   );
 
   return (
-    <AdminShell title="Organization" actions={inviteDialog}>
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Members</h1>
-        <p className="text-muted-foreground text-sm">
-          People with access to {admin?.organizationName ?? "this organization"}.
-        </p>
+    <AdminShell title="Organization">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Members</h1>
+          <p className="text-muted-foreground text-sm">
+            People with access to {admin?.organizationName ?? "this organization"}.
+          </p>
+        </div>
+        {inviteDialog}
       </div>
 
       <div className="rounded-md border">

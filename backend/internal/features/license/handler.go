@@ -8,18 +8,36 @@ import (
 	"strings"
 
 	"github.com/cheetahbyte/clave/internal/features/audit"
+	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/shared/email"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// optionalProductID reads ?productId= and returns a nullable UUID for scoping
+// org-wide admin queries to a single product. Absent or unparsable = null (no
+// filter), so callers transparently fall back to organization-wide results.
+func optionalProductID(r *http.Request) pgtype.UUID {
+	raw := strings.TrimSpace(r.URL.Query().Get("productId"))
+	if raw == "" {
+		return pgtype.UUID{}
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		return pgtype.UUID{}
+	}
+	return pgtype.UUID{Bytes: id, Valid: true}
+}
+
 type Handler struct {
-	svc     *Service
+	svc      *Service
 	auditSvc *audit.Service
-	mailer  *email.Sender
-	appURL  string
+	mailer   *email.Sender
+	appURL   string
 }
 
 func NewHandler(svc *Service, auditSvc *audit.Service, mailer *email.Sender, appURL string) *Handler {
@@ -62,6 +80,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.svc.NewLicense(r.Context(), orgID, data)
 	if err != nil {
+		observability.CountLicenseCreated(r.Context(), "failure")
 		if errors.Is(err, ErrTrialAlreadyUsed) {
 			helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": "a trial already exists for this customer and product"})
 			return
@@ -72,6 +91,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.audit(r, "license.created", "license", nil)
+	observability.CountLicenseCreated(r.Context(), "success")
 
 	if h.mailer != nil && data.SendEmail {
 		var portalLink string
@@ -97,7 +117,7 @@ func (h *Handler) AdminOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	overview, err := h.svc.AdminOverview(r.Context(), orgID)
+	overview, err := h.svc.AdminOverview(r.Context(), orgID, optionalProductID(r))
 	if err != nil {
 		slog.Error("admin overview failed", "err", err)
 		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
@@ -118,7 +138,7 @@ func (h *Handler) AdminTimeseries(w http.ResponseWriter, r *http.Request) {
 		days = 30
 	}
 
-	points, err := h.svc.AdminTimeseries(r.Context(), orgID, days)
+	points, err := h.svc.AdminTimeseries(r.Context(), orgID, days, optionalProductID(r))
 	if err != nil {
 		slog.Error("admin timeseries failed", "err", err)
 		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
@@ -140,7 +160,7 @@ func (h *Handler) AdminListTrials(w http.ResponseWriter, r *http.Request) {
 		status = "all"
 	}
 
-	items, err := h.svc.AdminListTrials(r.Context(), orgID, q, status)
+	items, err := h.svc.AdminListTrials(r.Context(), orgID, q, status, optionalProductID(r))
 	if err != nil {
 		slog.Error("admin list trials failed", "err", err)
 		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
@@ -381,4 +401,50 @@ func (h *Handler) AdminUpdateLicense(w http.ResponseWriter, r *http.Request) {
 	}
 	h.audit(r, "license.updated", "license", &id)
 	helpers.WriteJSON(w, http.StatusOK, detail)
+}
+
+func (h *Handler) AdminListDevices(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	q := r.URL.Query().Get("q")
+	productID := r.URL.Query().Get("productId")
+	status := r.URL.Query().Get("status")
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+
+	resp, err := h.svc.AdminListDevices(r.Context(), orgID, q, productID, status, page, pageSize)
+	if err != nil {
+		slog.Error("list admin devices failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) AdminDeleteDevice(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	deviceID, err := uuid.Parse(chi.URLParam(r, "deviceId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid device id"})
+		return
+	}
+	if err := h.svc.AdminDeleteDevice(r.Context(), orgID, deviceID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "device not found"})
+			return
+		}
+		slog.Error("delete admin device failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	h.audit(r, "device.removed", "device", &deviceID)
+	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

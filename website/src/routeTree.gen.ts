@@ -25,6 +25,7 @@ import { Route as DashSettingsIndexRouteImport } from './routes/_dash/settings/i
 import { Route as DashProductsIndexRouteImport } from './routes/_dash/products/index'
 import { Route as DashOrganizationIndexRouteImport } from './routes/_dash/organization/index'
 import { Route as DashLicensesIndexRouteImport } from './routes/_dash/licenses/index'
+import { Route as DashDevicesIndexRouteImport } from './routes/_dash/devices/index'
 import { Route as DashAuditIndexRouteImport } from './routes/_dash/audit/index'
 import { Route as SelfserviceOrgSlugAuthRouteImport } from './routes/selfservice/$orgSlug/auth'
 import { Route as DashUpdatesSourcesRouteImport } from './routes/_dash/updates/sources'
@@ -113,6 +114,11 @@ const DashLicensesIndexRoute = DashLicensesIndexRouteImport.update({
   path: '/licenses/',
   getParentRoute: () => DashRoute,
 } as any)
+const DashDevicesIndexRoute = DashDevicesIndexRouteImport.update({
+  id: '/devices/',
+  path: '/devices/',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashAuditIndexRoute = DashAuditIndexRouteImport.update({
   id: '/audit/',
   path: '/audit/',
@@ -171,6 +177,7 @@ export interface FileRoutesByFullPath {
   '/updates/sources': typeof DashUpdatesSourcesRoute
   '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
   '/audit/': typeof DashAuditIndexRoute
+  '/devices/': typeof DashDevicesIndexRoute
   '/licenses/': typeof DashLicensesIndexRoute
   '/organization/': typeof DashOrganizationIndexRoute
   '/products/': typeof DashProductsIndexRoute
@@ -196,6 +203,7 @@ export interface FileRoutesByTo {
   '/updates/sources': typeof DashUpdatesSourcesRoute
   '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
   '/audit': typeof DashAuditIndexRoute
+  '/devices': typeof DashDevicesIndexRoute
   '/licenses': typeof DashLicensesIndexRoute
   '/organization': typeof DashOrganizationIndexRoute
   '/products': typeof DashProductsIndexRoute
@@ -223,6 +231,7 @@ export interface FileRoutesById {
   '/_dash/updates/sources': typeof DashUpdatesSourcesRoute
   '/selfservice/$orgSlug/auth': typeof SelfserviceOrgSlugAuthRoute
   '/_dash/audit/': typeof DashAuditIndexRoute
+  '/_dash/devices/': typeof DashDevicesIndexRoute
   '/_dash/licenses/': typeof DashLicensesIndexRoute
   '/_dash/organization/': typeof DashOrganizationIndexRoute
   '/_dash/products/': typeof DashProductsIndexRoute
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/updates/sources'
     | '/selfservice/$orgSlug/auth'
     | '/audit/'
+    | '/devices/'
     | '/licenses/'
     | '/organization/'
     | '/products/'
@@ -275,6 +285,7 @@ export interface FileRouteTypes {
     | '/updates/sources'
     | '/selfservice/$orgSlug/auth'
     | '/audit'
+    | '/devices'
     | '/licenses'
     | '/organization'
     | '/products'
@@ -301,6 +312,7 @@ export interface FileRouteTypes {
     | '/_dash/updates/sources'
     | '/selfservice/$orgSlug/auth'
     | '/_dash/audit/'
+    | '/_dash/devices/'
     | '/_dash/licenses/'
     | '/_dash/organization/'
     | '/_dash/products/'
@@ -434,6 +446,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashLicensesIndexRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/devices/': {
+      id: '/_dash/devices/'
+      path: '/devices'
+      fullPath: '/devices/'
+      preLoaderRoute: typeof DashDevicesIndexRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/audit/': {
       id: '/_dash/audit/'
       path: '/audit'
@@ -503,6 +522,7 @@ interface DashRouteChildren {
   DashUpdatesReleasesRoute: typeof DashUpdatesReleasesRoute
   DashUpdatesSourcesRoute: typeof DashUpdatesSourcesRoute
   DashAuditIndexRoute: typeof DashAuditIndexRoute
+  DashDevicesIndexRoute: typeof DashDevicesIndexRoute
   DashLicensesIndexRoute: typeof DashLicensesIndexRoute
   DashOrganizationIndexRoute: typeof DashOrganizationIndexRoute
   DashProductsIndexRoute: typeof DashProductsIndexRoute
@@ -521,6 +541,7 @@ const DashRouteChildren: DashRouteChildren = {
   DashUpdatesReleasesRoute: DashUpdatesReleasesRoute,
   DashUpdatesSourcesRoute: DashUpdatesSourcesRoute,
   DashAuditIndexRoute: DashAuditIndexRoute,
+  DashDevicesIndexRoute: DashDevicesIndexRoute,
   DashLicensesIndexRoute: DashLicensesIndexRoute,
   DashOrganizationIndexRoute: DashOrganizationIndexRoute,
   DashProductsIndexRoute: DashProductsIndexRoute,

@@ -1,0 +1,22 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 10s
+
+exporters:
+  debug:
+    verbosity: basic
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug, prometheus]

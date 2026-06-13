@@ -117,21 +117,19 @@ function ReleasesPage() {
   }
 
   return (
-    <AdminShell
-      title="Releases"
-      actions={
-        product ? (
+    <AdminShell title="Releases">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Releases</h1>
+          <p className="text-muted-foreground text-sm">
+            Manage releases for {product ? product.name : "the selected product"}.
+          </p>
+        </div>
+        {product ? (
           <Button onClick={() => setNewReleaseOpen(true)}>
             <Plus className="size-4" /> New release
           </Button>
-        ) : null
-      }
-    >
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Releases</h1>
-        <p className="text-muted-foreground text-sm">
-          Manage releases for {product ? product.name : "the selected product"}.
-        </p>
+        ) : null}
       </div>
 
       <div className="rounded-md border">

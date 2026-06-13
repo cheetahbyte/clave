@@ -57,14 +57,14 @@ function LicensesPage() {
   const [type, setType] = useState("all");
   const [productId, setProductId] = useState("");
   const { product: currentProduct } = useCurrentProduct();
-  const seededProduct = useRef(false);
-  useEffect(() => {
-    if (!seededProduct.current && currentProduct) {
-      setProductId(currentProduct.id);
-      seededProduct.current = true;
-    }
-  }, [currentProduct]);
   const [page, setPage] = useState(1);
+  // Follow the sidebar product selection; the local dropdown can still override.
+  useEffect(() => {
+    if (currentProduct?.id) {
+      setProductId(currentProduct.id);
+      setPage(1);
+    }
+  }, [currentProduct?.id]);
   const pageSize = 20;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newEmail, setNewEmail] = useState("");
@@ -206,12 +206,15 @@ function LicensesPage() {
   );
 
   return (
-    <AdminShell title="Licenses" actions={createDialog}>
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Licenses</h1>
-        <p className="text-muted-foreground text-sm">
-          Search, filter, and issue license keys.
-        </p>
+    <AdminShell title="Licenses">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Licenses</h1>
+          <p className="text-muted-foreground text-sm">
+            Search, filter, and issue license keys.
+          </p>
+        </div>
+        {createDialog}
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

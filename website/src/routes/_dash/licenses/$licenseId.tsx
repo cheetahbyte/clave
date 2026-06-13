@@ -57,18 +57,6 @@ function LicenseDetailPage() {
     <AdminShell
       title="Details"
       breadcrumbs={[{ label: "Licenses", to: "/licenses" }]}
-      actions={
-        license ? (
-          <>
-            <Button variant="outline" onClick={() => setEditOpen(true)}>
-              <Pencil className="size-4" /> Edit
-            </Button>
-            <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
-              <Trash2 className="size-4" /> Delete
-            </Button>
-          </>
-        ) : null
-      }
     >
       {license ? (
         <EditLicenseDialog
@@ -114,6 +102,14 @@ function LicenseDetailPage() {
                 {license.isTrial && <Badge variant="outline">Trial</Badge>}
               </div>
               <p className="text-muted-foreground text-sm">{license.customerEmail}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button variant="outline" onClick={() => setEditOpen(true)}>
+                <Pencil className="size-4" /> Edit
+              </Button>
+              <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="size-4" /> Delete
+              </Button>
             </div>
           </div>
 

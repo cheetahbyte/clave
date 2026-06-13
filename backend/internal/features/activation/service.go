@@ -12,6 +12,7 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -37,6 +38,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 	lic, err := svc.licenses.GetByDigest(ctx, lookupDigest)
 	if err != nil {
 		slog.Warn("license not found", "err", err)
+		observability.CountActivationAttempt(ctx, "failure", "not_found")
 
 		p := problem.Of(404).
 			Append(problem.Type("https://api.yourapp.dev/problems/license-not-found")).
@@ -49,6 +51,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 	match, verr := argon2id.ComparePasswordAndHash(data.LicenseKey, lic.KeyPhc)
 	if verr != nil || !match {
 		slog.Warn("license verification failed", "licenseId", lic.ID, "err", verr)
+		observability.CountActivationAttempt(ctx, "failure", "invalid")
 		p := problem.Of(401).
 			Append(problem.Type("https://api.yourapp.dev/problems/invalid-license")).
 			Append(problem.Title("Invalid license")).
@@ -58,6 +61,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 	}
 	if !lic.Active {
 		slog.Warn("license revoked", "licenseId", lic.ID)
+		observability.CountActivationAttempt(ctx, "failure", "revoked")
 		p := problem.Of(403).
 			Append(problem.Type("https://api.yourapp.dev/problems/license-revoked")).
 			Append(problem.Title("License revoked")).
@@ -68,6 +72,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 
 	if !lic.ExpiresAt.IsZero() && time.Now().UTC().After(lic.ExpiresAt.UTC()) {
 		slog.Warn("license expired", "licenseId", lic.ID)
+		observability.CountActivationAttempt(ctx, "failure", "expired")
 		p := problem.Of(403).
 			Append(problem.Type("https://api.yourapp.dev/problems/license-expired")).
 			Append(problem.Title("License expired")).
@@ -81,6 +86,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 	act, err := svc.repo.ActivateAtomic(ctx, lic.ID, hwidHash, data.Device.Hostname, lic.MaxActivations)
 	if err != nil {
 		slog.Error("failed to activate license", "licenseId", lic.ID, "err", err)
+		observability.CountActivationAttempt(ctx, "failure", "internal")
 		p := problem.Of(500).
 			Append(problem.Type("https://api.yourapp.dev/problems/internal")).
 			Append(problem.Title("Internal error")).
@@ -95,6 +101,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 			"licenseId", lic.ID,
 			"maxActivations", lic.MaxActivations,
 		)
+		observability.CountActivationAttempt(ctx, "failure", "limit_reached")
 		p := problem.Of(409).
 			Append(problem.Type("https://api.yourapp.dev/problems/activation-limit")).
 			Append(problem.Title("Activation limit exceeded")).
@@ -106,6 +113,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 	signed, claims, err := svc.signer.IssueAndSignLicenseToken(lic, lic.ProductID.String(), lic.Features, data.Device.HWID, 24*7*time.Hour)
 	if err != nil {
 		slog.Error("failed to sign jwt", "licenseId", lic.ID, "err", err)
+		observability.CountActivationAttempt(ctx, "failure", "internal")
 
 		p := problem.Of(500).
 			Append(problem.Type("https://api.yourapp.dev/problems/token-signing-failed")).
@@ -114,6 +122,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 			Append(problem.Instance(instance))
 		return ActivateResponse{}, p
 	}
+	observability.CountActivationAttempt(ctx, "success", "")
 	return ActivateResponse{
 		ActivationID: act.ID,
 		Token:        signed,
@@ -127,6 +136,7 @@ func (svc *Service) StartTrial(ctx context.Context, data StartTrialRequest) (Act
 
 	productID, err := uuid.Parse(data.ProductID)
 	if err != nil {
+		observability.CountTrialAttempt(ctx, "failure", "invalid")
 		return ActivateResponse{}, problem.Of(400).
 			Append(problem.Title("Invalid product ID")).
 			Append(problem.Instance(instance))
@@ -134,6 +144,7 @@ func (svc *Service) StartTrial(ctx context.Context, data StartTrialRequest) (Act
 
 	product, err := svc.licenses.GetProductByID(ctx, productID)
 	if err != nil {
+		observability.CountTrialAttempt(ctx, "failure", "not_found")
 		return ActivateResponse{}, problem.Of(404).
 			Append(problem.Title("Product not found")).
 			Append(problem.Instance(instance))
@@ -143,12 +154,14 @@ func (svc *Service) StartTrial(ctx context.Context, data StartTrialRequest) (Act
 
 	cnt, err := svc.repo.CountTrialsByHwidProduct(ctx, product.OrganizationID, productID, hwidHash)
 	if err != nil {
+		observability.CountTrialAttempt(ctx, "failure", "internal")
 		slog.Error("failed to check trial by hwid", "err", err)
 		return ActivateResponse{}, problem.Of(500).
 			Append(problem.Title("Internal error")).
 			Append(problem.Instance(instance))
 	}
 	if cnt > 0 {
+		observability.CountTrialAttempt(ctx, "failure", "already_used")
 		return ActivateResponse{}, problem.Of(409).
 			Append(problem.Title("Trial already used")).
 			Append(problem.Detail("A trial for this product has already been started on this device.")).
@@ -158,12 +171,14 @@ func (svc *Service) StartTrial(ctx context.Context, data StartTrialRequest) (Act
 	trial, err := svc.licenses.NewTrialLicense(ctx, product.OrganizationID, productID, hwidHash, 14)
 	if err != nil {
 		if err.Error() == "trial already used" {
+			observability.CountTrialAttempt(ctx, "failure", "already_used")
 			return ActivateResponse{}, problem.Of(409).
 				Append(problem.Title("Trial already used")).
 				Append(problem.Detail("A trial for this product has already been started on this device.")).
 				Append(problem.Instance(instance))
 		}
 		slog.Error("failed to create trial license", "err", err)
+		observability.CountTrialAttempt(ctx, "failure", "internal")
 		return ActivateResponse{}, problem.Of(500).
 			Append(problem.Title("Internal error")).
 			Append(problem.Instance(instance))
@@ -174,6 +189,7 @@ func (svc *Service) StartTrial(ctx context.Context, data StartTrialRequest) (Act
 		ProductID:  data.ProductID,
 		Device:     data.Device,
 	}
+	observability.CountTrialAttempt(ctx, "success", "")
 	return svc.Activate(ctx, actReq)
 }
 

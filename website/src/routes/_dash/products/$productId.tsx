@@ -59,18 +59,6 @@ function ProductDetailPage() {
     <AdminShell
       title="Details"
       breadcrumbs={[{ label: "Products", to: "/products" }]}
-      actions={
-        product ? (
-          <>
-            <Button variant="outline" onClick={() => setEditOpen(true)}>
-              <Pencil className="size-4" /> Edit
-            </Button>
-            <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
-              <Trash2 className="size-4" /> Delete
-            </Button>
-          </>
-        ) : null
-      }
     >
       <EditProductDialog
         product={product ?? null}
@@ -116,6 +104,14 @@ function ProductDetailPage() {
                   Created {product.createdAt ? new Date(product.createdAt).toLocaleDateString() : "—"}
                 </span>
               </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button variant="outline" onClick={() => setEditOpen(true)}>
+                <Pencil className="size-4" /> Edit
+              </Button>
+              <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+                <Trash2 className="size-4" /> Delete
+              </Button>
             </div>
           </div>
         </div>

@@ -9,7 +9,49 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const countAdminDevicesByOrganization = `-- name: CountAdminDevicesByOrganization :one
+SELECT count(*)
+FROM devices d
+JOIN activations a ON a.device_id = d.id
+JOIN licenses l ON l.id = d.license_id
+JOIN products p ON p.id = l.product_id
+WHERE l.organization_id = $1::uuid
+  AND ($2::text IS NULL
+       OR d.hostname ILIKE '%' || $2::text || '%'
+       OR l.customer_email ILIKE '%' || $2::text || '%'
+       OR p.name ILIKE '%' || $2::text || '%'
+       OR d.id::text ILIKE '%' || $2::text || '%'
+       OR l.id::text ILIKE '%' || $2::text || '%')
+  AND ($3::uuid IS NULL OR p.id = $3::uuid)
+  AND (
+      $4::text IS NULL
+      OR $4::text = 'all'
+      OR ($4::text = 'seen' AND a.checked_in_at IS NOT NULL)
+      OR ($4::text = 'never_seen' AND a.checked_in_at IS NULL)
+  )
+`
+
+type CountAdminDevicesByOrganizationParams struct {
+	OrganizationID uuid.UUID   `json:"organization_id"`
+	Q              *string     `json:"q"`
+	ProductID      pgtype.UUID `json:"product_id"`
+	Status         *string     `json:"status"`
+}
+
+func (q *Queries) CountAdminDevicesByOrganization(ctx context.Context, arg CountAdminDevicesByOrganizationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countAdminDevicesByOrganization,
+		arg.OrganizationID,
+		arg.Q,
+		arg.ProductID,
+		arg.Status,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createDevice = `-- name: CreateDevice :one
 insert into devices(license_id, hwid_hash, hostname) values($1, $2, $3) returning id, hwid_hash, hostname, created_at, license_id
@@ -34,6 +76,28 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 	return i, err
 }
 
+const deleteAdminDeviceByOrganization = `-- name: DeleteAdminDeviceByOrganization :one
+DELETE FROM devices
+WHERE devices.id = $1
+  AND license_id IN (
+      SELECT l.id FROM licenses l
+      WHERE l.organization_id = $2::uuid
+  )
+RETURNING devices.id
+`
+
+type DeleteAdminDeviceByOrganizationParams struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) DeleteAdminDeviceByOrganization(ctx context.Context, arg DeleteAdminDeviceByOrganizationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deleteAdminDeviceByOrganization, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getDeviceByLicenseAndHwidHash = `-- name: GetDeviceByLicenseAndHwidHash :one
 select id, hwid_hash, hostname, created_at, license_id from devices where license_id = $1 and hwid_hash = $2
 `
@@ -54,4 +118,101 @@ func (q *Queries) GetDeviceByLicenseAndHwidHash(ctx context.Context, arg GetDevi
 		&i.LicenseID,
 	)
 	return i, err
+}
+
+const listAdminDevicesByOrganization = `-- name: ListAdminDevicesByOrganization :many
+SELECT
+    d.id AS device_id,
+    d.hostname,
+    d.created_at AS device_created_at,
+    a.id AS activation_id,
+    a.created_at AS activated_at,
+    a.checked_in_at,
+    l.id AS license_id,
+    l.customer_email,
+    l.is_active AS license_active,
+    p.id AS product_id,
+    p.name AS product_name
+FROM devices d
+JOIN activations a ON a.device_id = d.id
+JOIN licenses l ON l.id = d.license_id
+JOIN products p ON p.id = l.product_id
+WHERE l.organization_id = $1::uuid
+  AND ($2::text IS NULL
+       OR d.hostname ILIKE '%' || $2::text || '%'
+       OR l.customer_email ILIKE '%' || $2::text || '%'
+       OR p.name ILIKE '%' || $2::text || '%'
+       OR d.id::text ILIKE '%' || $2::text || '%'
+       OR l.id::text ILIKE '%' || $2::text || '%')
+  AND ($3::uuid IS NULL OR p.id = $3::uuid)
+  AND (
+      $4::text IS NULL
+      OR $4::text = 'all'
+      OR ($4::text = 'seen' AND a.checked_in_at IS NOT NULL)
+      OR ($4::text = 'never_seen' AND a.checked_in_at IS NULL)
+  )
+ORDER BY d.created_at DESC
+LIMIT $6 OFFSET $5
+`
+
+type ListAdminDevicesByOrganizationParams struct {
+	OrganizationID uuid.UUID   `json:"organization_id"`
+	Q              *string     `json:"q"`
+	ProductID      pgtype.UUID `json:"product_id"`
+	Status         *string     `json:"status"`
+	Offset         int32       `json:"offset"`
+	Limit          int32       `json:"limit"`
+}
+
+type ListAdminDevicesByOrganizationRow struct {
+	DeviceID        uuid.UUID          `json:"device_id"`
+	Hostname        *string            `json:"hostname"`
+	DeviceCreatedAt pgtype.Timestamptz `json:"device_created_at"`
+	ActivationID    uuid.UUID          `json:"activation_id"`
+	ActivatedAt     pgtype.Timestamptz `json:"activated_at"`
+	CheckedInAt     pgtype.Timestamptz `json:"checked_in_at"`
+	LicenseID       uuid.UUID          `json:"license_id"`
+	CustomerEmail   string             `json:"customer_email"`
+	LicenseActive   bool               `json:"license_active"`
+	ProductID       uuid.UUID          `json:"product_id"`
+	ProductName     string             `json:"product_name"`
+}
+
+func (q *Queries) ListAdminDevicesByOrganization(ctx context.Context, arg ListAdminDevicesByOrganizationParams) ([]ListAdminDevicesByOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listAdminDevicesByOrganization,
+		arg.OrganizationID,
+		arg.Q,
+		arg.ProductID,
+		arg.Status,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAdminDevicesByOrganizationRow{}
+	for rows.Next() {
+		var i ListAdminDevicesByOrganizationRow
+		if err := rows.Scan(
+			&i.DeviceID,
+			&i.Hostname,
+			&i.DeviceCreatedAt,
+			&i.ActivationID,
+			&i.ActivatedAt,
+			&i.CheckedInAt,
+			&i.LicenseID,
+			&i.CustomerEmail,
+			&i.LicenseActive,
+			&i.ProductID,
+			&i.ProductName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

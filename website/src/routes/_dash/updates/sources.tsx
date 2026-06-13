@@ -107,22 +107,20 @@ function SourcesPage() {
   });
 
   return (
-    <AdminShell
-      title="Sources"
-      actions={
-        product ? (
+    <AdminShell title="Sources">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Sources</h1>
+          <p className="text-muted-foreground text-sm">
+            Configure update sources per platform and channel — and where this product's release
+            artifacts are stored.
+          </p>
+        </div>
+        {product ? (
           <Button onClick={() => setNewConfigOpen(true)}>
             <Plus className="size-4" /> Add source
           </Button>
-        ) : null
-      }
-    >
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Sources</h1>
-        <p className="text-muted-foreground text-sm">
-          Configure update sources per platform and channel — and where this product's release
-          artifacts are stored.
-        </p>
+        ) : null}
       </div>
 
       {productsLoading ? (

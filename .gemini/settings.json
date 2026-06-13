@@ -1,0 +1,8 @@
+{
+  "hooksConfig": {
+    "disabled": [
+      "lean-ctx hook rewrite",
+      "lean-ctx hook redirect"
+    ]
+  }
+}

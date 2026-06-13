@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -132,6 +133,7 @@ func (s *Service) Write(ctx context.Context, e AuditEntry) {
 
 	auditCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	observability.CountAuditEvent(auditCtx, e.Action)
 	if err := s.repo.InsertAuditLog(auditCtx, db.InsertAuditLogParams{
 		AdminUserID:    pgtype.UUID{Bytes: e.AdminID, Valid: true},
 		OrganizationID: pgtype.UUID{Bytes: e.OrgID, Valid: true},

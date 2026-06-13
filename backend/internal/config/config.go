@@ -41,6 +41,10 @@ type Config struct {
 	TrustProxyHeaders bool
 
 	UpdateArtifactStoragePath string
+
+	OTELEnabled            bool
+	OTELServiceName        string
+	OTELExporterEndpoint   string
 }
 
 func truthy(v string) bool {
@@ -62,6 +66,9 @@ func Load() (*Config, error) {
 		VerboseLogging:   verboseLoggingEnabled(),
 		Dev:              truthy(os.Getenv("DEV")),
 		LicenseHMACSecret: os.Getenv("LICENSE_HMAC_SECRET"),
+		OTELEnabled:            truthy(os.Getenv("OTEL_ENABLED")),
+		OTELServiceName:        getEnv("OTEL_SERVICE_NAME", "clave-api"),
+		OTELExporterEndpoint:   os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		SelfServiceTokenPepper: os.Getenv("SELF_SERVICE_TOKEN_PEPPER"),
 		SelfServiceReturnToken: strings.ToLower(os.Getenv("SELF_SERVICE_RETURN_TOKEN")) == "true",
 		SMTPHost:        os.Getenv("SMTP_HOST"),

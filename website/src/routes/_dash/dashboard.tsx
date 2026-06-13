@@ -4,6 +4,7 @@ import * as React from "react";
 import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 import { getCurrentAdmin } from "@/features/admin/api";
 import { getAdminOverview, getAdminTimeseries } from "@/features/admin/api";
+import { useCurrentProduct } from "@/features/admin/product-context";
 import { AdminShell } from "@/components/admin/AdminShell";
 import {
   Card,
@@ -58,10 +59,11 @@ const rangeLabel: Record<Range, string> = {
 function UsageChart() {
   const [range, setRange] = React.useState<Range>("90d");
   const days = rangeDays[range];
+  const { product } = useCurrentProduct();
 
   const { data: series, isLoading } = useQuery({
-    queryKey: ["adminTimeseries", days],
-    queryFn: () => getAdminTimeseries(days),
+    queryKey: ["adminTimeseries", days, product?.id],
+    queryFn: () => getAdminTimeseries(days, product?.id),
   });
 
   const data = series ?? [];
@@ -241,14 +243,15 @@ export const Route = createFileRoute("/_dash/dashboard")({
 });
 
 function DashboardPage() {
+  const { product } = useCurrentProduct();
   const { data: admin } = useQuery({
     queryKey: ["currentAdmin"],
     queryFn: getCurrentAdmin,
   });
 
   const { data: overview } = useQuery({
-    queryKey: ["adminOverview"],
-    queryFn: getAdminOverview,
+    queryKey: ["adminOverview", product?.id],
+    queryFn: () => getAdminOverview(product?.id),
   });
 
   const isLoading = !overview;

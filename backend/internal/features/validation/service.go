@@ -7,6 +7,7 @@ import (
 	problem "github.com/cheetahbyte/problems"
 
 	"github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 )
 
@@ -27,6 +28,7 @@ func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (Validat
 
 	claims, err := svc.signer.ParseJWT(data.Token)
 	if err != nil {
+		observability.CountLicenseValidation(ctx, "failure")
 		return ValidateResponse{}, problem.Of(401).
 			Append(problem.Title("Invalid token")).
 			Append(problem.Instance(instance))
@@ -34,6 +36,7 @@ func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (Validat
 
 	licenseID, err := license.LicenseIDFromSubject(claims.Subject)
 	if err != nil {
+		observability.CountLicenseValidation(ctx, "failure")
 		return ValidateResponse{}, problem.Of(401).
 			Append(problem.Title("Invalid token")).
 			Append(problem.Instance(instance))
@@ -80,11 +83,13 @@ func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (Validat
 		tokenTTL,
 	)
 	if err != nil {
+		observability.CountLicenseValidation(ctx, "failure")
 		return ValidateResponse{}, problem.Of(500).
 			Append(problem.Title("Token signing failed")).
 			Append(problem.Instance(instance))
 	}
 
+	observability.CountLicenseValidation(ctx, "success")
 	return ValidateResponse{
 		Token:      newToken,
 		ValidUntil: newClaims.ExpiresAt.Unix(),

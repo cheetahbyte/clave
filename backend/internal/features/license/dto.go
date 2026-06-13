@@ -104,3 +104,23 @@ type UpdateLicenseRequest struct {
 	ExpiresAt      *time.Time `json:"expiresAt"`
 	Features       []string   `json:"features"`
 }
+
+type AdminDeviceItem struct {
+	DeviceID      string     `json:"deviceId"`
+	Hostname      *string    `json:"hostname"`
+	ActivationID  string     `json:"activationId"`
+	ActivatedAt   *time.Time `json:"activatedAt"`
+	CheckedInAt   *time.Time `json:"checkedInAt"`
+	LicenseID     string     `json:"licenseId"`
+	CustomerEmail string     `json:"customerEmail"`
+	LicenseActive bool       `json:"licenseActive"`
+	ProductID     string     `json:"productId"`
+	ProductName   string     `json:"productName"`
+}
+
+type AdminDeviceListResponse struct {
+	Items    []AdminDeviceItem `json:"items"`
+	Total    int64             `json:"total"`
+	Page     int               `json:"page"`
+	PageSize int               `json:"pageSize"`
+}

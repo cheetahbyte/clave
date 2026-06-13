@@ -127,8 +127,11 @@ func (r *Repository) CreateLicenseTx(ctx context.Context, params db.CreateLicens
 	return row, nil
 }
 
-func (r *Repository) GetAdminOverviewStatsByOrganization(ctx context.Context, orgID uuid.UUID) (db.GetAdminOverviewStatsByOrganizationRow, error) {
-	return r.q.GetAdminOverviewStatsByOrganization(ctx, orgID)
+func (r *Repository) GetAdminOverviewStatsByOrganization(ctx context.Context, orgID uuid.UUID, productID pgtype.UUID) (db.GetAdminOverviewStatsByOrganizationRow, error) {
+	return r.q.GetAdminOverviewStatsByOrganization(ctx, db.GetAdminOverviewStatsByOrganizationParams{
+		OrganizationID: orgID,
+		ProductID:      productID,
+	})
 }
 
 func (r *Repository) ListAdminRecentLicensesByOrganization(ctx context.Context, orgID uuid.UUID, limit int32) ([]db.ListAdminRecentLicensesByOrganizationRow, error) {
@@ -138,18 +141,20 @@ func (r *Repository) ListAdminRecentLicensesByOrganization(ctx context.Context, 
 	})
 }
 
-func (r *Repository) GetAdminTimeseriesByOrganization(ctx context.Context, orgID uuid.UUID, days int32) ([]db.GetAdminTimeseriesByOrganizationRow, error) {
+func (r *Repository) GetAdminTimeseriesByOrganization(ctx context.Context, orgID uuid.UUID, days int32, productID pgtype.UUID) ([]db.GetAdminTimeseriesByOrganizationRow, error) {
 	return r.q.GetAdminTimeseriesByOrganization(ctx, db.GetAdminTimeseriesByOrganizationParams{
 		OrganizationID: orgID,
 		Days:           days,
+		ProductID:      productID,
 	})
 }
 
-func (r *Repository) ListAdminTrialsByOrganization(ctx context.Context, orgID uuid.UUID, q, status string) ([]db.ListAdminTrialsByOrganizationRow, error) {
+func (r *Repository) ListAdminTrialsByOrganization(ctx context.Context, orgID uuid.UUID, q, status string, productID pgtype.UUID) ([]db.ListAdminTrialsByOrganizationRow, error) {
 	return r.q.ListAdminTrialsByOrganization(ctx, db.ListAdminTrialsByOrganizationParams{
 		OrganizationID: orgID,
 		Q:              q,
 		Status:         status,
+		ProductID:      productID,
 	})
 }
 
@@ -263,6 +268,18 @@ func (r *Repository) UpdateProduct(ctx context.Context, orgID, id uuid.UUID, nam
 		return db.Product{}, err
 	}
 	return p, nil
+}
+
+func (r *Repository) ListAdminDevices(ctx context.Context, params db.ListAdminDevicesByOrganizationParams) ([]db.ListAdminDevicesByOrganizationRow, error) {
+	return r.q.ListAdminDevicesByOrganization(ctx, params)
+}
+
+func (r *Repository) CountAdminDevices(ctx context.Context, params db.CountAdminDevicesByOrganizationParams) (int64, error) {
+	return r.q.CountAdminDevicesByOrganization(ctx, params)
+}
+
+func (r *Repository) DeleteAdminDevice(ctx context.Context, params db.DeleteAdminDeviceByOrganizationParams) (uuid.UUID, error) {
+	return r.q.DeleteAdminDeviceByOrganization(ctx, params)
 }
 
 func uuidToPG(id uuid.UUID) pgtype.UUID {
