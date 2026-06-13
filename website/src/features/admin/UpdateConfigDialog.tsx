@@ -53,7 +53,7 @@ export function UpdateConfigDialog({
   );
   const [platform, setPlatform] = useState(editingConfig?.platform ?? "macos");
   const [channel, setChannel] = useState(editingConfig?.channel ?? "stable");
-  const [providerKey, setProviderKey] = useState(editingConfig?.providerKey ?? "clave_native");
+  const [providerKey] = useState(editingConfig?.providerKey ?? "clave_native");
   const [enabled, setEnabled] = useState(editingConfig?.enabled ?? true);
 
   const effectiveProductId = productId ?? selectedProductId;
