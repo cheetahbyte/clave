@@ -132,15 +132,17 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 	}
 
 	updateReq := UpdateRequest{
-		LicenseID:      licenseID.String(),
-		ProductID:      claims.ProductID,
-		Platform:       Platform(platform),
-		Channel:        channel,
-		CurrentVersion: data.Version,
-		CurrentBuild:   data.Build,
-		Arch:           data.Arch,
-		OSVersion:      data.OSVersion,
-		ClientID:       data.ClientID,
+		LicenseID:               licenseID.String(),
+		ProductID:               claims.ProductID,
+		Platform:                Platform(platform),
+		Channel:                 channel,
+		CurrentVersion:          data.Version,
+		CurrentBuild:            data.Build,
+		Arch:                    data.Arch,
+		OSVersion:               data.OSVersion,
+		ClientID:                data.ClientID,
+		CurrentManifestSHA256:   data.CurrentManifestSHA256,
+		CurrentArtifactSHA256:   data.CurrentArtifactSHA256,
 	}
 
 	dbConfig, dbErr := svc.repo.GetProductUpdateConfig(ctx, claims.ProductID, platform, channel)
@@ -487,6 +489,7 @@ func (svc *Service) ListReleases(ctx context.Context, orgID uuid.UUID, productID
 				Type:      a.ArtifactType,
 				URL:       a.Url,
 				Arch:      a.Arch,
+				OS:        a.Os,
 				Signature: sig,
 			}
 			if a.SizeBytes != nil {
@@ -500,6 +503,12 @@ func (svc *Service) ListReleases(ctx context.Context, orgID uuid.UUID, productID
 			}
 			if a.MimeType != nil {
 				artifactDTOs[j].MimeType = *a.MimeType
+			}
+			if len(a.Metadata) > 0 && string(a.Metadata) != "{}" {
+				var md map[string]any
+				if err := json.Unmarshal(a.Metadata, &md); err == nil {
+					artifactDTOs[j].Metadata = md
+				}
 			}
 		}
 

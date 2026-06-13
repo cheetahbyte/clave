@@ -164,13 +164,17 @@ Use your license JWT to check if a newer version is available. The server resolv
   "build": "42",
   "arch": "arm64",
   "osVersion": "15.0",
-  "clientId": "<stable device identifier>"
+  "clientId": "<stable device identifier>",
+  "currentManifestSha256": "<sha256 of installed app manifest>",
+  "currentArtifactSha256": "<sha256 of the artifact that was installed>"
 }
 ```
 
 Only `version` and `token` are required. Defaults when omitted:
 - `platform`: `"macos"`
 - `channel`: `"stable"`
+
+Send `currentManifestSha256` and `currentArtifactSha256` to enable delta updates. Without these hashes the server cannot match a delta to your exact install, so it returns only full artifacts.
 
 **You'll get back:**
 ```json
@@ -183,9 +187,29 @@ Only `version` and `token` are required. Defaults when omitted:
   "releaseNotes": "Bug fixes and performance improvements.",
   "artifacts": [
     {
+      "type": "delta",
+      "url": "https://releases.example.com/myapp-1.0.0-to-1.1.0-arm64.delta.zip",
+      "arch": "arm64",
+      "os": "macos",
+      "sizeBytes": 2097152,
+      "sha256": "def456...",
+      "metadata": {
+        "format": "clave.delta/v1",
+        "fromVersion": "1.0.0",
+        "fromBuild": "42",
+        "fromManifestSha256": "...",
+        "fromArtifactSha256": "...",
+        "toVersion": "1.1.0",
+        "toBuild": "43",
+        "toManifestSha256": "...",
+        "toArtifactSha256": "..."
+      }
+    },
+    {
       "type": "full",
       "url": "https://releases.example.com/myapp-1.1.0-arm64.dmg",
       "arch": "arm64",
+      "os": "macos",
       "sizeBytes": 52428800,
       "sha256": "abc123..."
     }
@@ -197,3 +221,22 @@ Only `version` and `token` are required. Defaults when omitted:
 `kind` can be `"no_update"`, `"update_available"`, `"mandatory_update"`, or `"error"`. Use this to decide whether to show a dismissible update prompt or a mandatory upgrade screen.
 
 The `clientId` field enables deterministic staged rollouts. Send a stable, unique value (e.g. a hash of the machine ID) so the server can consistently bucket your client for percentage-based releases.
+
+### Delta Updates
+
+When the server returns a `delta` artifact in `artifacts`, it has matched your exact install via `currentManifestSha256`. The client should:
+
+1. Attempt to apply the delta first.
+2. If delta application fails for any reason (hash mismatch, signature failure, corrupt download), fall back to the `full` artifact.
+3. `downloadUrl` always points to the full artifact. Use it for legacy clients or when no delta exists.
+
+**Matching rule**: A delta is only included when ALL of these match:
+- `artifact.type` == `"delta"`
+- `artifact.arch` matches your `arch` (or `"universal"`)
+- `artifact.os` matches your `platform`
+- `artifact.metadata.fromManifestSha256` == `currentManifestSha256`
+- `artifact.metadata.fromArtifactSha256` == `currentArtifactSha256` (if you provide it)
+
+**Delta package format** (`clave.delta/v1`): The delta artifact contains a JSON manifest with per-file operations (patch, add, delete, mkdir, symlink), a `target-manifest.json` to verify the result against, and patch/add files in subdirectories. Always verify the final app manifest against `target-manifest.json` before promoting the update.
+
+**macOS-specific validation**: After applying a delta, run `codesign --verify --strict --verbose=2 YourApp.app` and `spctl --assess --type execute --verbose=2 YourApp.app` before atomically replacing the running app. Never mutate the running `.app` in place — apply to a staging copy, then swap on next launch.

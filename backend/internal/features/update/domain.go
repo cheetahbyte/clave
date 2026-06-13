@@ -64,26 +64,30 @@ type ProviderConfig struct {
 }
 
 type UpdateRequest struct {
-	LicenseID      string
-	ProductID      uuid.UUID
-	Platform       Platform
-	Channel        string
-	CurrentVersion string
-	CurrentBuild   string
-	Arch           string
-	OSVersion      string
-	ClientID       string
+	LicenseID               string
+	ProductID               uuid.UUID
+	Platform                Platform
+	Channel                 string
+	CurrentVersion          string
+	CurrentBuild            string
+	Arch                    string
+	OSVersion               string
+	ClientID                string
+	CurrentManifestSHA256   string
+	CurrentArtifactSHA256   string
 }
 
 type ArtifactDTO struct {
-	Type      string `json:"type,omitempty"`
-	URL       string `json:"url,omitempty"`
-	Arch      string `json:"arch,omitempty"`
-	SizeBytes int64  `json:"sizeBytes,omitempty"`
-	SHA256    string `json:"sha256,omitempty"`
-	Signature string `json:"signature,omitempty"`
-	Filename  string `json:"filename,omitempty"`
-	MimeType  string `json:"mimeType,omitempty"`
+	Type      string         `json:"type,omitempty"`
+	URL       string         `json:"url,omitempty"`
+	Arch      string         `json:"arch,omitempty"`
+	OS        string         `json:"os,omitempty"`
+	SizeBytes int64          `json:"sizeBytes,omitempty"`
+	SHA256    string         `json:"sha256,omitempty"`
+	Signature string         `json:"signature,omitempty"`
+	Filename  string         `json:"filename,omitempty"`
+	MimeType  string         `json:"mimeType,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 type UpdateDecision struct {

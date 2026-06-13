@@ -32,12 +32,14 @@ type NativeFeedRelease struct {
 }
 
 type NativeFeedArtifact struct {
-	Type      string `json:"type"`
-	Arch      string `json:"arch,omitempty"`
-	URL       string `json:"url"`
-	SizeBytes int64  `json:"sizeBytes,omitempty"`
-	SHA256    string `json:"sha256,omitempty"`
-	Signature string `json:"signature,omitempty"`
+	Type      string         `json:"type"`
+	Arch      string         `json:"arch,omitempty"`
+	OS        string         `json:"os,omitempty"`
+	URL       string         `json:"url"`
+	SizeBytes int64          `json:"sizeBytes,omitempty"`
+	SHA256    string         `json:"sha256,omitempty"`
+	Signature string         `json:"signature,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
 // NativeFeedReleaseInput bundles a release with its artifacts and rollout policy.
@@ -86,12 +88,19 @@ func GenerateNativeFeed(product db.Product, platform, channel string, releases [
 			art := NativeFeedArtifact{
 				Type:      a.ArtifactType,
 				Arch:      a.Arch,
+				OS:        a.Os,
 				URL:       a.Url,
 				SHA256:    safeString(a.ChecksumSha256),
 				Signature: safeString(a.Signature),
 			}
 			if a.SizeBytes != nil {
 				art.SizeBytes = *a.SizeBytes
+			}
+			if len(a.Metadata) > 0 && string(a.Metadata) != "{}" {
+				var md map[string]any
+				if uerr := json.Unmarshal(a.Metadata, &md); uerr == nil {
+					art.Metadata = md
+				}
 			}
 			fr.Artifacts = append(fr.Artifacts, art)
 		}

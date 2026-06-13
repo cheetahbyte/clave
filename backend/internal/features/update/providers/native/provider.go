@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/update"
@@ -99,14 +100,25 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 	}
 
 	artifacts, _ := p.repo.ListArtifactsForRelease(ctx, release.ID)
-	artifactDTOs := make([]update.ArtifactDTO, 0, len(artifacts))
-	var downloadURL string
+
+	var fullArtifact *update.ArtifactDTO
+	var deltaArtifact *update.ArtifactDTO
+
 	for _, a := range artifacts {
+		// Skip artifacts that don't match the requested arch/os.
+		if !matchesArch(req.Arch, a.Arch) || !matchesOS(string(req.Platform), a.Os) {
+			continue
+		}
+
+		md := parseArtifactMetadata(a.Metadata)
+
 		dto := update.ArtifactDTO{
 			Type:      a.ArtifactType,
 			URL:       a.Url,
 			Arch:      a.Arch,
+			OS:        a.Os,
 			Signature: "",
+			Metadata:  md,
 		}
 		if a.SizeBytes != nil {
 			dto.SizeBytes = *a.SizeBytes
@@ -117,13 +129,33 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 		if a.Signature != nil {
 			dto.Signature = *a.Signature
 		}
-		if a.ArtifactType == "full" && downloadURL == "" {
-			downloadURL = a.Url
+
+		if a.ArtifactType == "full" && fullArtifact == nil {
+			copy1 := dto
+			fullArtifact = &copy1
+			continue
 		}
-		artifactDTOs = append(artifactDTOs, dto)
+
+		if a.ArtifactType == "delta" && deltaArtifact == nil {
+			if deltaApplies(md, req) {
+				copy2 := dto
+				deltaArtifact = &copy2
+			}
+		}
 	}
-	if downloadURL == "" && len(artifacts) > 0 {
-		downloadURL = artifacts[0].Url
+
+	artifactDTOs := make([]update.ArtifactDTO, 0, 2)
+	var downloadURL string
+
+	// Delta first, then full fallback — clients try delta, fall back to full.
+	if deltaArtifact != nil {
+		artifactDTOs = append(artifactDTOs, *deltaArtifact)
+	}
+	if fullArtifact != nil {
+		artifactDTOs = append(artifactDTOs, *fullArtifact)
+		downloadURL = fullArtifact.URL
+	} else if len(artifactDTOs) > 0 {
+		downloadURL = artifactDTOs[0].URL
 	}
 
 	var releaseNotes string
@@ -187,4 +219,57 @@ func fnvHash(s string) uint32 {
 		h *= 16777619
 	}
 	return h
+}
+
+func matchesArch(requested, artifact string) bool {
+	if requested == "" || artifact == "" {
+		return true
+	}
+	ra := strings.ToLower(requested)
+	aa := strings.ToLower(artifact)
+	if ra == aa {
+		return true
+	}
+	if artifact == "universal" {
+		return true
+	}
+	return false
+}
+
+func matchesOS(requested, artifact string) bool {
+	if requested == "" || artifact == "" {
+		return true
+	}
+	return strings.EqualFold(requested, artifact)
+}
+
+func parseArtifactMetadata(raw []byte) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var md map[string]any
+	if err := json.Unmarshal(raw, &md); err != nil {
+		return nil
+	}
+	return md
+}
+
+func deltaApplies(md map[string]any, req update.UpdateRequest) bool {
+	if md == nil {
+		return false
+	}
+	if req.CurrentManifestSHA256 == "" {
+		return false
+	}
+	fromManifest, _ := md["fromManifestSha256"].(string)
+	if !strings.EqualFold(fromManifest, req.CurrentManifestSHA256) {
+		return false
+	}
+	if req.CurrentArtifactSHA256 != "" {
+		fromArtifact, _ := md["fromArtifactSha256"].(string)
+		if fromArtifact != "" && !strings.EqualFold(fromArtifact, req.CurrentArtifactSHA256) {
+			return false
+		}
+	}
+	return true
 }

@@ -4,12 +4,14 @@ type CheckRequest struct {
 	Token   string `json:"token" validate:"required"`
 	Version string `json:"version" validate:"required"`
 
-	Build     string `json:"build,omitempty"`
-	Platform  string `json:"platform,omitempty"`
-	Channel   string `json:"channel,omitempty"`
-	Arch      string `json:"arch,omitempty"`
-	OSVersion string `json:"osVersion,omitempty"`
-	ClientID  string `json:"clientId,omitempty"`
+	Build                   string `json:"build,omitempty"`
+	Platform                string `json:"platform,omitempty"`
+	Channel                 string `json:"channel,omitempty"`
+	Arch                    string `json:"arch,omitempty"`
+	OSVersion               string `json:"osVersion,omitempty"`
+	ClientID                string `json:"clientId,omitempty"`
+	CurrentManifestSHA256   string `json:"currentManifestSha256,omitempty"`
+	CurrentArtifactSHA256   string `json:"currentArtifactSha256,omitempty"`
 }
 
 type CheckResponse struct {

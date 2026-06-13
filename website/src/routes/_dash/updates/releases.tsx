@@ -348,6 +348,7 @@ function UploadArtifactDialog({
                   <SelectItem value="dmg">DMG</SelectItem>
                   <SelectItem value="zip">ZIP</SelectItem>
                   <SelectItem value="pkg">PKG</SelectItem>
+                  <SelectItem value="delta">Delta</SelectItem>
                   <SelectItem value="exe">EXE</SelectItem>
                   <SelectItem value="msi">MSI</SelectItem>
                   <SelectItem value="appimage">AppImage</SelectItem>
