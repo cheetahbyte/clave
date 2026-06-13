@@ -1,0 +1,27 @@
+{
+  "name": "emailer",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/main.ts",
+    "start": "bun run src/main.ts",
+    "publish:test": "bun run src/publish-test.ts",
+    "email:dev": "email dev --dir src/emails"
+  },
+  "devDependencies": {
+    "@react-email/ui": "6.6.0",
+    "@types/bun": "latest",
+    "@types/nodemailer": "^8.0.1",
+    "@types/react": "^19.2.17"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "amqp-connection-manager": "^5.0.0",
+    "amqplib": "^2.0.1",
+    "nodemailer": "^8.0.11",
+    "react": "^19.2.7",
+    "react-email": "^6.6.0",
+    "v": "^0.3.0"
+  }
+}
