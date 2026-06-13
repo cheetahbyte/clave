@@ -4,7 +4,7 @@ import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginAdmin } from "@/features/admin/api";
-import { fetchCsrfToken } from "@/lib/api";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +50,6 @@ function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await fetchCsrfToken();
       const resp = await loginAdmin(values);
 
       if (resp.mfaSetupRequired) {

@@ -97,7 +97,7 @@ for you, with a warning):
 | `RUN_MIGRATIONS`             | unset                 | Truthy = run DB migrations on startup.                             |
 | `LOG_LEVEL` / `VERBOSE_LOGGING` | `info`             | `debug`/`verbose`/`trace` (or a truthy `VERBOSE_LOGGING`) = debug logs. |
 | `TRUST_PROXY_HEADERS`        | unset                 | Truthy = trust `X-Forwarded-For` / `X-Real-IP` for client IPs **and** `X-Forwarded-Proto` for the in-app HTTPS guard (redirect HTTP→HTTPS, reject plaintext POSTs). Set only behind a trusted proxy that overwrites these headers. |
-| `ADMIN_BEARER_TOKEN`         | —                     | Optional static bearer token for admin API access.                 |
+
 | `SELF_SERVICE_RETURN_TOKEN`  | unset                 | Truthy = return the magic-link token in the API response. Dev convenience. |
 
 ### Email (optional)

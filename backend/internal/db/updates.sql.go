@@ -158,6 +158,38 @@ func (q *Queries) DeleteUpdateRelease(ctx context.Context, id uuid.UUID) (Update
 	return i, err
 }
 
+const getChangelogsByReleaseIDs = `-- name: GetChangelogsByReleaseIDs :many
+SELECT r.id AS release_id, c.body AS changelog_body
+FROM update_releases r
+JOIN changelogs c ON c.id = r.changelog_id
+WHERE r.id = ANY($1::uuid[])
+`
+
+type GetChangelogsByReleaseIDsRow struct {
+	ReleaseID     uuid.UUID `json:"release_id"`
+	ChangelogBody string    `json:"changelog_body"`
+}
+
+func (q *Queries) GetChangelogsByReleaseIDs(ctx context.Context, dollar_1 []uuid.UUID) ([]GetChangelogsByReleaseIDsRow, error) {
+	rows, err := q.db.Query(ctx, getChangelogsByReleaseIDs, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetChangelogsByReleaseIDsRow{}
+	for rows.Next() {
+		var i GetChangelogsByReleaseIDsRow
+		if err := rows.Scan(&i.ReleaseID, &i.ChangelogBody); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getChannelByProductAndName = `-- name: GetChannelByProductAndName :one
 SELECT id, organization_id, product_id, name, is_default, created_at, updated_at, required_features, description FROM update_channels
 WHERE product_id = $1 AND name = $2
@@ -697,6 +729,49 @@ func (q *Queries) ListArtifactsForRelease(ctx context.Context, releaseID uuid.UU
 	return items, nil
 }
 
+const listArtifactsForReleases = `-- name: ListArtifactsForReleases :many
+SELECT id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata, created_at, filename, mime_type, minimum_system_version, sparkle_ed_signature, storage_backend, storage_key FROM update_artifacts
+WHERE release_id = ANY($1::uuid[])
+`
+
+func (q *Queries) ListArtifactsForReleases(ctx context.Context, dollar_1 []uuid.UUID) ([]UpdateArtifact, error) {
+	rows, err := q.db.Query(ctx, listArtifactsForReleases, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UpdateArtifact{}
+	for rows.Next() {
+		var i UpdateArtifact
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.ArtifactType,
+			&i.Os,
+			&i.Arch,
+			&i.Url,
+			&i.SizeBytes,
+			&i.ChecksumSha256,
+			&i.Signature,
+			&i.Metadata,
+			&i.CreatedAt,
+			&i.Filename,
+			&i.MimeType,
+			&i.MinimumSystemVersion,
+			&i.SparkleEdSignature,
+			&i.StorageBackend,
+			&i.StorageKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublishedReleasesForAppcast = `-- name: ListPublishedReleasesForAppcast :many
 SELECT id, organization_id, product_id, channel_id, platform, version, build_number, status, release_notes, published_at, created_at, updated_at, changelog, changelog_id
 FROM update_releases
@@ -900,64 +975,6 @@ func (q *Queries) ListReleasesForOrganizationByProduct(ctx context.Context, arg 
 	return items, nil
 }
 
-const listReleasesForProductChannel = `-- name: ListReleasesForProductChannel :many
-SELECT id, organization_id, product_id, channel_id, platform, version, build_number, status, release_notes, published_at, created_at, updated_at, changelog, changelog_id FROM update_releases
-WHERE product_id = $1
-  AND platform = $2
-  AND channel_id = $3
-ORDER BY created_at DESC
-LIMIT $4 OFFSET $5
-`
-
-type ListReleasesForProductChannelParams struct {
-	ProductID uuid.UUID `json:"product_id"`
-	Platform  string    `json:"platform"`
-	ChannelID uuid.UUID `json:"channel_id"`
-	Limit     int32     `json:"limit"`
-	Offset    int32     `json:"offset"`
-}
-
-func (q *Queries) ListReleasesForProductChannel(ctx context.Context, arg ListReleasesForProductChannelParams) ([]UpdateRelease, error) {
-	rows, err := q.db.Query(ctx, listReleasesForProductChannel,
-		arg.ProductID,
-		arg.Platform,
-		arg.ChannelID,
-		arg.Limit,
-		arg.Offset,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []UpdateRelease{}
-	for rows.Next() {
-		var i UpdateRelease
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrganizationID,
-			&i.ProductID,
-			&i.ChannelID,
-			&i.Platform,
-			&i.Version,
-			&i.BuildNumber,
-			&i.Status,
-			&i.ReleaseNotes,
-			&i.PublishedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Changelog,
-			&i.ChangelogID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const publishUpdateRelease = `-- name: PublishUpdateRelease :one
 UPDATE update_releases
 SET status = 'published', published_at = now(), updated_at = now()
@@ -967,43 +984,6 @@ RETURNING id, organization_id, product_id, channel_id, platform, version, build_
 
 func (q *Queries) PublishUpdateRelease(ctx context.Context, id uuid.UUID) (UpdateRelease, error) {
 	row := q.db.QueryRow(ctx, publishUpdateRelease, id)
-	var i UpdateRelease
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProductID,
-		&i.ChannelID,
-		&i.Platform,
-		&i.Version,
-		&i.BuildNumber,
-		&i.Status,
-		&i.ReleaseNotes,
-		&i.PublishedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Changelog,
-		&i.ChangelogID,
-	)
-	return i, err
-}
-
-const updateReleaseChangelog = `-- name: UpdateReleaseChangelog :one
-UPDATE update_releases
-SET release_notes = $2,
-    changelog = $3,
-    updated_at = now()
-WHERE id = $1
-RETURNING id, organization_id, product_id, channel_id, platform, version, build_number, status, release_notes, published_at, created_at, updated_at, changelog, changelog_id
-`
-
-type UpdateReleaseChangelogParams struct {
-	ID           uuid.UUID `json:"id"`
-	ReleaseNotes *string   `json:"release_notes"`
-	Changelog    *string   `json:"changelog"`
-}
-
-func (q *Queries) UpdateReleaseChangelog(ctx context.Context, arg UpdateReleaseChangelogParams) (UpdateRelease, error) {
-	row := q.db.QueryRow(ctx, updateReleaseChangelog, arg.ID, arg.ReleaseNotes, arg.Changelog)
 	var i UpdateRelease
 	err := row.Scan(
 		&i.ID,
@@ -1112,55 +1092,6 @@ func (q *Queries) UpsertProductUpdateConfig(ctx context.Context, arg UpsertProdu
 		&i.ProviderKey,
 		&i.Config,
 		&i.Enabled,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const upsertReleasePolicy = `-- name: UpsertReleasePolicy :one
-INSERT INTO update_release_policies (
-    release_id, mandatory, min_supported_version, rollout_percentage, starts_at, ends_at
-)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (release_id)
-DO UPDATE SET
-    mandatory = EXCLUDED.mandatory,
-    min_supported_version = EXCLUDED.min_supported_version,
-    rollout_percentage = EXCLUDED.rollout_percentage,
-    starts_at = EXCLUDED.starts_at,
-    ends_at = EXCLUDED.ends_at,
-    updated_at = now()
-RETURNING id, release_id, mandatory, min_supported_version, rollout_percentage, starts_at, ends_at, created_at, updated_at
-`
-
-type UpsertReleasePolicyParams struct {
-	ReleaseID           uuid.UUID          `json:"release_id"`
-	Mandatory           bool               `json:"mandatory"`
-	MinSupportedVersion *string            `json:"min_supported_version"`
-	RolloutPercentage   int32              `json:"rollout_percentage"`
-	StartsAt            pgtype.Timestamptz `json:"starts_at"`
-	EndsAt              pgtype.Timestamptz `json:"ends_at"`
-}
-
-func (q *Queries) UpsertReleasePolicy(ctx context.Context, arg UpsertReleasePolicyParams) (UpdateReleasePolicy, error) {
-	row := q.db.QueryRow(ctx, upsertReleasePolicy,
-		arg.ReleaseID,
-		arg.Mandatory,
-		arg.MinSupportedVersion,
-		arg.RolloutPercentage,
-		arg.StartsAt,
-		arg.EndsAt,
-	)
-	var i UpdateReleasePolicy
-	err := row.Scan(
-		&i.ID,
-		&i.ReleaseID,
-		&i.Mandatory,
-		&i.MinSupportedVersion,
-		&i.RolloutPercentage,
-		&i.StartsAt,
-		&i.EndsAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

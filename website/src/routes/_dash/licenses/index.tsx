@@ -1,8 +1,7 @@
-import { createFileRoute, redirect, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getCurrentAdmin } from "@/features/admin/api";
 import { useCurrentProduct } from "@/features/admin/product-context";
 import {
   listAdminLicenses,
@@ -12,7 +11,7 @@ import {
   type AdminLicenseItem,
   type ListLicensesParams,
 } from "@/features/admin/api";
-import { fetchCsrfToken } from "@/lib/api";
+
 import { AdminShell } from "@/components/admin/AdminShell";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -48,18 +47,6 @@ import {
 import { Eye, Plus, Search, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_dash/licenses/")({
-  beforeLoad: async () => {
-    try {
-      const admin = await getCurrentAdmin();
-      if (!admin.mfaVerified) {
-        if (admin.mfaEnabled) throw redirect({ to: "/2fa" });
-        throw redirect({ to: "/2fa/setup" });
-      }
-    } catch (err) {
-      if (err instanceof Error && "redirect" in (err as unknown as Record<string, unknown>)) throw err;
-      throw redirect({ to: "/login" });
-    }
-  },
   component: LicensesPage,
 });
 
@@ -103,7 +90,6 @@ function LicensesPage() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      await fetchCsrfToken();
       const isTrial = newType === "trial";
       return createLicense({
         productId: newProductId,

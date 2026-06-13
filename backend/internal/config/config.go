@@ -26,7 +26,6 @@ type Config struct {
 	SelfServiceReturnToken  bool
 
 	AdminTOTPEncryptionKey []byte
-	AdminBearerToken       string
 
 	SMTPHost string
 	SMTPPort string
@@ -65,7 +64,6 @@ func Load() (*Config, error) {
 		LicenseHMACSecret: os.Getenv("LICENSE_HMAC_SECRET"),
 		SelfServiceTokenPepper: os.Getenv("SELF_SERVICE_TOKEN_PEPPER"),
 		SelfServiceReturnToken: strings.ToLower(os.Getenv("SELF_SERVICE_RETURN_TOKEN")) == "true",
-		AdminBearerToken:       os.Getenv("ADMIN_BEARER_TOKEN"),
 		SMTPHost:        os.Getenv("SMTP_HOST"),
 		SMTPPort:        getEnv("SMTP_PORT", "587"),
 		SMTPUser:        os.Getenv("SMTP_USER"),

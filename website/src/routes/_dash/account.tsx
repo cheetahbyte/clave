@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { getCurrentAdmin } from "@/features/admin/api";
 import { AdminShell } from "@/components/admin/AdminShell";
@@ -6,18 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_dash/account")({
-  beforeLoad: async () => {
-    try {
-      const admin = await getCurrentAdmin();
-      if (!admin.mfaVerified) {
-        if (admin.mfaEnabled) throw redirect({ to: "/2fa" });
-        throw redirect({ to: "/2fa/setup" });
-      }
-    } catch (err) {
-      if (err instanceof Error && "redirect" in (err as unknown as Record<string, unknown>)) throw err;
-      throw redirect({ to: "/login" });
-    }
-  },
   component: AccountPage,
 });
 

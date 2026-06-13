@@ -113,11 +113,6 @@ func DecodeValidated[T any](w http.ResponseWriter, r *http.Request, dst *T) bool
 	return true
 }
 
-func WriteInternal(w http.ResponseWriter, r *http.Request, msg string, err error) {
-	slog.Error(msg, "err", err)
-	WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
-}
-
 var TrustProxyHeaders bool
 
 func ClientIP(r *http.Request) *netip.Addr {

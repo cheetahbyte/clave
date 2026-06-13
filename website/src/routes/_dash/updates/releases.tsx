@@ -1,10 +1,9 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import {
-  getCurrentAdmin,
   listReleases,
   listChannels,
   listChangelogs,
@@ -49,18 +48,6 @@ import {
 import { Plus, Upload, Rocket, Ban, Trash2, Pencil } from "lucide-react";
 
 export const Route = createFileRoute("/_dash/updates/releases")({
-  beforeLoad: async () => {
-    try {
-      const admin = await getCurrentAdmin();
-      if (!admin.mfaVerified) {
-        if (admin.mfaEnabled) throw redirect({ to: "/2fa" });
-        throw redirect({ to: "/2fa/setup" });
-      }
-    } catch (err) {
-      if (err instanceof Error && "redirect" in (err as unknown as Record<string, unknown>)) throw err;
-      throw redirect({ to: "/login" });
-    }
-  },
   component: ReleasesPage,
 });
 

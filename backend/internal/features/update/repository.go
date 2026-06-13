@@ -98,10 +98,6 @@ func (r *Repository) CountConfigsForChannel(ctx context.Context, channelID uuid.
 	return r.q.CountConfigsForChannel(ctx, channelID)
 }
 
-func (r *Repository) UpdateReleaseChangelog(ctx context.Context, params db.UpdateReleaseChangelogParams) (db.UpdateRelease, error) {
-	return r.q.UpdateReleaseChangelog(ctx, params)
-}
-
 func (r *Repository) ListChangelogsForProduct(ctx context.Context, productID uuid.UUID) ([]db.Changelog, error) {
 	return r.q.ListChangelogsForProduct(ctx, productID)
 }
@@ -192,16 +188,6 @@ func (r *Repository) DeleteUpdateRelease(ctx context.Context, id uuid.UUID) (db.
 	return r.q.DeleteUpdateRelease(ctx, id)
 }
 
-func (r *Repository) ListReleasesForProductChannel(ctx context.Context, productID uuid.UUID, platform string, channelID uuid.UUID, limit, offset int32) ([]db.UpdateRelease, error) {
-	return r.q.ListReleasesForProductChannel(ctx, db.ListReleasesForProductChannelParams{
-		ProductID: productID,
-		Platform:  platform,
-		ChannelID: channelID,
-		Limit:     limit,
-		Offset:    offset,
-	})
-}
-
 func (r *Repository) InsertUpdateArtifact(ctx context.Context, params db.InsertUpdateArtifactParams) (db.UpdateArtifact, error) {
 	return r.q.InsertUpdateArtifact(ctx, params)
 }
@@ -212,6 +198,20 @@ func (r *Repository) GetArtifact(ctx context.Context, id uuid.UUID) (db.UpdateAr
 
 func (r *Repository) ListArtifactsForRelease(ctx context.Context, releaseID uuid.UUID) ([]db.UpdateArtifact, error) {
 	return r.q.ListArtifactsForRelease(ctx, releaseID)
+}
+
+func (r *Repository) ListArtifactsForReleases(ctx context.Context, releaseIDs []uuid.UUID) ([]db.UpdateArtifact, error) {
+	if len(releaseIDs) == 0 {
+		return nil, nil
+	}
+	return r.q.ListArtifactsForReleases(ctx, releaseIDs)
+}
+
+func (r *Repository) GetChangelogsByReleaseIDs(ctx context.Context, releaseIDs []uuid.UUID) ([]db.GetChangelogsByReleaseIDsRow, error) {
+	if len(releaseIDs) == 0 {
+		return nil, nil
+	}
+	return r.q.GetChangelogsByReleaseIDs(ctx, releaseIDs)
 }
 
 func (r *Repository) GetReleasePolicy(ctx context.Context, releaseID uuid.UUID) (db.UpdateReleasePolicy, error) {
@@ -261,20 +261,6 @@ func (r *Repository) InsertUpdateCheck(ctx context.Context, orgID, productID, li
 		SelectedReleaseID: relID,
 	})
 	return err
-}
-
-func (r *Repository) EnsureDefaultChannel(ctx context.Context, orgID, productID uuid.UUID) (db.UpdateChannel, error) {
-	ch, err := r.GetDefaultChannelForProduct(ctx, productID)
-	if err == nil {
-		return ch, nil
-	}
-
-	return r.UpsertUpdateChannel(ctx, db.UpsertUpdateChannelParams{
-		OrganizationID: orgID,
-		ProductID:      productID,
-		Name:           "stable",
-		IsDefault:      true,
-	})
 }
 
 func MustParseProviderConfig(raw []byte) map[string]any {

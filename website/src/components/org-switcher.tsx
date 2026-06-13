@@ -52,7 +52,16 @@ export function OrgSwitcher() {
   const activeRole = orgs?.find((o) => o.id === activeId)?.role
 
   async function refreshAll() {
-    await queryClient.invalidateQueries()
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["currentAdmin"] }),
+      queryClient.invalidateQueries({ queryKey: ["organizations"] }),
+      queryClient.invalidateQueries({ queryKey: ["adminOverview"] }),
+      queryClient.invalidateQueries({ queryKey: ["adminLicenses"] }),
+      queryClient.invalidateQueries({ queryKey: ["adminProducts"] }),
+      queryClient.invalidateQueries({ queryKey: ["adminTrials"] }),
+      queryClient.invalidateQueries({ queryKey: ["adminTimeseries"] }),
+      queryClient.invalidateQueries({ queryKey: ["adminAudit"] }),
+    ])
     await router.invalidate()
   }
 

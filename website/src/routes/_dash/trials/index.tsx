@@ -1,7 +1,7 @@
-import { createFileRoute, redirect, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { getCurrentAdmin, listAdminTrials, getAdminOverview } from "@/features/admin/api";
+import { listAdminTrials, getAdminOverview } from "@/features/admin/api";
 import type { AdminLicenseItem } from "@/features/admin/api";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
@@ -32,18 +32,6 @@ import { Badge } from "@/components/ui/badge";
 import { Eye, Search, FlaskConical, CheckCircle2, Clock } from "lucide-react";
 
 export const Route = createFileRoute("/_dash/trials/")({
-  beforeLoad: async () => {
-    try {
-      const admin = await getCurrentAdmin();
-      if (!admin.mfaVerified) {
-        if (admin.mfaEnabled) throw redirect({ to: "/2fa" });
-        throw redirect({ to: "/2fa/setup" });
-      }
-    } catch (err) {
-      if (err instanceof Error && "redirect" in (err as unknown as Record<string, unknown>)) throw err;
-      throw redirect({ to: "/login" });
-    }
-  },
   component: TrialsPage,
 });
 

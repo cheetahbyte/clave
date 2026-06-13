@@ -4,7 +4,7 @@ import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { start2FASetup, verify2FASetup, getCurrentAdmin } from "@/features/admin/api";
-import { fetchCsrfToken } from "@/lib/api";
+
 import { Button } from "@/components/ui/button";
 import {
   InputOTP,
@@ -45,7 +45,6 @@ function TwoFactorSetupPage() {
     setError(null);
     setLoading(true);
     try {
-      await fetchCsrfToken();
       const resp = await start2FASetup();
       setOtpauthUrl(resp.otpauthUrl);
     } catch (err: unknown) {
@@ -62,7 +61,6 @@ function TwoFactorSetupPage() {
     setError(null);
     setLoading(true);
     try {
-      await fetchCsrfToken();
       await verify2FASetup(code);
       navigate({ to: "/dashboard" });
     } catch (err: unknown) {

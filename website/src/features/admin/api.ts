@@ -385,42 +385,6 @@ export function getAdminProduct(id: string): Promise<AdminProductItem> {
   return adminFetch<AdminProductItem>(`/api/v1/admin/products/${encodeURIComponent(id)}`);
 }
 
-export interface StartTrialRequest {
-  productId: string;
-  device: {
-    hwid: string;
-    hostname?: string;
-  };
-}
-
-export interface StartTrialResponse {
-  activationId: string;
-  token: string;
-  validUntil: number;
-  maskedEmail: string;
-}
-
-export function startTrial(data: StartTrialRequest): Promise<StartTrialResponse> {
-  return publicFetch<StartTrialResponse>("/api/v1/client/trials/start", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export interface UpdateProviderInfo {
-  key: string;
-  name: string;
-  capabilities: {
-    deltaUpdates: string;
-    codeSigning: string;
-    stagedRollouts: string;
-    mandatoryUpdates: string;
-    releaseNotes: string;
-    channels: string;
-    serverSideChecks: string;
-  };
-}
-
 export interface ProductUpdateConfigDTO {
   id: string;
   productId: string;
@@ -431,10 +395,6 @@ export interface ProductUpdateConfigDTO {
   enabled: boolean;
   config: Record<string, unknown>;
   feedUrl?: string;
-}
-
-export function listUpdateProviders(): Promise<UpdateProviderInfo[]> {
-  return adminFetch<UpdateProviderInfo[]>("/api/v1/admin/update-providers");
 }
 
 export function listProductUpdateConfigs(productId: string): Promise<ProductUpdateConfigDTO[]> {

@@ -21,14 +21,6 @@ func NewRepository(q *db.Queries, pool *pgxpool.Pool) *Repository {
 	return &Repository{q: q, pool: pool}
 }
 
-func (r *Repository) CountByLicense(ctx context.Context, licenseID uuid.UUID) (int64, error) {
-	val, err := r.q.CountActivations(ctx, licenseID)
-	if err != nil {
-		return 0, fmt.Errorf("count activations: %w", err)
-	}
-	return val, nil
-}
-
 func (r *Repository) CountTrialsByHwidProduct(ctx context.Context, orgID uuid.UUID, productID uuid.UUID, hwidHash []byte) (int64, error) {
 	return r.q.CountTrialsByHwidProduct(ctx, db.CountTrialsByHwidProductParams{
 		OrganizationID: orgID,

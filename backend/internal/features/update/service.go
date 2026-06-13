@@ -333,13 +333,6 @@ func (svc *Service) nativeFeedURL(productID uuid.UUID, platform, channel string)
 	return strings.TrimRight(svc.publicAppURL, "/") + path
 }
 
-func (svc *Service) NativeUpdateURL() string {
-	if svc.publicAppURL == "" {
-		return "/api/v1/client/updates/check"
-	}
-	return fmt.Sprintf("%s/api/v1/client/updates/check", strings.TrimRight(svc.publicAppURL, "/"))
-}
-
 func (svc *Service) ChangelogURL(releaseID uuid.UUID) string {
 	path := fmt.Sprintf("/api/v1/updates/releases/%s/changelog.html", releaseID)
 	if svc.publicAppURL == "" {
@@ -454,12 +447,26 @@ func (svc *Service) GenerateAppcast(ctx context.Context, productID uuid.UUID, pl
 	}
 
 	appcastReleases := make([]AppcastRelease, len(releases))
+	releaseIDs := make([]uuid.UUID, len(releases))
 	for i, rel := range releases {
-		artifacts, _ := svc.repo.ListArtifactsForRelease(ctx, rel.ID)
+		releaseIDs[i] = rel.ID
+	}
+
+	allArtifacts, _ := svc.repo.ListArtifactsForReleases(ctx, releaseIDs)
+	artifactMap := make(map[uuid.UUID][]db.UpdateArtifact)
+	for _, a := range allArtifacts {
+		artifactMap[a.ReleaseID] = append(artifactMap[a.ReleaseID], a)
+	}
+
+	for i, rel := range releases {
+		artifacts := artifactMap[rel.ID]
 		for j := range artifacts {
 			artifacts[j].Url = appendDownloadToken(artifacts[j].Url, token)
 		}
-		_, changelogURL := svc.releaseChangelog(ctx, rel)
+		changelogURL := ""
+		if rel.ChangelogID.Valid {
+			changelogURL = svc.ChangelogURL(rel.ID)
+		}
 		appcastReleases[i] = AppcastRelease{Release: rel, Artifacts: artifacts, ChangelogURL: changelogURL}
 	}
 
@@ -486,13 +493,34 @@ func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID,
 	}
 
 	inputs := make([]NativeFeedReleaseInput, len(releases))
+	releaseIDs := make([]uuid.UUID, len(releases))
 	for i, rel := range releases {
-		artifacts, _ := svc.repo.ListArtifactsForRelease(ctx, rel.ID)
+		releaseIDs[i] = rel.ID
+	}
+
+	allArtifacts, _ := svc.repo.ListArtifactsForReleases(ctx, releaseIDs)
+	artifactMap := make(map[uuid.UUID][]db.UpdateArtifact)
+	for _, a := range allArtifacts {
+		artifactMap[a.ReleaseID] = append(artifactMap[a.ReleaseID], a)
+	}
+
+	changelogRows, _ := svc.repo.GetChangelogsByReleaseIDs(ctx, releaseIDs)
+	changelogBodyByRelease := make(map[uuid.UUID]string)
+	for _, cl := range changelogRows {
+		changelogBodyByRelease[cl.ReleaseID] = cl.ChangelogBody
+	}
+
+	for i, rel := range releases {
+		artifacts := artifactMap[rel.ID]
 		for j := range artifacts {
 			artifacts[j].Url = appendDownloadToken(artifacts[j].Url, token)
 		}
 		policy, _ := svc.repo.GetReleasePolicy(ctx, rel.ID)
-		changelogBody, changelogURL := svc.releaseChangelog(ctx, rel)
+		changelogBody := changelogBodyByRelease[rel.ID]
+		changelogURL := ""
+		if rel.ChangelogID.Valid {
+			changelogURL = svc.ChangelogURL(rel.ID)
+		}
 		inputs[i] = NativeFeedReleaseInput{Release: rel, Artifacts: artifacts, Policy: policy, Changelog: changelogBody, ChangelogURL: changelogURL}
 	}
 
@@ -511,8 +539,19 @@ func (svc *Service) ListReleases(ctx context.Context, orgID uuid.UUID, productID
 	}
 
 	result := make([]ReleaseDTO, len(rows))
+	releaseIDs := make([]uuid.UUID, len(rows))
 	for i, r := range rows {
-		artifacts, _ := svc.repo.ListArtifactsForRelease(ctx, r.ID)
+		releaseIDs[i] = r.ID
+	}
+
+	allArtifacts, _ := svc.repo.ListArtifactsForReleases(ctx, releaseIDs)
+	artifactMap := make(map[uuid.UUID][]db.UpdateArtifact)
+	for _, a := range allArtifacts {
+		artifactMap[a.ReleaseID] = append(artifactMap[a.ReleaseID], a)
+	}
+
+	for i, r := range rows {
+		artifacts := artifactMap[r.ID]
 		artifactDTOs := make([]ArtifactDTO, len(artifacts))
 		for j, a := range artifacts {
 			var sig string

@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -42,18 +42,6 @@ import {
 import { Trash2, UserPlus } from "lucide-react";
 
 export const Route = createFileRoute("/_dash/organization/")({
-  beforeLoad: async () => {
-    try {
-      const admin = await getCurrentAdmin();
-      if (!admin.mfaVerified) {
-        if (admin.mfaEnabled) throw redirect({ to: "/2fa" });
-        throw redirect({ to: "/2fa/setup" });
-      }
-    } catch (err) {
-      if (err instanceof Error && "redirect" in (err as unknown as Record<string, unknown>)) throw err;
-      throw redirect({ to: "/login" });
-    }
-  },
   component: OrganizationPage,
 });
 

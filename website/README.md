@@ -1,21 +1,16 @@
-# React + TypeScript + Vite + shadcn/ui
+# Clave — Website
 
-This is a template for a new Vite project with React, TypeScript, and shadcn/ui.
+Admin dashboard and self-service portal for Clave, the self-hosted license server.
 
-## Adding components
+Built with React + TypeScript + Vite + shadcn/ui + TanStack Router.
 
-To add components to your app, run the following command:
+## Development
 
 ```bash
-npx shadcn@latest add button
+pnpm install
+pnpm dev        # http://localhost:5173
+pnpm typecheck  # TypeScript check
+pnpm lint       # ESLint
 ```
 
-This will place the ui components in the `src/components` directory.
-
-## Using components
-
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button"
-```
+Vite proxies `/api` to the backend on `:8000`. See the repo root README for backend setup.

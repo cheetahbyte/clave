@@ -3,7 +3,7 @@ import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { useState } from "react";
 import { toast } from "sonner";
 import { verify2FA, getCurrentAdmin } from "@/features/admin/api";
-import { fetchCsrfToken } from "@/lib/api";
+
 import { Button } from "@/components/ui/button";
 import {
   InputOTP,
@@ -50,7 +50,6 @@ function TwoFactorPage() {
     setError(null);
     setLoading(true);
     try {
-      await fetchCsrfToken();
       await verify2FA(code);
       navigate({ to: "/dashboard" });
     } catch (err: unknown) {

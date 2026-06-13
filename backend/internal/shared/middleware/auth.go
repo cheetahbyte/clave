@@ -152,46 +152,46 @@ func RequireAdminBearerToken(expectedToken string) func(http.Handler) http.Handl
 	}
 }
 
+func adminSessionContext(r *http.Request, sm *scs.SessionManager) (context.Context, error) {
+	userID := sm.GetString(r.Context(), "admin_user_id")
+	if userID == "" {
+		return nil, errors.New("Admin authentication required")
+	}
+
+	id, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, errors.New("Invalid admin session")
+	}
+
+	email := sm.GetString(r.Context(), "admin_email")
+	role := sm.GetString(r.Context(), "admin_role")
+
+	orgIDStr := sm.GetString(r.Context(), "admin_organization_id")
+	orgID, err := uuid.Parse(orgIDStr)
+	if err != nil {
+		return nil, errors.New("Invalid admin session")
+	}
+
+	ctx := r.Context()
+	ctx = context.WithValue(ctx, adminIDKey, id)
+	ctx = context.WithValue(ctx, adminEmailKey, email)
+	ctx = context.WithValue(ctx, adminRoleKey, role)
+	ctx = context.WithValue(ctx, adminOrganizationIDKey, orgID)
+
+	return ctx, nil
+}
+
 func RequireAdmin(sm *scs.SessionManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userID := sm.GetString(r.Context(), "admin_user_id")
-			if userID == "" {
-				p := problem.Of(401).
-					Append(problem.Title("Unauthorized")).
-					Append(problem.Detail("Admin authentication required"))
-				p.WriteTo(w)
-				return
-			}
-
-			id, err := uuid.Parse(userID)
+			ctx, err := adminSessionContext(r, sm)
 			if err != nil {
 				p := problem.Of(401).
 					Append(problem.Title("Unauthorized")).
-					Append(problem.Detail("Invalid admin session"))
+					Append(problem.Detail(err.Error()))
 				p.WriteTo(w)
 				return
 			}
-
-			email := sm.GetString(r.Context(), "admin_email")
-			role := sm.GetString(r.Context(), "admin_role")
-
-			orgIDStr := sm.GetString(r.Context(), "admin_organization_id")
-			orgID, err := uuid.Parse(orgIDStr)
-			if err != nil {
-				p := problem.Of(401).
-					Append(problem.Title("Unauthorized")).
-					Append(problem.Detail("Invalid admin session"))
-				p.WriteTo(w)
-				return
-			}
-
-			ctx := r.Context()
-			ctx = context.WithValue(ctx, adminIDKey, id)
-			ctx = context.WithValue(ctx, adminEmailKey, email)
-			ctx = context.WithValue(ctx, adminRoleKey, role)
-			ctx = context.WithValue(ctx, adminOrganizationIDKey, orgID)
-
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -200,11 +200,11 @@ func RequireAdmin(sm *scs.SessionManager) func(http.Handler) http.Handler {
 func RequireAdminVerified(sm *scs.SessionManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			userID := sm.GetString(r.Context(), "admin_user_id")
-			if userID == "" {
+			ctx, err := adminSessionContext(r, sm)
+			if err != nil {
 				p := problem.Of(401).
 					Append(problem.Title("Unauthorized")).
-					Append(problem.Detail("Admin authentication required"))
+					Append(problem.Detail(err.Error()))
 				p.WriteTo(w)
 				return
 			}
@@ -217,34 +217,6 @@ func RequireAdminVerified(sm *scs.SessionManager) func(http.Handler) http.Handle
 				p.WriteTo(w)
 				return
 			}
-
-			id, err := uuid.Parse(userID)
-			if err != nil {
-				p := problem.Of(401).
-					Append(problem.Title("Unauthorized")).
-					Append(problem.Detail("Invalid admin session"))
-				p.WriteTo(w)
-				return
-			}
-
-			email := sm.GetString(r.Context(), "admin_email")
-			role := sm.GetString(r.Context(), "admin_role")
-
-			orgIDStr := sm.GetString(r.Context(), "admin_organization_id")
-			orgID, err := uuid.Parse(orgIDStr)
-			if err != nil {
-				p := problem.Of(401).
-					Append(problem.Title("Unauthorized")).
-					Append(problem.Detail("Invalid admin session"))
-				p.WriteTo(w)
-				return
-			}
-
-			ctx := r.Context()
-			ctx = context.WithValue(ctx, adminIDKey, id)
-			ctx = context.WithValue(ctx, adminEmailKey, email)
-			ctx = context.WithValue(ctx, adminRoleKey, role)
-			ctx = context.WithValue(ctx, adminOrganizationIDKey, orgID)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

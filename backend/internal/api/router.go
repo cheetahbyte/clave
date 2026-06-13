@@ -284,34 +284,6 @@ func Register(r *chi.Mux, cfg Config) {
 
 			v1.Get("/updates/artifacts/{artifactId}/download", ua.DownloadArtifact)
 
-			v1.With(mw.VerifiedAuth).Post("/", la.Create)
-			v1.Group(func(enc chi.Router) {
-				if mw.Verbose {
-					enc.Use(verboseLogger)
-				}
-				enc.Post("/activate", c.Activate)
-				enc.Post("/validate", c.Validate)
-				enc.Post("/updates/check", c.CheckUpdate)
 			})
-			v1.Route("/selfservice", func(ss chi.Router) {
-				ss.Route("/auth", func(auth chi.Router) {
-					auth.With(sensitiveRate).Post("/request-token", sv.RequestLink)
-					auth.Post("/validate", sv.Validate)
-				})
-				ss.With(mw.SSAuth).Get("/check", sv.CheckSession)
-				ss.With(mw.SSAuth).Post("/logout", sv.Logout)
-				ss.With(mw.SSAuth).Get("/", sv.ListLicenses)
-			})
-		})
-
-		api.Route("/selfservice", func(ss chi.Router) {
-			ss.Route("/auth", func(auth chi.Router) {
-				auth.With(sensitiveRate).Post("/request-token", sv.RequestLink)
-				auth.Post("/validate", sv.Validate)
-			})
-			ss.With(mw.SSAuth).Get("/check", sv.CheckSession)
-			ss.With(mw.SSAuth).Post("/logout", sv.Logout)
-			ss.With(mw.SSAuth).Get("/", sv.ListLicenses)
-		})
 	})
 }

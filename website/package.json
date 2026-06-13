@@ -18,7 +18,7 @@
     "@tailwindcss/vite": "^4",
     "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-router": "^1.170.15",
-    "@tanstack/react-router-devtools": "^1.167.0",
+
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "input-otp": "^1.4.2",
@@ -43,6 +43,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6",
+    "@tanstack/react-router-devtools": "^1.167.0",
     "eslint": "^10",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",

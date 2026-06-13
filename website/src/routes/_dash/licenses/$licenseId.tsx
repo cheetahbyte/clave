@@ -1,8 +1,7 @@
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { getCurrentAdmin } from "@/features/admin/api";
 import { getAdminLicense, updateLicense, deleteLicense, type AdminLicenseDetail } from "@/features/admin/api";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -29,18 +28,6 @@ import {
 import { Pencil, Trash2, ShieldCheck, Laptop, Monitor, HardDrive } from "lucide-react";
 
 export const Route = createFileRoute("/_dash/licenses/$licenseId")({
-  beforeLoad: async () => {
-    try {
-      const admin = await getCurrentAdmin();
-      if (!admin.mfaVerified) {
-        if (admin.mfaEnabled) throw redirect({ to: "/2fa" });
-        throw redirect({ to: "/2fa/setup" });
-      }
-    } catch (err) {
-      if (err instanceof Error && "redirect" in (err as unknown as Record<string, unknown>)) throw err;
-      throw redirect({ to: "/login" });
-    }
-  },
   component: LicenseDetailPage,
 });
 

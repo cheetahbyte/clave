@@ -4,7 +4,6 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { useQuery } from "@tanstack/react-query"
 import { getCurrentAdmin, logoutAdmin } from "@/features/admin/api"
-import { fetchCsrfToken } from "@/lib/api"
 import { NavUser } from "@/components/nav-user"
 import { OrgSwitcher } from "@/components/org-switcher"
 import { ProductSwitcher } from "@/components/product-switcher"
@@ -32,7 +31,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   async function handleLogout() {
     try {
-      await fetchCsrfToken()
       await logoutAdmin()
       navigate({ to: "/login" })
     } catch {

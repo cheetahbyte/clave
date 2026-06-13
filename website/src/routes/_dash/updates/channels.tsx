@@ -1,9 +1,8 @@
-import { createFileRoute, redirect, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
-  getCurrentAdmin,
   listChannels,
   createChannel,
   updateChannel,
@@ -39,18 +38,6 @@ import {
 import { ExternalLink, Plus, Pencil, Trash2, Globe, Lock } from "lucide-react";
 
 export const Route = createFileRoute("/_dash/updates/channels")({
-  beforeLoad: async () => {
-    try {
-      const admin = await getCurrentAdmin();
-      if (!admin.mfaVerified) {
-        if (admin.mfaEnabled) throw redirect({ to: "/2fa" });
-        throw redirect({ to: "/2fa/setup" });
-      }
-    } catch (err) {
-      if (err instanceof Error && "redirect" in (err as unknown as Record<string, unknown>)) throw err;
-      throw redirect({ to: "/login" });
-    }
-  },
   component: ChannelsPage,
 });
 

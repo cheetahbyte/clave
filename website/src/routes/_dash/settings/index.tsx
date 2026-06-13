@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { getCurrentAdmin, listOrganizations } from "@/features/admin/api";
 import { AdminShell } from "@/components/admin/AdminShell";
@@ -9,18 +9,6 @@ import { Copy, ExternalLink, Users } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_dash/settings/")({
-  beforeLoad: async () => {
-    try {
-      const admin = await getCurrentAdmin();
-      if (!admin.mfaVerified) {
-        if (admin.mfaEnabled) throw redirect({ to: "/2fa" });
-        throw redirect({ to: "/2fa/setup" });
-      }
-    } catch (err) {
-      if (err instanceof Error && "redirect" in (err as unknown as Record<string, unknown>)) throw err;
-      throw redirect({ to: "/login" });
-    }
-  },
   component: SettingsPage,
 });
 

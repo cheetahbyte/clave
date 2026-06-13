@@ -47,10 +47,6 @@ func New(publicKey ed25519.PublicKey, privateKey ed25519.PrivateKey, hmacSecret 
 	}
 }
 
-func (svc *Service) GetPublicKey() ed25519.PublicKey {
-	return svc.publicKey
-}
-
 func (svc *Service) normalizeKey(s string) string {
 	s = strings.TrimSpace(s)
 	s = strings.ToUpper(s)

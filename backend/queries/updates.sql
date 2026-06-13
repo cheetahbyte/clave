@@ -104,14 +104,6 @@ INSERT INTO update_releases (
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
 
--- name: UpdateReleaseChangelog :one
-UPDATE update_releases
-SET release_notes = $2,
-    changelog = $3,
-    updated_at = now()
-WHERE id = $1
-RETURNING *;
-
 -- name: PublishUpdateRelease :one
 UPDATE update_releases
 SET status = 'published', published_at = now(), updated_at = now()
@@ -128,14 +120,6 @@ RETURNING *;
 DELETE FROM update_releases
 WHERE id = $1
 RETURNING *;
-
--- name: ListReleasesForProductChannel :many
-SELECT * FROM update_releases
-WHERE product_id = $1
-  AND platform = $2
-  AND channel_id = $3
-ORDER BY created_at DESC
-LIMIT $4 OFFSET $5;
 
 -- name: ListReleasesForOrganization :many
 SELECT ur.*, p.name AS product_name, c.name AS channel_name
@@ -174,21 +158,6 @@ RETURNING *;
 SELECT * FROM update_release_policies
 WHERE release_id = $1;
 
--- name: UpsertReleasePolicy :one
-INSERT INTO update_release_policies (
-    release_id, mandatory, min_supported_version, rollout_percentage, starts_at, ends_at
-)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (release_id)
-DO UPDATE SET
-    mandatory = EXCLUDED.mandatory,
-    min_supported_version = EXCLUDED.min_supported_version,
-    rollout_percentage = EXCLUDED.rollout_percentage,
-    starts_at = EXCLUDED.starts_at,
-    ends_at = EXCLUDED.ends_at,
-    updated_at = now()
-RETURNING *;
-
 -- name: InsertUpdateCheck :one
 INSERT INTO update_checks (
     organization_id, product_id, license_id, platform, channel,
@@ -207,3 +176,13 @@ WHERE product_id = $1
   AND published_at <= now()
 ORDER BY published_at DESC
 LIMIT 20;
+
+-- name: ListArtifactsForReleases :many
+SELECT * FROM update_artifacts
+WHERE release_id = ANY($1::uuid[]);
+
+-- name: GetChangelogsByReleaseIDs :many
+SELECT r.id AS release_id, c.body AS changelog_body
+FROM update_releases r
+JOIN changelogs c ON c.id = r.changelog_id
+WHERE r.id = ANY($1::uuid[]);
