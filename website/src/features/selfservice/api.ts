@@ -60,8 +60,8 @@ export async function removeSelfServiceDevice(licenseId: string, deviceId: strin
   );
 }
 
-export async function revokeSelfServiceLicense(licenseId: string): Promise<{ ok: boolean }> {
-  return selfServiceFetch<{ ok: boolean }>(
+export async function revokeSelfServiceLicense(licenseId: string): Promise<{ ok: boolean; newLicenseId: string }> {
+  return selfServiceFetch<{ ok: boolean; newLicenseId: string }>(
     `/api/v1/self-service/licenses/${licenseId}/revoke`,
     { method: "POST" },
   );

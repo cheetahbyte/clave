@@ -22,7 +22,6 @@ import (
 	"github.com/cheetahbyte/clave/internal/features/update/providers/native"
 	"github.com/cheetahbyte/clave/internal/features/validation"
 	"github.com/cheetahbyte/clave/internal/observability"
-	"github.com/cheetahbyte/clave/internal/shared/email"
 	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
@@ -104,16 +103,11 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	)
 
 	updateSvc := update.NewService(licenseSvc, signer, updateRepo, updateRegistry, cfg.PublicAppURL, cfg.UpdateArtifactStoragePath, cfg.SparkleEd25519PublicKey, cfg.SparkleEd25519PrivateKey)
-	selfServiceRepo := selfservice.NewRepository(q)
-	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer)
+	selfServiceRepo := selfservice.NewRepository(q, pool)
+	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer, licenseSvc)
 
 	adminAuthRepo := adminauth.NewRepository(q)
 	adminAuthSvc := adminauth.NewService(adminAuthRepo, cfg.AdminTOTPEncryptionKey)
-
-	var mailer *email.Sender
-	if cfg.SMTPHost != "" {
-		mailer = email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.MailFrom)
-	}
 
 	if cfg.RabbitMQURL != "" {
 		publisher = events.NewPublisher(cfg.RabbitMQURL)
@@ -126,7 +120,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	activationH := activation.NewHandler(activationSvc)
 	validationH := validation.NewHandler(validationSvc)
 	updateH := update.NewHandler(updateSvc, auditSvc)
-	selfserviceH := selfservice.NewHandler(selfserviceSvc, mailer, appURL, cfg.SelfServiceReturnToken, cfg.Dev)
+	selfserviceH := selfservice.NewHandler(selfserviceSvc, publisher, appURL, cfg.SelfServiceReturnToken, cfg.Dev)
 
 	sessionManager := scs.New()
 	sessionManager.Store = pgxstore.New(pool)
@@ -143,7 +137,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 
 	orgRepo := organization.NewRepository(q)
 	orgSvc := organization.NewService(orgRepo, []byte(cfg.SelfServiceTokenPepper))
-	orgH := organization.NewHandler(orgSvc, sessionManager, mailer, appURL, auditSvc)
+	orgH := organization.NewHandler(orgSvc, sessionManager, publisher, appURL, auditSvc)
 
 	auditH := audit.NewHandler(auditSvc)
 

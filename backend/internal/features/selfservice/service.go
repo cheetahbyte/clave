@@ -12,10 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexedwards/argon2id"
 	"github.com/cheetahbyte/clave/internal/db"
+	lic "github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var (
@@ -64,21 +67,58 @@ func (svc *Service) RemoveDevice(ctx context.Context, email string, orgID, licen
 	return svc.repo.DeleteDevice(ctx, licenseID, deviceID, email, orgID)
 }
 
-func (svc *Service) RevokeLicense(ctx context.Context, email string, orgID, licenseID uuid.UUID) error {
-	return svc.repo.RevokeLicense(ctx, licenseID, email, orgID)
+// ReplaceLicenseResponse holds the result of a license replacement.
+type ReplaceLicenseResponse struct {
+	NewLicenseID uuid.UUID
+	LicenseKey   string
+	ProductName  string
+}
+
+// RevokeLicense replaces the license with a new key. The old license is
+// deactivated and a new active license is created with the same metadata.
+func (svc *Service) RevokeLicense(ctx context.Context, email string, orgID, licenseID uuid.UUID) (*ReplaceLicenseResponse, error) {
+	key, err := svc.licenseSvc.GenerateKey()
+	if err != nil {
+		return nil, fmt.Errorf("generate key: %w", err)
+	}
+
+	digest := svc.signer.HMACSign(key, signing.NormalizeKey)
+	hash, err := argon2id.CreateHash(key, argon2id.DefaultParams)
+	if err != nil {
+		slog.Error("failed to hash replacement key", "err", err.Error())
+		return nil, fmt.Errorf("hash key: %w", err)
+	}
+
+	newRow, err := svc.repo.ReplaceLicense(ctx, licenseID, email, orgID, digest, hash)
+	if err != nil {
+		return nil, fmt.Errorf("replace license: %w", err)
+	}
+
+	product, err := svc.licenseSvc.GetProductByID(ctx, pgToUUID(newRow.ProductID))
+	if err != nil {
+		return nil, fmt.Errorf("get product: %w", err)
+	}
+
+	return &ReplaceLicenseResponse{
+		NewLicenseID: newRow.ID,
+		LicenseKey:   key,
+		ProductName:  product.Name,
+	}, nil
 }
 
 type Service struct {
-	repo   *Repository
-	pepper []byte
-	signer *signing.Service
+	repo       *Repository
+	pepper     []byte
+	signer     *signing.Service
+	licenseSvc *lic.Service
 }
 
-func NewService(repo *Repository, pepper []byte, signer *signing.Service) *Service {
+func NewService(repo *Repository, pepper []byte, signer *signing.Service, licenseSvc *lic.Service) *Service {
 	return &Service{
-		repo:   repo,
-		pepper: pepper,
-		signer: signer,
+		repo:       repo,
+		pepper:     pepper,
+		signer:     signer,
+		licenseSvc: licenseSvc,
 	}
 }
 
@@ -158,4 +198,8 @@ func generateURLToken(nBytes int) (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func pgToUUID(pg pgtype.UUID) uuid.UUID {
+	return pg.Bytes
 }

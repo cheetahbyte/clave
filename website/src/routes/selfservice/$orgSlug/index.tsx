@@ -165,7 +165,7 @@ function DetailsView({
           {logout.isPending ? "Signing out..." : "Sign out"}
         </Button>
       </div>
-      <LicenseDetails license={license} />
+      <LicenseDetails license={license} orgSlug={orgSlug} />
     </main>
   );
 }

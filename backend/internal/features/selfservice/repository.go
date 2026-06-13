@@ -2,17 +2,20 @@ package selfservice
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository struct {
-	q *db.Queries
+	q    *db.Queries
+	pool *pgxpool.Pool
 }
 
-func NewRepository(q *db.Queries) *Repository {
-	return &Repository{q: q}
+func NewRepository(q *db.Queries, pool *pgxpool.Pool) *Repository {
+	return &Repository{q: q, pool: pool}
 }
 
 func (r *Repository) GetOrganizationBySlug(ctx context.Context, slug string) (db.Organization, error) {
@@ -44,6 +47,14 @@ func (r *Repository) DeleteDevice(ctx context.Context, licenseID uuid.UUID, devi
 	return err
 }
 
+func (r *Repository) GetLicense(ctx context.Context, licenseID uuid.UUID, email string, orgID uuid.UUID) (db.License, error) {
+	return r.q.GetSelfServiceLicense(ctx, db.GetSelfServiceLicenseParams{
+		LicenseID:      licenseID,
+		CustomerEmail:  email,
+		OrganizationID: orgID,
+	})
+}
+
 func (r *Repository) RevokeLicense(ctx context.Context, licenseID uuid.UUID, email string, orgID uuid.UUID) error {
 	_, err := r.q.RevokeSelfServiceLicense(ctx, db.RevokeSelfServiceLicenseParams{
 		LicenseID:      licenseID,
@@ -51,6 +62,57 @@ func (r *Repository) RevokeLicense(ctx context.Context, licenseID uuid.UUID, ema
 		OrganizationID: orgID,
 	})
 	return err
+}
+
+// ReplaceLicense revokes the old license and creates a new one with the same
+// metadata in a single transaction. Returns the new license.
+func (r *Repository) ReplaceLicense(ctx context.Context, oldLicenseID uuid.UUID, email string, orgID uuid.UUID, lookupDigest []byte, keyPhc string) (db.License, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return db.License{}, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := r.q.WithTx(tx)
+
+	oldRow, err := qtx.GetSelfServiceLicense(ctx, db.GetSelfServiceLicenseParams{
+		LicenseID:      oldLicenseID,
+		CustomerEmail:  email,
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		return db.License{}, fmt.Errorf("get old license: %w", err)
+	}
+
+	_, err = qtx.RevokeSelfServiceLicense(ctx, db.RevokeSelfServiceLicenseParams{
+		LicenseID:      oldLicenseID,
+		CustomerEmail:  email,
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		return db.License{}, fmt.Errorf("revoke old license: %w", err)
+	}
+
+	newRow, err := qtx.CreateLicense(ctx, db.CreateLicenseParams{
+		OrganizationID: orgID,
+		ProductID:      oldRow.ProductID,
+		MaxActivations: oldRow.MaxActivations,
+		LookupDigest:   lookupDigest,
+		KeyPhc:         keyPhc,
+		CustomerEmail:  oldRow.CustomerEmail,
+		ExpiresAt:      oldRow.ExpiresAt,
+		IsTrial:        oldRow.IsTrial,
+		TrialHwidHash:  oldRow.TrialHwidHash,
+	})
+	if err != nil {
+		return db.License{}, fmt.Errorf("create replacement: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return db.License{}, fmt.Errorf("commit: %w", err)
+	}
+
+	return newRow, nil
 }
 
 func (r *Repository) CreateLink(ctx context.Context, params db.CreateSelfServiceLinkParams) error {

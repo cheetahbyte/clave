@@ -2,12 +2,13 @@ package selfservice
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/cheetahbyte/clave/internal/db"
-	"github.com/cheetahbyte/clave/internal/shared/email"
+	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/go-chi/chi/v5"
@@ -18,16 +19,16 @@ import (
 
 type Handler struct {
 	svc         *Service
-	mailer      *email.Sender
+	publisher   *events.Publisher
 	appURL      string
 	returnToken bool
 	dev         bool
 }
 
-func NewHandler(svc *Service, mailer *email.Sender, appURL string, returnToken bool, dev bool) *Handler {
+func NewHandler(svc *Service, publisher *events.Publisher, appURL string, returnToken bool, dev bool) *Handler {
 	return &Handler{
 		svc:         svc,
-		mailer:      mailer,
+		publisher:   publisher,
 		appURL:      strings.TrimRight(appURL, "/"),
 		returnToken: returnToken,
 		dev:         dev,
@@ -66,14 +67,10 @@ func (h *Handler) RequestLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.mailer != nil && h.appURL != "" {
-		link := ""
-		if body.OrgSlug != "" {
-			link = h.appURL + "/selfservice/" + body.OrgSlug + "/auth?token=" + rawToken
-		}
-		msg, terr := email.MagicLinkEmail(link)
-		if terr == nil {
-			h.mailer.Enqueue(emailAddr, msg)
+	if h.publisher != nil && h.appURL != "" && body.OrgSlug != "" {
+		link := h.appURL + "/selfservice/" + body.OrgSlug + "/auth?token=" + rawToken
+		if perr := h.publisher.PublishSelfServiceMagicLink(r.Context(), emailAddr, link); perr != nil {
+			slog.Error("failed to publish selfservice.magic_link event", "err", perr.Error())
 		}
 	}
 
@@ -221,16 +218,33 @@ func (h *Handler) RevokeLicense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.RevokeLicense(r.Context(), email, orgID, licenseID); err != nil {
+	result, err := h.svc.RevokeLicense(r.Context(), email, orgID, licenseID)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "license not found"})
 			return
 		}
+		slog.Error("revoke failed", "err", err)
 		helpers.WriteError(w, r, err)
 		return
 	}
 
-	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	if h.publisher != nil {
+		var portalLink string
+		if h.appURL != "" {
+			if slug := h.svc.licenseSvc.OrgSlug(r.Context(), orgID); slug != "" {
+				portalLink = h.appURL + "/selfservice/" + slug
+			}
+		}
+		if perr := h.publisher.PublishLicenseReplaced(r.Context(), email, result.LicenseKey, result.ProductName, portalLink); perr != nil {
+			slog.Error("failed to publish license.replaced event", "err", perr.Error())
+		}
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{
+		"ok":          true,
+		"newLicenseId": result.NewLicenseID.String(),
+	})
 }
 
 func selfServiceScope(w http.ResponseWriter, r *http.Request) (string, uuid.UUID, bool) {

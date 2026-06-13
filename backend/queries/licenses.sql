@@ -78,6 +78,12 @@ where d.id = sqlc.arg('device_id')
   )
 returning d.id;
 
+-- name: GetSelfServiceLicense :one
+select * from licenses
+where id = sqlc.arg('license_id')
+  and customer_email = sqlc.arg('customer_email')
+  and organization_id = sqlc.arg('organization_id');
+
 -- name: RevokeSelfServiceLicense :one
 update licenses set is_active = false
 where id = sqlc.arg('license_id')

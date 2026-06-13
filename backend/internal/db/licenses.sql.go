@@ -284,6 +284,40 @@ func (q *Queries) GetLicenseByIdForUpdate(ctx context.Context, id uuid.UUID) (Li
 	return i, err
 }
 
+const getSelfServiceLicense = `-- name: GetSelfServiceLicense :one
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash from licenses
+where id = $1
+  and customer_email = $2
+  and organization_id = $3
+`
+
+type GetSelfServiceLicenseParams struct {
+	LicenseID      uuid.UUID `json:"license_id"`
+	CustomerEmail  string    `json:"customer_email"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) GetSelfServiceLicense(ctx context.Context, arg GetSelfServiceLicenseParams) (License, error) {
+	row := q.db.QueryRow(ctx, getSelfServiceLicense, arg.LicenseID, arg.CustomerEmail, arg.OrganizationID)
+	var i License
+	err := row.Scan(
+		&i.LookupDigest,
+		&i.KeyPhc,
+		&i.CustomerEmail,
+		&i.MaxActivations,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.Features,
+		&i.ID,
+		&i.ProductID,
+		&i.OrganizationID,
+		&i.IsTrial,
+		&i.TrialHwidHash,
+	)
+	return i, err
+}
+
 const listByCustomerEmail = `-- name: ListByCustomerEmail :many
 select lt.is_active, lt.id, lt.max_activations, lt.expires_at, p.name, p.logo_url from licenses lt join products p on lt.product_id = p.id where customer_email = $1
 `

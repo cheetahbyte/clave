@@ -36,7 +36,7 @@ func TestLicenseIDFromSubjectInvalidUUID(t *testing.T) {
 
 func TestGenerateKeyFormat(t *testing.T) {
 	svc := &Service{}
-	key, err := svc.generateKey()
+	key, err := svc.GenerateKey()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

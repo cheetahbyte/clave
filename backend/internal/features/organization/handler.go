@@ -8,7 +8,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/cheetahbyte/clave/internal/features/audit"
-	"github.com/cheetahbyte/clave/internal/shared/email"
+	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/go-chi/chi/v5"
@@ -16,15 +16,15 @@ import (
 )
 
 type Handler struct {
-	svc      *Service
-	sessions *scs.SessionManager
-	mailer   *email.Sender
-	appURL   string
-	auditSvc *audit.Service
+	svc       *Service
+	sessions  *scs.SessionManager
+	publisher *events.Publisher
+	appURL    string
+	auditSvc  *audit.Service
 }
 
-func NewHandler(svc *Service, sessions *scs.SessionManager, mailer *email.Sender, appURL string, auditSvc *audit.Service) *Handler {
-	return &Handler{svc: svc, sessions: sessions, mailer: mailer, appURL: strings.TrimRight(appURL, "/"), auditSvc: auditSvc}
+func NewHandler(svc *Service, sessions *scs.SessionManager, publisher *events.Publisher, appURL string, auditSvc *audit.Service) *Handler {
+	return &Handler{svc: svc, sessions: sessions, publisher: publisher, appURL: strings.TrimRight(appURL, "/"), auditSvc: auditSvc}
 }
 
 func (h *Handler) audit(r *http.Request, action, resourceType string, adminID, orgID uuid.UUID, resourceID *uuid.UUID) {
@@ -154,12 +154,11 @@ func (h *Handler) Invite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := InviteResponse{Invite: *item}
-	if h.mailer != nil && h.appURL != "" {
+	if h.publisher != nil && h.appURL != "" {
 		link := h.appURL + "/invite/" + rawToken
 		orgName := h.svc.Name(r.Context(), orgID)
-		msg, terr := email.InviteEmail(orgName, link)
-		if terr == nil {
-			h.mailer.Enqueue(item.Email, msg)
+		if perr := h.publisher.PublishOrganizationInvite(r.Context(), item.Email, orgName, link); perr != nil {
+			slog.Error("failed to publish organization.invite event", "err", perr.Error())
 		}
 	} else {
 		// No mailer configured (dev) — return token so the link can be built client-side.

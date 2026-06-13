@@ -114,6 +114,48 @@ func (p *Publisher) PublishLicenseCreated(ctx context.Context, email, licenseKey
 	})
 }
 
+// PublishSelfServiceMagicLink emits a "selfservice.magic_link" event for the
+// emailer worker.
+func (p *Publisher) PublishSelfServiceMagicLink(ctx context.Context, email, link string) error {
+	return p.PublishEmail(ctx, EmailEvent{
+		Type:  "selfservice.magic_link",
+		Email: email,
+		Data:  map[string]any{"link": link},
+	})
+}
+
+// PublishOrganizationInvite emits an "organization.invite" event for the
+// emailer worker.
+func (p *Publisher) PublishOrganizationInvite(ctx context.Context, email, orgName, link string) error {
+	data := map[string]any{"link": link}
+	if orgName != "" {
+		data["orgName"] = orgName
+	}
+	return p.PublishEmail(ctx, EmailEvent{
+		Type:  "organization.invite",
+		Email: email,
+		Data:  data,
+	})
+}
+
+// PublishLicenseReplaced emits a "license.replaced" event for the emailer
+// worker. Optional fields are omitted when empty so the worker applies its
+// defaults.
+func (p *Publisher) PublishLicenseReplaced(ctx context.Context, email, licenseKey, productName, portalLink string) error {
+	data := map[string]any{"licenseKey": licenseKey}
+	if productName != "" {
+		data["productName"] = productName
+	}
+	if portalLink != "" {
+		data["portalLink"] = portalLink
+	}
+	return p.PublishEmail(ctx, EmailEvent{
+		Type:  "license.replaced",
+		Email: email,
+		Data:  data,
+	})
+}
+
 // Close tears down the channel and connection.
 func (p *Publisher) Close() error {
 	p.mu.Lock()

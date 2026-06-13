@@ -2,11 +2,14 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func newCookieJar(t *testing.T) *cookiejar.Jar {
@@ -171,9 +174,47 @@ func TestSelfServiceFullFlow(t *testing.T) {
 		drain(resp)
 		t.Fatalf("revoke status = %d, want 200", resp.StatusCode)
 	}
-	drain(resp)
+	revokeResp := decode[struct {
+		Ok           bool   `json:"ok"`
+		NewLicenseId string `json:"newLicenseId"`
+	}](t, resp)
+	if !revokeResp.Ok {
+		t.Error("revoke response should be ok")
+	}
+	if revokeResp.NewLicenseId == "" {
+		t.Fatal("revoke response should include newLicenseId")
+	}
+
+	// old license should be inactive
 	if licenseActive(t, pool, licenseID) {
-		t.Error("license should be inactive after revoke")
+		t.Error("old license should be inactive after revoke")
+	}
+
+	// new license should exist and be active
+	newID, err := uuid.Parse(revokeResp.NewLicenseId)
+	if err != nil {
+		t.Fatalf("invalid new license id: %v", err)
+	}
+	if !licenseActive(t, pool, newID) {
+		t.Error("new license should be active")
+	}
+
+	// verify new license has same customer_email and product
+	var newEmail, oldEmail string
+	var newProductID, oldProductID string
+	pool.QueryRow(context.Background(),
+		`select customer_email from licenses where id = $1`, newID).Scan(&newEmail)
+	pool.QueryRow(context.Background(),
+		`select customer_email from licenses where id = $1`, licenseID).Scan(&oldEmail)
+	if newEmail != oldEmail {
+		t.Error("new license should have same customer email")
+	}
+	pool.QueryRow(context.Background(),
+		`select product_id from licenses where id = $1`, newID).Scan(&newProductID)
+	pool.QueryRow(context.Background(),
+		`select product_id from licenses where id = $1`, licenseID).Scan(&oldProductID)
+	if newProductID != oldProductID {
+		t.Error("new license should have same product")
 	}
 }
 

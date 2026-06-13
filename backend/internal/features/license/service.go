@@ -40,7 +40,7 @@ func NewService(q *db.Queries, pool *pgxpool.Pool, signer signing.Provider) *Ser
 }
 
 func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data CreationRequest) (CreationResponse, error) {
-	key, err := svc.generateKey()
+	key, err := svc.GenerateKey()
 	if err != nil {
 		return CreationResponse{}, errors.New("failed to generate license key")
 	}
@@ -111,7 +111,7 @@ func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data Creati
 }
 
 func (svc *Service) NewTrialLicense(ctx context.Context, orgID uuid.UUID, productID uuid.UUID, hwidHash []byte, trialDays int) (*CreationResponse, error) {
-	key, err := svc.generateKey()
+	key, err := svc.GenerateKey()
 	if err != nil {
 		return nil, errors.New("failed to generate trial key")
 	}
@@ -184,7 +184,7 @@ func (svc *Service) ListByCustomerEmail(ctx context.Context, email string) ([]db
 	return svc.repo.ListByCustomerEmail(ctx, email)
 }
 
-func (svc *Service) generateKey() (string, error) {
+func (svc *Service) GenerateKey() (string, error) {
 	b := make([]byte, 15)
 	if _, err := rand.Read(b); err != nil {
 		return "", err

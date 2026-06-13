@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { Laptop, Monitor, HardDrive, ShieldCheck, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import type { Device, License } from "@/features/selfservice/api";
 import {
   listSelfServiceDevices,
@@ -12,6 +14,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface LicenseDetailsProps {
   license: License;
+  orgSlug: string;
 }
 
 function clamp(n: number, min: number, max: number) {
@@ -45,8 +48,9 @@ function deviceIcon(name: string) {
   return Monitor;
 }
 
-export function LicenseDetails({ license }: LicenseDetailsProps) {
+export function LicenseDetails({ license, orgSlug }: LicenseDetailsProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [deviceToRemove, setDeviceToRemove] = useState<Device | null>(null);
   const [revokeOpen, setRevokeOpen] = useState(false);
   const [logoError, setLogoError] = useState(false);
@@ -70,11 +74,21 @@ export function LicenseDetails({ license }: LicenseDetailsProps) {
 
   const revoke = useMutation({
     mutationFn: () => revokeSelfServiceLicense(license.id),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["selfserviceLicenses"] });
       queryClient.invalidateQueries({ queryKey: ["selfserviceDevices", license.id] });
       setRevokeOpen(false);
+      toast.success("License revoked. A new key has been emailed to you.");
+      if (data.newLicenseId) {
+        navigate({
+          to: "/selfservice/$orgSlug",
+          params: { orgSlug },
+          search: { licenseId: data.newLicenseId },
+          replace: true,
+        });
+      }
     },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to revoke license"),
   });
 
   const status = licenseStatus(license);
