@@ -4,9 +4,10 @@ RUN apk add --no-cache ca-certificates
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /app/clave ./cmd/clave && \
+RUN mkdir -p /app && \
+    CGO_ENABLED=0 go build -o /app/clave ./cmd/clave && \
     CGO_ENABLED=0 go build -o /app/createadmin ./cmd/createadmin && \
-    CGO_ENABLED=0 go build -o /app/resetadmin2fa ./cmd/resetadmin2fa \
+    CGO_ENABLED=0 go build -o /app/resetadmin2fa ./cmd/resetadmin2fa && \
     CGO_ENABLED=0 go build -o /app/deltaworker ./cmd/deltaworker
 
 FROM alpine:3.20
