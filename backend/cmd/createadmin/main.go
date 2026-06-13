@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/alexedwards/argon2id"
 	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -42,6 +44,7 @@ func main() {
 	}
 
 	q := db.New(pool)
+
 	admin, err := q.CreateAdmin(context.Background(), db.CreateAdminParams{
 		Email:        email,
 		PasswordHash: hash,
@@ -52,5 +55,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Admin created: id=%s email=%s role=%s\n", admin.ID, admin.Email, admin.Role)
+	org, err := q.GetOrganizationBySlug(context.Background(), "default")
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			org, err = q.CreateOrganization(context.Background(), db.CreateOrganizationParams{
+				Name: "Default Organization",
+				Slug: "default",
+			})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to create default organization: %v\n", err)
+				os.Exit(1)
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "failed to find default organization: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	if err := q.CreateOrganizationMember(context.Background(), db.CreateOrganizationMemberParams{
+		OrganizationID: org.ID,
+		AdminUserID:    admin.ID,
+		Role:           role,
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to add admin to organization: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Admin created: id=%s email=%s role=%s org=%s\n", admin.ID, admin.Email, admin.Role, org.Name)
 }

@@ -4,12 +4,15 @@ RUN apk add --no-cache ca-certificates
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /app/clave ./cmd/clave
+RUN CGO_ENABLED=0 go build -o /app/clave ./cmd/clave && \
+    CGO_ENABLED=0 go build -o /app/createadmin ./cmd/createadmin && \
+    CGO_ENABLED=0 go build -o /app/resetadmin2fa ./cmd/resetadmin2fa
 
-FROM scratch
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
 COPY --from=builder /app/clave /clave
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /app/createadmin /createadmin
+COPY --from=builder /app/resetadmin2fa /resetadmin2fa
 COPY --from=builder /build/migrations /migrations
 EXPOSE 8000
-USER 65532:65532
 CMD ["/clave"]
