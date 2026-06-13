@@ -65,7 +65,7 @@ jobs:
           /tmp/clave > /tmp/clave.log 2>&1 &
           echo "Waiting for server to be ready..."
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8000/api/v1/public/pubkey >/dev/null 2>&1; then
+            if curl -fsS http://localhost:8000/api/v1/health >/dev/null 2>&1; then
               echo "Server ready"
               exit 0
             fi

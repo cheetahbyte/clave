@@ -19,7 +19,6 @@ You need a few secrets before anything boots. Generate them once:
 
 ```bash
 go run ./scripts/generate_jwt_keys.go        # LICENSE_JWT_* keypair (ed25519)
-go run ./scripts/generate_x25519_key         # X25519_* keypair (payload encryption)
 openssl rand -hex 32                         # use for CSRF_AUTH_KEY
 openssl rand -hex 32                         # use for ADMIN_TOTP_ENCRYPTION_KEY
 ```
@@ -79,7 +78,6 @@ won't start; the rest have sane defaults.
 | `LICENSE_JWT_PUBLIC_KEY`    | Matching ed25519 public key (base64).                                         |
 | `LICENSE_HMAC_SECRET`       | Secret used to derive license keys. Pick something long and random.           |
 | `SELF_SERVICE_TOKEN_PEPPER` | Extra secret mixed into self-service magic-link tokens.                       |
-| `X25519_PRIVATE_KEY`        | X25519 private key (base64url) for request/response encryption. Required unless `DISABLE_ENCRYPTION=true`. |
 
 In **production** these two are also required (in dev an ephemeral key is generated
 for you, with a warning):
@@ -97,12 +95,10 @@ for you, with a warning):
 | `DEV`                        | unset                 | Truthy = dev mode: insecure cookies, ephemeral keys allowed.       |
 | `PUBLIC_APP_URL`             | —                     | Base URL of the website, used in links inside emails.              |
 | `RUN_MIGRATIONS`             | unset                 | Truthy = run DB migrations on startup.                             |
-| `DISABLE_ENCRYPTION`         | unset                 | Truthy = skip payload encryption on `/activate` and `/validate`. Dev only. |
 | `LOG_LEVEL` / `VERBOSE_LOGGING` | `info`             | `debug`/`verbose`/`trace` (or a truthy `VERBOSE_LOGGING`) = debug logs. |
-| `TRUST_PROXY_HEADERS`        | unset                 | Truthy = trust `X-Forwarded-For` / `X-Real-IP` for client IPs.     |
+| `TRUST_PROXY_HEADERS`        | unset                 | Truthy = trust `X-Forwarded-For` / `X-Real-IP` for client IPs **and** `X-Forwarded-Proto` for the in-app HTTPS guard (redirect HTTP→HTTPS, reject plaintext POSTs). Set only behind a trusted proxy that overwrites these headers. |
 | `ADMIN_BEARER_TOKEN`         | —                     | Optional static bearer token for admin API access.                 |
 | `SELF_SERVICE_RETURN_TOKEN`  | unset                 | Truthy = return the magic-link token in the API response. Dev convenience. |
-| `X25519_PUBLIC_KEY`          | —                     | The matching public key. Clients fetch it from the API; kept around for reference. |
 
 ### Email (optional)
 
@@ -124,6 +120,22 @@ Used by the `/check-update` endpoint to look up product releases on GitHub.
 |-----------------|---------|-------------------------------------------------------|
 | `GITHUB_REPO`   | —       | `owner/repo` to read releases from. Required for update checks. |
 | `GITHUB_TOKEN`  | —       | GitHub token to raise the rate limit / read private repos. |
+
+## Production / HTTPS
+
+The server speaks plain HTTP and is meant to run **behind a TLS-terminating reverse
+proxy** (Caddy, nginx, Traefik, …). All transport security comes from TLS — there is no
+application-layer payload encryption. **Exposing the backend directly on the internet
+without TLS in front is unsupported.**
+
+The proxy should redirect HTTP→HTTPS and terminate TLS. When it does, set
+`TRUST_PROXY_HEADERS=true` so the app also enforces HTTPS itself: in production it emits
+HSTS, redirects plaintext `GET`/`HEAD` to `https://`, and rejects plaintext body requests
+with `403`. Only set this behind a proxy that **overwrites** `X-Forwarded-Proto` — the
+header is client-spoofable on a directly exposed server.
+
+Clients should talk to the server over HTTPS only and pin the server's TLS certificate
+(SPKI pinning) — see [`CLIENT.md`](./CLIENT.md).
 
 ## Tests
 

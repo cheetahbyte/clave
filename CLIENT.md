@@ -10,41 +10,13 @@ The basic idea is simple: **activate once, then validate every so often**. Activ
 
 A trial is really just activation without a key. Instead of sending a license key, your client asks the server to spin up a time-limited trial for the device. You get back the exact same token you'd get from a normal activation, so everything that happens afterwards (validation, grace periods, all of it) works the same way.
 
-One thing to know up front: `/activate`, `/validate`, and `/trials/start` all expect encrypted payloads. Plain JSON won't get you anywhere.
-
----
-
-## Payload Encryption (required for /activate and /validate)
-
-Every request and response body on `/activate` and `/validate` is encrypted with AES-256-GCM. The key comes from an X25519 ECDH handshake, so you and the server end up with a shared secret without ever sending it over the wire.
-
-**Do this once:**
-1. Grab the server's static X25519 public key from `GET /api/v1/public/pubkey`
-   ```json
-   { "publicKey": "<base64url>" }
-   ```
-   Pin it. There's no reason to fetch it on every call.
-
-**Do this on every request:**
-1. Generate a fresh, throwaway X25519 keypair.
-2. Work out the shared secret: `ECDH(your_ephemeral_privkey, server_static_pubkey)`.
-3. Derive the AES key: `HKDF-SHA256(shared_secret, salt=nil, info="clave-v1")`, which gives you 32 bytes.
-4. Encrypt your JSON body with AES-256-GCM:
-   - Use a random 12-byte nonce.
-   - Put it on the wire as `base64url(nonce || ciphertext)`.
-5. Send it off:
-   - Header: `X-Client-Public-Key: <base64url of your ephemeral pubkey>`
-   - Body: the base64url ciphertext.
-
-**When the response comes back:**
-- It's encrypted the same way, so decrypt it with the same AES key.
-- Check that the `X-Client-Key-Echo` header matches the key you sent. If it doesn't line up, throw the response away. Someone's probably replaying an old one.
+All requests and responses are plain JSON over **HTTPS**. There's no application-layer payload encryption — transport security comes from TLS, so always use `https://` and never talk to the server over plaintext HTTP. For defense against a rogue CA or an untrusted TLS terminator, pin the server's TLS certificate (see [Security Notes](#security-notes)).
 
 ---
 
 ## Activation
 
-`POST /api/v1/client/licenses/activate` (encrypted)
+`POST /api/v1/client/licenses/activate`
 
 ```json
 {
@@ -79,7 +51,7 @@ Stash `token` and `validUntil` in an encrypted local cache; you'll lean on both 
 
 ## Validation
 
-`POST /api/v1/client/licenses/validate` (encrypted)
+`POST /api/v1/client/licenses/validate`
 
 Run this on every launch, and again every few hours while the app is open.
 
@@ -104,7 +76,7 @@ Whatever token comes back, swap it in for your cached one.
 
 ## Starting a Trial
 
-`POST /api/v1/client/trials/start` (encrypted)
+`POST /api/v1/client/trials/start`
 
 Reach for this when the user doesn't have a license key and you want to give them a time-limited trial tied to their device. The server creates the trial license, activates it, and hands you back the same payload `/activate` does. So as far as your client is concerned, starting a trial *is* activating.
 
@@ -170,8 +142,8 @@ A 403 or 404 means the license is genuinely no good, so don't retry those. For 5
 
 ## Security Notes
 
-- **Pin the server's X25519 public key.** Fetch it once when you ship, bundle it with the app, and don't go grabbing it again at runtime.
-- **Always check `X-Client-Key-Echo`.** If it doesn't match the ephemeral pubkey you sent, someone's replaying an old response.
+- **Always use HTTPS.** Refuse plaintext `http://` endpoints, and treat the base URL and any `downloadUrl` as HTTPS-only. The server expects to run behind TLS.
+- **Pin the server's TLS certificate.** Pin the SubjectPublicKeyInfo (SPKI) hash rather than the leaf certificate - that survives certificate renewal as long as the key is reused, and you should pin a backup key too so a planned key rotation doesn't brick your clients. This protects you against a rogue CA or an untrusted TLS terminator. Platform helpers: Apple `NSPinnedDomains` / `URLSession` delegate, Android `network_security_config` / OkHttp `CertificatePinner`, or your HTTP stack's pinning hook.
 - **Encrypt your local cache.** Use the OS keychain or whatever secure storage your platform offers. Don't leave the JWT sitting in plaintext.
 - **Keep the HWID stable.** If it changes between calls, validation will start failing with a 403.
 
@@ -179,7 +151,7 @@ A 403 or 404 means the license is genuinely no good, so don't retry those. For 5
 
 ## Checking for Updates
 
-`POST /api/v1/client/updates/check` (encrypted)
+`POST /api/v1/client/updates/check`
 
 Use your license JWT to check if a newer version is available. The server resolves which update backend to use based on the product's configuration.
 

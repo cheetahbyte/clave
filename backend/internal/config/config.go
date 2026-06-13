@@ -25,9 +25,6 @@ type Config struct {
 	SelfServiceTokenPepper  string
 	SelfServiceReturnToken  bool
 
-	DisableEncryption bool
-	X25519PrivateKey   []byte
-
 	AdminTOTPEncryptionKey []byte
 	AdminBearerToken       string
 
@@ -65,7 +62,6 @@ func Load() (*Config, error) {
 		RunMigrations:    truthy(os.Getenv("RUN_MIGRATIONS")),
 		VerboseLogging:   verboseLoggingEnabled(),
 		Dev:              truthy(os.Getenv("DEV")),
-		DisableEncryption: truthy(os.Getenv("DISABLE_ENCRYPTION")),
 		LicenseHMACSecret: os.Getenv("LICENSE_HMAC_SECRET"),
 		SelfServiceTokenPepper: os.Getenv("SELF_SERVICE_TOKEN_PEPPER"),
 		SelfServiceReturnToken: strings.ToLower(os.Getenv("SELF_SERVICE_RETURN_TOKEN")) == "true",
@@ -99,14 +95,6 @@ func Load() (*Config, error) {
 
 	if cfg.SelfServiceTokenPepper == "" {
 		return nil, fmt.Errorf("SELF_SERVICE_TOKEN_PEPPER is required")
-	}
-
-	if !cfg.DisableEncryption {
-		x25519Key := os.Getenv("X25519_PRIVATE_KEY")
-		cfg.X25519PrivateKey, err = base64.RawURLEncoding.DecodeString(x25519Key)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode X25519 private key: %w", err)
-		}
 	}
 
 	cfg.AdminTOTPEncryptionKey, err = loadTOTPKey(cfg.Dev)

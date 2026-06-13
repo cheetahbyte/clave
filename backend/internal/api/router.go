@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/cheetahbyte/clave/internal/shared/encryption"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -112,13 +111,11 @@ type MiddlewareConfig struct {
 	SessionMW    func(http.Handler) http.Handler
 	CSRFAuth     func(http.Handler) http.Handler
 	CSRFPlain    func(http.Handler) http.Handler
-	EncSvc       *encryption.Service
-	EncDisabled  bool
+	ForceHTTPS   func(http.Handler) http.Handler
 	Verbose      bool
 }
 
 type Config struct {
-	Public         http.HandlerFunc
 	Client         ClientHandlers
 	SelfService    SelfServiceHandlers
 	AdminAuth      AdminAuthHandlers
@@ -168,16 +165,18 @@ func Register(r *chi.Mux, cfg Config) {
 
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
+	if mw.ForceHTTPS != nil {
+		r.Use(mw.ForceHTTPS)
+	}
 	r.Use(middleware.Logger)
 	r.Route("/api", func(api chi.Router) {
 		api.Route("/v1", func(v1 chi.Router) {
-			v1.Route("/public", func(pub chi.Router) {
-				pub.Get("/pubkey", cfg.Public)
+			v1.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+				helpers.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 			})
 
 			v1.Route("/client", func(client chi.Router) {
 				client.Group(func(enc chi.Router) {
-					enc.Use(encryption.OptionalMiddleware(mw.EncSvc, mw.EncDisabled))
 					if mw.Verbose {
 						enc.Use(verboseLogger)
 					}
@@ -279,8 +278,6 @@ func Register(r *chi.Mux, cfg Config) {
 				ss.With(mw.SSAuth).Post("/licenses/{licenseId}/revoke", sv.RevokeLicense)
 			})
 
-			v1.Get("/pubkey", cfg.Public)
-
 			v1.Get("/updates/products/{productId}/{platform}/{channel}/appcast.xml", ua.Appcast)
 				v1.Get("/updates/products/{productId}/{platform}/{channel}/feed.json", ua.NativeFeed)
 				v1.Get("/updates/releases/{releaseId}/changelog.html", ua.Changelog)
@@ -289,7 +286,6 @@ func Register(r *chi.Mux, cfg Config) {
 
 			v1.With(mw.VerifiedAuth).Post("/", la.Create)
 			v1.Group(func(enc chi.Router) {
-				enc.Use(encryption.OptionalMiddleware(mw.EncSvc, mw.EncDisabled))
 				if mw.Verbose {
 					enc.Use(verboseLogger)
 				}

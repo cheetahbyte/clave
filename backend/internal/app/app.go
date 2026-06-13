@@ -17,14 +17,12 @@ import (
 	"github.com/cheetahbyte/clave/internal/features/audit"
 	"github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/features/organization"
-	publicfeature "github.com/cheetahbyte/clave/internal/features/public"
 	"github.com/cheetahbyte/clave/internal/features/selfservice"
 	"github.com/cheetahbyte/clave/internal/features/update"
 	"github.com/cheetahbyte/clave/internal/features/update/providers/native"
 	"github.com/cheetahbyte/clave/internal/features/update/providers/sparkle"
 	"github.com/cheetahbyte/clave/internal/features/validation"
 	"github.com/cheetahbyte/clave/internal/shared/email"
-	"github.com/cheetahbyte/clave/internal/shared/encryption"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
@@ -100,18 +98,6 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	updateH := update.NewHandler(updateSvc)
 	selfserviceH := selfservice.NewHandler(selfserviceSvc, mailer, appURL, cfg.SelfServiceReturnToken, cfg.Dev)
 
-	var encSvc *encryption.Service
-	if cfg.DisableEncryption {
-		log.Println("request payload encryption is disabled")
-	} else {
-		var err error
-		encSvc, err = encryption.New(cfg.X25519PrivateKey)
-		if err != nil {
-			return nil, err
-		}
-	}
-	publicH := publicfeature.NewHandler(encSvc, cfg.DisableEncryption)
-
 	sessionManager := scs.New()
 	sessionManager.Store = pgxstore.New(pool)
 	sessionManager.Lifetime = 12 * time.Hour
@@ -162,7 +148,6 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 
 	r := chi.NewRouter()
 	api.Register(r, api.Config{
-		Public: publicH.PubKey,
 		Client: api.ClientHandlers{
 			Activate:    activationH.Activate,
 			Validate:    validationH.Validate,
@@ -250,8 +235,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 			SessionMW:   sessionManager.LoadAndSave,
 			CSRFAuth:    csrfMW,
 			CSRFPlain:   csrfPlaintext,
-			EncSvc:      encSvc,
-			EncDisabled: cfg.DisableEncryption,
+			ForceHTTPS:  middleware.SecureTransport(cfg.IsProduction(), cfg.TrustProxyHeaders),
 			Verbose:     cfg.VerboseLogging,
 		},
 	})
