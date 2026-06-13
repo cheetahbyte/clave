@@ -129,7 +129,7 @@ Seven days is a sensible grace period. Don't push it past the token's TTL (also 
 
 | Status | Meaning |
 |--------|---------|
-| 400 | Bad request, or a missing encryption header |
+| 400 | Bad request — malformed JSON, missing required field, or invalid value |
 | 401 | Invalid or expired token |
 | 403 | License revoked or expired |
 | 404 | License not found |

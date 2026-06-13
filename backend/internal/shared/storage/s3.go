@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -18,11 +19,11 @@ import (
 type S3Config struct {
 	Bucket          string `json:"bucket"`
 	Region          string `json:"region"`
-	Endpoint        string `json:"endpoint"`          // optional custom endpoint
+	Endpoint        string `json:"endpoint"` // optional custom endpoint
 	AccessKeyID     string `json:"access_key_id"`
 	SecretAccessKey string `json:"secret_access_key"`
-	Prefix          string `json:"prefix"`            // optional key prefix
-	UsePathStyle    bool   `json:"use_path_style"`    // required by MinIO and some others
+	Prefix          string `json:"prefix"`         // optional key prefix
+	UsePathStyle    bool   `json:"use_path_style"` // required by MinIO and some others
 }
 
 type s3Backend struct {
@@ -113,6 +114,20 @@ func (s *s3Backend) Open(ctx context.Context, key string) (io.ReadCloser, error)
 		return nil, fmt.Errorf("s3 get: %w", err)
 	}
 	return out.Body, nil
+}
+
+// PresignGet returns a time-limited URL the client can use to download the
+// object directly from S3, offloading transfer from the app server.
+func (s *s3Backend) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	ps := s3.NewPresignClient(s.client)
+	req, err := ps.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(s.objectKey(key)),
+	}, s3.WithPresignExpires(ttl))
+	if err != nil {
+		return "", fmt.Errorf("s3 presign: %w", err)
+	}
+	return req.URL, nil
 }
 
 func (s *s3Backend) Verify(ctx context.Context) error {

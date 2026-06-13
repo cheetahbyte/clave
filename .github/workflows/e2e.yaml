@@ -42,7 +42,6 @@ jobs:
       - name: Generate CI keys
         run: |
           go run scripts/generate_jwt_keys.go >> "$GITHUB_ENV"
-          go run scripts/generate_x25519_key/main.go >> "$GITHUB_ENV"
 
           echo "ADMIN_TOTP_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           echo "SELF_SERVICE_TOKEN_PEPPER=$(openssl rand -hex 16)" >> "$GITHUB_ENV"

@@ -1,10 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 import { useState } from "react";
 import { toast } from "sonner";
 import { verify2FA, getCurrentAdmin } from "@/features/admin/api";
 import { fetchCsrfToken } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -74,22 +80,36 @@ function TwoFactorPage() {
               </Alert>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="code">Authenticator code</Label>
-              <Input
+            <div className="flex flex-col items-center gap-3">
+              <Label htmlFor="code" className="self-start">
+                Authenticator code
+              </Label>
+              <InputOTP
                 id="code"
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
                 maxLength={6}
-                placeholder="000000"
+                pattern={REGEXP_ONLY_DIGITS}
+                autoComplete="one-time-code"
+                autoFocus
                 value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              />
+                onChange={(value) => setCode(value)}
+                containerClassName="justify-center"
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                </InputOTPGroup>
+                <InputOTPSeparator />
+                <InputOTPGroup>
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
             </div>
           </CardContent>
 
-          <CardFooter>
+          <CardFooter className="pt-6">
             <Button className="w-full" type="submit" disabled={loading || code.length !== 6}>
               {loading ? "Verifying…" : "Verify"}
             </Button>

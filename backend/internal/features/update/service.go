@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -188,6 +189,13 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 		decision.ChangelogURL = svc.ChangelogURL(*releaseID)
 	}
 
+	// Carry the caller's license token onto download URLs so the client can
+	// fetch feature-gated artifacts from the channel-gated /download endpoint.
+	decision.DownloadURL = appendDownloadToken(decision.DownloadURL, data.Token)
+	for i := range decision.Artifacts {
+		decision.Artifacts[i].URL = appendDownloadToken(decision.Artifacts[i].URL, data.Token)
+	}
+
 	_ = svc.repo.InsertUpdateCheck(ctx, dbConfig.OrganizationID, claims.ProductID, licenseID,
 		platform, channel, string(provider.Key()),
 		data.Version, data.Build, data.Arch, data.OSVersion,
@@ -352,6 +360,38 @@ func (svc *Service) AuthorizeChannelAccess(ctx context.Context, productID uuid.U
 		// Unknown channel: nothing to gate, let feed generation 404.
 		return nil
 	}
+	return svc.authorizeChannel(ch, productID, token)
+}
+
+// AuthorizeArtifactAccess gates a direct artifact download by the feature
+// requirements of the release's channel, mirroring feed access. Channels
+// without required features stay open; feature-gated channels need a valid
+// license token (passed via ?token= or Authorization: Bearer).
+func (svc *Service) AuthorizeArtifactAccess(ctx context.Context, artifactID uuid.UUID, token string) error {
+	artifact, err := svc.repo.GetArtifact(ctx, artifactID)
+	if err != nil {
+		return err
+	}
+	release, err := svc.repo.GetUpdateRelease(ctx, artifact.ReleaseID)
+	if err != nil {
+		return err
+	}
+	channels, err := svc.repo.GetChannelsForProduct(ctx, release.ProductID)
+	if err != nil {
+		// Can't resolve the channel: don't block (matches unknown-channel feed behavior).
+		return nil
+	}
+	for _, ch := range channels {
+		if ch.ID == release.ChannelID {
+			return svc.authorizeChannel(ch, release.ProductID, token)
+		}
+	}
+	return nil
+}
+
+// authorizeChannel enforces a channel's required-features against a license
+// token. An empty required-features set is always allowed.
+func (svc *Service) authorizeChannel(ch db.UpdateChannel, productID uuid.UUID, token string) error {
 	if len(ch.RequiredFeatures) == 0 {
 		return nil
 	}
@@ -388,7 +428,7 @@ func (svc *Service) RenderReleaseChangelog(ctx context.Context, releaseID uuid.U
 	return RenderChangelogHTML(title, body)
 }
 
-func (svc *Service) GenerateAppcast(ctx context.Context, productID uuid.UUID, platform, channel string) ([]byte, error) {
+func (svc *Service) GenerateAppcast(ctx context.Context, productID uuid.UUID, platform, channel, token string) ([]byte, error) {
 	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
 		ProductID: productID,
 		Name:      channel,
@@ -416,6 +456,9 @@ func (svc *Service) GenerateAppcast(ctx context.Context, productID uuid.UUID, pl
 	appcastReleases := make([]AppcastRelease, len(releases))
 	for i, rel := range releases {
 		artifacts, _ := svc.repo.ListArtifactsForRelease(ctx, rel.ID)
+		for j := range artifacts {
+			artifacts[j].Url = appendDownloadToken(artifacts[j].Url, token)
+		}
 		_, changelogURL := svc.releaseChangelog(ctx, rel)
 		appcastReleases[i] = AppcastRelease{Release: rel, Artifacts: artifacts, ChangelogURL: changelogURL}
 	}
@@ -428,7 +471,7 @@ func (svc *Service) GenerateAppcast(ctx context.Context, productID uuid.UUID, pl
 	return GenerateAppcastXML(product, platform, channel, appcastReleases, svc.AppcastURL(productID, platform, channel))
 }
 
-func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID, platform, channel string) ([]byte, error) {
+func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID, platform, channel, token string) ([]byte, error) {
 	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
 		ProductID: productID,
 		Name:      channel,
@@ -445,6 +488,9 @@ func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID,
 	inputs := make([]NativeFeedReleaseInput, len(releases))
 	for i, rel := range releases {
 		artifacts, _ := svc.repo.ListArtifactsForRelease(ctx, rel.ID)
+		for j := range artifacts {
+			artifacts[j].Url = appendDownloadToken(artifacts[j].Url, token)
+		}
 		policy, _ := svc.repo.GetReleasePolicy(ctx, rel.ID)
 		changelogBody, changelogURL := svc.releaseChangelog(ctx, rel)
 		inputs[i] = NativeFeedReleaseInput{Release: rel, Artifacts: artifacts, Policy: policy, Changelog: changelogBody, ChangelogURL: changelogURL}
@@ -741,29 +787,35 @@ func (svc *Service) GetArtifact(ctx context.Context, artifactID uuid.UUID) (db.U
 	return svc.repo.GetArtifact(ctx, artifactID)
 }
 
-// OpenArtifactDownload resolves the storage backend for an artifact and
-// returns a reader for its bytes along with size and mime type for response
-// headers. Caller must close the reader.
-func (svc *Service) OpenArtifactDownload(ctx context.Context, artifactID uuid.UUID) (io.ReadCloser, int64, string, error) {
+// presignTTL bounds how long a presigned artifact download URL stays valid.
+const presignTTL = 15 * time.Minute
+
+// ArtifactDownload describes how to serve an artifact: either a redirect to a
+// presigned URL (RedirectURL set) or a stream the caller must close (Body set).
+type ArtifactDownload struct {
+	RedirectURL string
+	Body        io.ReadCloser
+	Size        int64
+	MimeType    string
+}
+
+// ResolveArtifactDownload prefers a presigned redirect (offloading transfer to
+// the storage backend, e.g. S3) and falls back to streaming through the app
+// when the backend cannot presign (e.g. local disk).
+func (svc *Service) ResolveArtifactDownload(ctx context.Context, artifactID uuid.UUID) (*ArtifactDownload, error) {
 	artifact, err := svc.repo.GetArtifact(ctx, artifactID)
 	if err != nil {
-		return nil, 0, "", err
+		return nil, err
 	}
 
 	release, err := svc.repo.GetUpdateRelease(ctx, artifact.ReleaseID)
 	if err != nil {
-		return nil, 0, "", err
+		return nil, err
 	}
 
 	backend, _, err := svc.storageForProduct(ctx, release.ProductID)
 	if err != nil {
-		return nil, 0, "", err
-	}
-
-	key := svc.artifactStorageKey(artifact)
-	rc, err := backend.Open(ctx, key)
-	if err != nil {
-		return nil, 0, "", err
+		return nil, err
 	}
 
 	var size int64
@@ -774,7 +826,20 @@ func (svc *Service) OpenArtifactDownload(ctx context.Context, artifactID uuid.UU
 	if artifact.MimeType != nil && *artifact.MimeType != "" {
 		mimeType = *artifact.MimeType
 	}
-	return rc, size, mimeType, nil
+
+	key := svc.artifactStorageKey(artifact)
+
+	if url, ok, perr := storage.PresignGet(ctx, backend, key, presignTTL); perr != nil {
+		return nil, perr
+	} else if ok {
+		return &ArtifactDownload{RedirectURL: url, Size: size, MimeType: mimeType}, nil
+	}
+
+	rc, err := backend.Open(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	return &ArtifactDownload{Body: rc, Size: size, MimeType: mimeType}, nil
 }
 
 // artifactStorageKey returns the storage key for an artifact, deriving the
@@ -793,6 +858,20 @@ func (svc *Service) artifactStorageKey(artifact db.UpdateArtifact) string {
 func (svc *Service) DeleteRelease(ctx context.Context, releaseID uuid.UUID) error {
 	_, err := svc.repo.DeleteUpdateRelease(ctx, releaseID)
 	return err
+}
+
+// appendDownloadToken adds a license token to an artifact download URL so the
+// updater carries it to the (channel-gated) /download endpoint. No-op when the
+// token is empty (open channels need none).
+func appendDownloadToken(rawURL, token string) string {
+	if token == "" {
+		return rawURL
+	}
+	sep := "?"
+	if strings.Contains(rawURL, "?") {
+		sep = "&"
+	}
+	return rawURL + sep + "token=" + url.QueryEscape(token)
 }
 
 func (svc *Service) artifactDownloadURL(artifactID uuid.UUID) string {

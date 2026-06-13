@@ -223,7 +223,7 @@ func (h *Handler) Appcast(w http.ResponseWriter, r *http.Request) {
 	platform := chi.URLParam(r, "platform")
 	channel := chi.URLParam(r, "channel")
 
-	appcast, err := h.svc.GenerateAppcast(r.Context(), productID, platform, channel)
+	appcast, err := h.svc.GenerateAppcast(r.Context(), productID, platform, channel, feedToken(r))
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("<error>Appcast not found</error>"))
@@ -250,7 +250,7 @@ func (h *Handler) NativeFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feed, err := h.svc.GenerateNativeFeed(r.Context(), productID, platform, channel)
+	feed, err := h.svc.GenerateNativeFeed(r.Context(), productID, platform, channel, feedToken(r))
 	if err != nil {
 		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "feed not found"})
 		return
@@ -577,19 +577,31 @@ func (h *Handler) DownloadArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rc, size, mimeType, err := h.svc.OpenArtifactDownload(r.Context(), artifactID)
+	if err := h.svc.AuthorizeArtifactAccess(r.Context(), artifactID, feedToken(r)); err != nil {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	dl, err := h.svc.ResolveArtifactDownload(r.Context(), artifactID)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	defer rc.Close()
 
-	w.Header().Set("Content-Type", mimeType)
-	if size > 0 {
-		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	// S3-backed artifacts redirect to a short-lived presigned URL so the
+	// transfer goes client->storage directly instead of through the app.
+	if dl.RedirectURL != "" {
+		http.Redirect(w, r, dl.RedirectURL, http.StatusFound)
+		return
+	}
+
+	defer dl.Body.Close()
+	w.Header().Set("Content-Type", dl.MimeType)
+	if dl.Size > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(dl.Size, 10))
 	}
 	w.WriteHeader(http.StatusOK)
-	io.Copy(w, rc)
+	io.Copy(w, dl.Body)
 }
 
 func (h *Handler) AdminListChangelogs(w http.ResponseWriter, r *http.Request) {

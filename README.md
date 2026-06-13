@@ -11,7 +11,7 @@ can manage their own devices, and an admin dashboard for everything else.
 - **Backend** — Go, talks Postgres. Lives in `backend/`.
 - **Website** — the admin + self-service UI (Vite). Lives in `website/`.
 - **Client guide** — building an integration? Read [`CLIENT.md`](./CLIENT.md). It
-  covers the encrypted `/activate` and `/validate` flow end to end.
+  covers the `/activate` and `/validate` flow end to end.
 
 ## Quick start
 
@@ -114,12 +114,11 @@ Mail is only sent if `SMTP_HOST` is set. Locally, Mailpit catches everything.
 
 ### Update checks (optional)
 
-Used by the `/check-update` endpoint to look up product releases on GitHub.
+Used by the `/updates/check` endpoint to look up product releases.
 
 | Variable        | Default | What it does                                          |
 |-----------------|---------|-------------------------------------------------------|
-| `GITHUB_REPO`   | —       | `owner/repo` to read releases from. Required for update checks. |
-| `GITHUB_TOKEN`  | —       | GitHub token to raise the rate limit / read private repos. |
+| `UPDATE_ARTIFACT_STORAGE_PATH` | `./data/update-artifacts` | Local directory where uploaded release artifacts are stored. |
 
 ## Production / HTTPS
 

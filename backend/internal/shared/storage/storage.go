@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 )
 
 // Backend is generic blob storage addressed by opaque string keys.
@@ -34,6 +35,28 @@ func Verify(ctx context.Context, b Backend) error {
 		return v.Verify(ctx)
 	}
 	return nil
+}
+
+// Presigner is an optional interface for backends that can hand out a
+// time-limited URL the client fetches directly, offloading transfer from the
+// app server. Backends that cannot presign (e.g. local disk) omit it.
+type Presigner interface {
+	// PresignGet returns a URL valid for ttl that grants read access to key.
+	PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error)
+}
+
+// PresignGet returns (url, true, nil) if b can presign key, or ("", false, nil)
+// if the backend does not support presigning (caller should stream instead).
+func PresignGet(ctx context.Context, b Backend, key string, ttl time.Duration) (string, bool, error) {
+	p, ok := b.(Presigner)
+	if !ok {
+		return "", false, nil
+	}
+	url, err := p.PresignGet(ctx, key, ttl)
+	if err != nil {
+		return "", false, err
+	}
+	return url, true, nil
 }
 
 // Kind identifies a storage backend implementation.

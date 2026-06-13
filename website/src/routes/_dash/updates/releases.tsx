@@ -13,6 +13,8 @@ import {
   yankRelease,
   deleteRelease,
   uploadArtifact,
+  attachReleaseChangelog,
+  type ReleaseDTO,
 } from "@/features/admin/api";
 import { useCurrentProduct } from "@/features/admin/product-context";
 import { AdminShell } from "@/components/admin/AdminShell";
@@ -44,7 +46,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Upload, Rocket, Ban, Trash2 } from "lucide-react";
+import { Plus, Upload, Rocket, Ban, Trash2, Pencil } from "lucide-react";
 
 export const Route = createFileRoute("/_dash/updates/releases")({
   beforeLoad: async () => {
@@ -88,6 +90,7 @@ function ReleasesPage() {
   const { product } = useCurrentProduct();
   const [newReleaseOpen, setNewReleaseOpen] = useState(false);
   const [uploadReleaseId, setUploadReleaseId] = useState<string | null>(null);
+  const [editRelease, setEditRelease] = useState<ReleaseDTO | null>(null);
 
   const { data: releases, isLoading: releasesLoading } = useQuery({
     queryKey: ["updateReleases", product?.id],
@@ -225,6 +228,15 @@ function ReleasesPage() {
                   </TableCell>
                   <TableCell>
                       <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="size-8"
+                          title="Edit release"
+                          onClick={() => setEditRelease(r)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
                         {(r.status === "draft" || !r.status) && (
                           <>
                             <Button
@@ -284,6 +296,14 @@ function ReleasesPage() {
         releaseId={uploadReleaseId}
         open={uploadReleaseId !== null}
         onOpenChange={(open) => !open && setUploadReleaseId(null)}
+        onSaved={invalidate}
+      />
+
+      <EditReleaseDialog
+        release={editRelease}
+        productId={product?.id ?? ""}
+        open={editRelease !== null}
+        onOpenChange={(open) => !open && setEditRelease(null)}
         onSaved={invalidate}
       />
     </AdminShell>
@@ -382,6 +402,94 @@ function UploadArtifactDialog({
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending ? "Uploading…" : "Upload"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditReleaseDialog({
+  release,
+  productId,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  release: ReleaseDTO | null;
+  productId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [changelogId, setChangelogId] = useState("__none__");
+
+  // Reset the selection whenever a different release is opened.
+  const lastReleaseId = useRef<string | null>(null);
+  if (release && release.id !== lastReleaseId.current) {
+    lastReleaseId.current = release.id;
+    setChangelogId(release.changelogId ?? "__none__");
+  }
+
+  const { data: changelogs } = useQuery({
+    queryKey: ["productChangelogs", productId],
+    queryFn: () => listChangelogs(productId),
+    enabled: open && !!productId,
+  });
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      if (!release) throw new Error("No release selected");
+      return attachReleaseChangelog(
+        release.id,
+        changelogId === "__none__" ? null : changelogId,
+      );
+    },
+    onSuccess: () => {
+      toast.success("Release updated");
+      onOpenChange(false);
+      onSaved();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update release"),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit release</DialogTitle>
+          <DialogDescription>
+            {release
+              ? `${release.version}${release.buildNumber ? ` (${release.buildNumber})` : ""} · ${formatPlatform(release.platform)} · ${release.channel}`
+              : ""}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Changelog</Label>
+            <Select value={changelogId} onValueChange={setChangelogId}>
+              <SelectTrigger><SelectValue placeholder="No changelog" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {changelogs?.map((cl) => (
+                  <SelectItem key={cl.id} value={cl.id}>{cl.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              <Link to="/updates/changelogs" className="underline hover:text-foreground">
+                Manage changelogs
+              </Link>
+            </p>
+          </div>
+        </div>
+        <DialogFooter className="mt-4">
+          <Button
+            type="button"
+            disabled={mutation.isPending || !release}
+            onClick={() => mutation.mutate()}
+          >
+            {mutation.isPending ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>
