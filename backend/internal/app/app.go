@@ -12,7 +12,6 @@ import (
 	"github.com/cheetahbyte/clave/internal/api"
 	"github.com/cheetahbyte/clave/internal/config"
 	"github.com/cheetahbyte/clave/internal/db"
-	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/features/activation"
 	"github.com/cheetahbyte/clave/internal/features/adminauth"
 	"github.com/cheetahbyte/clave/internal/features/audit"
@@ -22,6 +21,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/features/update"
 	"github.com/cheetahbyte/clave/internal/features/update/providers/native"
 	"github.com/cheetahbyte/clave/internal/features/validation"
+	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/shared/email"
 	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
@@ -216,41 +216,42 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 			DeleteProduct: licenseH.AdminDeleteProduct,
 			UpdateLicense: licenseH.AdminUpdateLicense,
 			DeleteLicense: licenseH.AdminDeleteLicense,
-			ListDevices:  licenseH.AdminListDevices,
-			DeleteDevice: licenseH.AdminDeleteDevice,
+			ListDevices:   licenseH.AdminListDevices,
+			DeleteDevice:  licenseH.AdminDeleteDevice,
 		},
 		UpdateAdmin: api.UpdateAdminHandlers{
-			ListProviders:    updateH.AdminListProviders,
-			ListConfigs:      updateH.AdminListProductUpdateConfigs,
-			SaveConfig:       updateH.AdminSaveProductUpdateConfig,
-			DeleteConfig:     updateH.AdminDeleteProductUpdateConfig,
-	
-			NativeFeed:       updateH.NativeFeed,
-			Changelog:        updateH.Changelog,
-			ListChannels:     updateH.AdminListChannels,
-			CreateChannel:    updateH.AdminCreateChannel,
-			UpdateChannel:    updateH.AdminUpdateChannel,
-			DeleteChannel:    updateH.AdminDeleteChannel,
-			ListReleases:     updateH.AdminListReleases,
-			CreateRelease:    updateH.AdminCreateRelease,
-			UploadArtifact:   updateH.AdminUploadArtifact,
-			GenerateDelta:    updateH.AdminGenerateDelta,
-			PublishRelease:   updateH.AdminPublishRelease,
-			YankRelease:      updateH.AdminYankRelease,
-			DeleteRelease:     updateH.AdminDeleteRelease,
-			AdminListChangelogs:  updateH.AdminListChangelogs,
-			AdminCreateChangelog: updateH.AdminCreateChangelog,
-			AdminUpdateChangelog: updateH.AdminUpdateChangelog,
-			AdminDeleteChangelog: updateH.AdminDeleteChangelog,
+			ListProviders: updateH.AdminListProviders,
+			ListConfigs:   updateH.AdminListProductUpdateConfigs,
+			SaveConfig:    updateH.AdminSaveProductUpdateConfig,
+			DeleteConfig:  updateH.AdminDeleteProductUpdateConfig,
+
+			NativeFeed:                  updateH.NativeFeed,
+			Changelog:                   updateH.Changelog,
+			ListChannels:                updateH.AdminListChannels,
+			CreateChannel:               updateH.AdminCreateChannel,
+			UpdateChannel:               updateH.AdminUpdateChannel,
+			DeleteChannel:               updateH.AdminDeleteChannel,
+			ListReleases:                updateH.AdminListReleases,
+			CreateRelease:               updateH.AdminCreateRelease,
+			UploadArtifact:              updateH.AdminUploadArtifact,
+			GenerateDelta:               updateH.AdminGenerateDelta,
+			PublishRelease:              updateH.AdminPublishRelease,
+			YankRelease:                 updateH.AdminYankRelease,
+			DeleteRelease:               updateH.AdminDeleteRelease,
+			AdminListChangelogs:         updateH.AdminListChangelogs,
+			AdminCreateChangelog:        updateH.AdminCreateChangelog,
+			AdminUpdateChangelog:        updateH.AdminUpdateChangelog,
+			AdminDeleteChangelog:        updateH.AdminDeleteChangelog,
 			AdminAttachReleaseChangelog: updateH.AdminAttachReleaseChangelog,
-			DownloadArtifact:  updateH.DownloadArtifact,
-			GetStorageConfig:  updateH.AdminGetStorageConfig,
-			SaveStorageConfig: updateH.AdminSaveStorageConfig,
-			TestStorageConfig: updateH.AdminTestStorageConfig,
-			WorkerGetDeltaJob:     updateH.WorkerGetDeltaJob,
-			WorkerStartDeltaJob:   updateH.WorkerStartDeltaJob,
-			WorkerCompleteDeltaJob: updateH.WorkerCompleteDeltaJob,
-			WorkerFailDeltaJob:    updateH.WorkerFailDeltaJob,
+			DownloadArtifact:            updateH.DownloadArtifact,
+			GetStorageConfig:            updateH.AdminGetStorageConfig,
+			SaveStorageConfig:           updateH.AdminSaveStorageConfig,
+			TestStorageConfig:           updateH.AdminTestStorageConfig,
+			WorkerGetDeltaJob:           updateH.WorkerGetDeltaJob,
+			WorkerStartDeltaJob:         updateH.WorkerStartDeltaJob,
+			WorkerCompleteDeltaJob:      updateH.WorkerCompleteDeltaJob,
+			WorkerFailDeltaJob:          updateH.WorkerFailDeltaJob,
+			WorkerDownloadArtifact:      updateH.WorkerDownloadArtifact,
 		},
 		Organization: api.OrganizationHandlers{
 			List:          orgH.List,
@@ -265,15 +266,15 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 		},
 		AdminAuditLogs: auditH.List,
 		Middleware: api.MiddlewareConfig{
-			SSAuth:      ssAuth,
-			AdminAuth:   adminAuth,
+			SSAuth:       ssAuth,
+			AdminAuth:    adminAuth,
 			VerifiedAuth: adminVerified,
-			SessionMW:   sessionManager.LoadAndSave,
-			CSRFAuth:    csrfMW,
-			CSRFPlain:   csrfPlaintext,
-			ForceHTTPS:  middleware.SecureTransport(cfg.IsProduction(), cfg.TrustProxyHeaders),
-			WorkerAuth:  workerAuth,
-			Verbose:     cfg.VerboseLogging,
+			SessionMW:    sessionManager.LoadAndSave,
+			CSRFAuth:     csrfMW,
+			CSRFPlain:    csrfPlaintext,
+			ForceHTTPS:   middleware.SecureTransport(cfg.IsProduction(), cfg.TrustProxyHeaders),
+			WorkerAuth:   workerAuth,
+			Verbose:      cfg.VerboseLogging,
 		},
 	})
 

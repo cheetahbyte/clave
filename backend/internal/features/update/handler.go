@@ -246,7 +246,6 @@ func (h *Handler) AdminSaveStorageConfig(w http.ResponseWriter, r *http.Request)
 	helpers.WriteJSON(w, http.StatusOK, cfg)
 }
 
-
 func (h *Handler) NativeFeed(w http.ResponseWriter, r *http.Request) {
 	productID, err := uuid.Parse(chi.URLParam(r, "productId"))
 	if err != nil {
@@ -626,6 +625,33 @@ func (h *Handler) AdminGenerateDelta(w http.ResponseWriter, r *http.Request) {
 		"jobId":  job.ID.String(),
 		"status": job.Status,
 	})
+}
+
+func (h *Handler) WorkerDownloadArtifact(w http.ResponseWriter, r *http.Request) {
+	artifactID, err := uuid.Parse(chi.URLParam(r, "artifactId"))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	dl, err := h.svc.ResolveArtifactDownload(r.Context(), artifactID)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	if dl.RedirectURL != "" {
+		http.Redirect(w, r, dl.RedirectURL, http.StatusFound)
+		return
+	}
+
+	defer dl.Body.Close()
+	w.Header().Set("Content-Type", dl.MimeType)
+	if dl.Size > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(dl.Size, 10))
+	}
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, dl.Body)
 }
 
 func (h *Handler) WorkerGetDeltaJob(w http.ResponseWriter, r *http.Request) {

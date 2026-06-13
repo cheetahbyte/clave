@@ -251,7 +251,17 @@ func completeJob(client *http.Client, apiURL, token, jobID string, deltaData []b
 
 func failJob(client *http.Client, apiURL, token, jobID, errMsg string) {
 	body, _ := json.Marshal(map[string]string{"error": errMsg})
-	workerPost(client, apiURL, token, jobID, "failed", body)
+	url := fmt.Sprintf("%s/api/v1/worker/delta-jobs/%s/failed", apiURL, jobID)
+	req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("failed to report job failure: %v", err)
+		return
+	}
+	resp.Body.Close()
 }
 
 func downloadAndUnzip(client *http.Client, token, url, dest string) error {
@@ -277,10 +287,11 @@ func downloadAndUnzip(client *http.Client, token, url, dest string) error {
 	}
 
 	for _, f := range r.File {
-		path := filepath.Join(dest, filepath.FromSlash(f.Name))
-		if strings.Contains(f.Name, "..") || filepath.IsAbs(f.Name) {
+		clean := filepath.Clean(filepath.FromSlash(f.Name))
+		if strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
 			continue
 		}
+		path := filepath.Join(dest, clean)
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(path, 0755)
 			continue

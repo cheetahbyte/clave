@@ -62,41 +62,42 @@ type LicenseAdminHandlers struct {
 	DeleteProduct http.HandlerFunc
 	UpdateLicense http.HandlerFunc
 	DeleteLicense http.HandlerFunc
-	ListDevices  http.HandlerFunc
-	DeleteDevice http.HandlerFunc
+	ListDevices   http.HandlerFunc
+	DeleteDevice  http.HandlerFunc
 }
 
 type UpdateAdminHandlers struct {
-	ListProviders       http.HandlerFunc
-	ListConfigs         http.HandlerFunc
-	SaveConfig          http.HandlerFunc
-	DeleteConfig        http.HandlerFunc
-	NativeFeed          http.HandlerFunc
-	Changelog           http.HandlerFunc
-	ListChannels        http.HandlerFunc
-	CreateChannel       http.HandlerFunc
-	UpdateChannel       http.HandlerFunc
-	DeleteChannel       http.HandlerFunc
-	ListReleases        http.HandlerFunc
-	CreateRelease       http.HandlerFunc
-	UploadArtifact      http.HandlerFunc
-	GenerateDelta       http.HandlerFunc
-	PublishRelease      http.HandlerFunc
-	YankRelease         http.HandlerFunc
-	DeleteRelease        http.HandlerFunc
-	AdminListChangelogs  http.HandlerFunc
-	AdminCreateChangelog http.HandlerFunc
-	AdminUpdateChangelog http.HandlerFunc
-	AdminDeleteChangelog http.HandlerFunc
+	ListProviders               http.HandlerFunc
+	ListConfigs                 http.HandlerFunc
+	SaveConfig                  http.HandlerFunc
+	DeleteConfig                http.HandlerFunc
+	NativeFeed                  http.HandlerFunc
+	Changelog                   http.HandlerFunc
+	ListChannels                http.HandlerFunc
+	CreateChannel               http.HandlerFunc
+	UpdateChannel               http.HandlerFunc
+	DeleteChannel               http.HandlerFunc
+	ListReleases                http.HandlerFunc
+	CreateRelease               http.HandlerFunc
+	UploadArtifact              http.HandlerFunc
+	GenerateDelta               http.HandlerFunc
+	PublishRelease              http.HandlerFunc
+	YankRelease                 http.HandlerFunc
+	DeleteRelease               http.HandlerFunc
+	AdminListChangelogs         http.HandlerFunc
+	AdminCreateChangelog        http.HandlerFunc
+	AdminUpdateChangelog        http.HandlerFunc
+	AdminDeleteChangelog        http.HandlerFunc
 	AdminAttachReleaseChangelog http.HandlerFunc
-	DownloadArtifact     http.HandlerFunc
-	GetStorageConfig    http.HandlerFunc
-	SaveStorageConfig   http.HandlerFunc
-	TestStorageConfig   http.HandlerFunc
-	WorkerGetDeltaJob     http.HandlerFunc
-	WorkerStartDeltaJob   http.HandlerFunc
-	WorkerCompleteDeltaJob http.HandlerFunc
-	WorkerFailDeltaJob    http.HandlerFunc
+	DownloadArtifact            http.HandlerFunc
+	GetStorageConfig            http.HandlerFunc
+	SaveStorageConfig           http.HandlerFunc
+	TestStorageConfig           http.HandlerFunc
+	WorkerGetDeltaJob           http.HandlerFunc
+	WorkerStartDeltaJob         http.HandlerFunc
+	WorkerCompleteDeltaJob      http.HandlerFunc
+	WorkerFailDeltaJob          http.HandlerFunc
+	WorkerDownloadArtifact      http.HandlerFunc
 }
 
 type OrganizationHandlers struct {
@@ -229,10 +230,10 @@ func Register(r *chi.Mux, cfg Config) {
 					protected.Get("/licenses/{id}", la.GetLicense)
 					protected.Post("/licenses", la.Create)
 					protected.Patch("/licenses/{id}", la.UpdateLicense)
-				protected.Delete("/licenses/{id}", la.DeleteLicense)
-				protected.Get("/devices", la.ListDevices)
-				protected.Delete("/devices/{deviceId}", la.DeleteDevice)
-				protected.Get("/products", la.ListProducts)
+					protected.Delete("/licenses/{id}", la.DeleteLicense)
+					protected.Get("/devices", la.ListDevices)
+					protected.Delete("/devices/{deviceId}", la.DeleteDevice)
+					protected.Get("/products", la.ListProducts)
 					protected.Post("/products", la.CreateProduct)
 					protected.Get("/products/{id}/update-configs", ua.ListConfigs)
 					protected.Post("/products/{id}/update-configs", ua.SaveConfig)
@@ -290,8 +291,8 @@ func Register(r *chi.Mux, cfg Config) {
 				ss.With(mw.SSAuth).Post("/licenses/{licenseId}/revoke", sv.RevokeLicense)
 			})
 
-		v1.Get("/updates/products/{productId}/{platform}/{channel}/feed.json", ua.NativeFeed)
-				v1.Get("/updates/releases/{releaseId}/changelog.html", ua.Changelog)
+			v1.Get("/updates/products/{productId}/{platform}/{channel}/feed.json", ua.NativeFeed)
+			v1.Get("/updates/releases/{releaseId}/changelog.html", ua.Changelog)
 
 			v1.Get("/updates/artifacts/{artifactId}/download", ua.DownloadArtifact)
 
@@ -301,8 +302,9 @@ func Register(r *chi.Mux, cfg Config) {
 				worker.Post("/delta-jobs/{jobId}/started", ua.WorkerStartDeltaJob)
 				worker.Post("/delta-jobs/{jobId}/complete", ua.WorkerCompleteDeltaJob)
 				worker.Post("/delta-jobs/{jobId}/failed", ua.WorkerFailDeltaJob)
+				worker.Get("/artifacts/{artifactId}/download", ua.WorkerDownloadArtifact)
 			})
 
-			})
+		})
 	})
 }

@@ -10,7 +10,6 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,7 +21,6 @@ import (
 	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/cheetahbyte/clave/internal/shared/storage"
-	"github.com/cheetahbyte/clave/pkg/delta"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -137,17 +135,17 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 	}
 
 	updateReq := UpdateRequest{
-		LicenseID:               licenseID.String(),
-		ProductID:               claims.ProductID,
-		Platform:                Platform(platform),
-		Channel:                 channel,
-		CurrentVersion:          data.Version,
-		CurrentBuild:            data.Build,
-		Arch:                    data.Arch,
-		OSVersion:               data.OSVersion,
-		ClientID:                data.ClientID,
-		CurrentManifestSHA256:   data.CurrentManifestSHA256,
-		CurrentArtifactSHA256:   data.CurrentArtifactSHA256,
+		LicenseID:             licenseID.String(),
+		ProductID:             claims.ProductID,
+		Platform:              Platform(platform),
+		Channel:               channel,
+		CurrentVersion:        data.Version,
+		CurrentBuild:          data.Build,
+		Arch:                  data.Arch,
+		OSVersion:             data.OSVersion,
+		ClientID:              data.ClientID,
+		CurrentManifestSHA256: data.CurrentManifestSHA256,
+		CurrentArtifactSHA256: data.CurrentArtifactSHA256,
 	}
 
 	dbConfig, dbErr := svc.repo.GetProductUpdateConfig(ctx, claims.ProductID, platform, channel)
@@ -307,7 +305,6 @@ func (svc *Service) DeleteProductUpdateConfig(ctx context.Context, orgID, config
 	_, err := svc.repo.DeleteProductUpdateConfig(ctx, configID, orgID)
 	return err
 }
-
 
 // FeedURL returns the public feed URL for the Clave Native JSON feed.
 func (svc *Service) FeedURL(providerKey string, productID uuid.UUID, platform, channel string) string {
@@ -897,7 +894,21 @@ func (svc *Service) artifactDownloadURL(artifactID uuid.UUID) string {
 	return fmt.Sprintf("%s/api/v1/updates/artifacts/%s/download", base, artifactID)
 }
 
-func (svc *Service) GenerateDelta(ctx context.Context, orgID, releaseID uuid.UUID, publisher interface{ PublishDeltaGenerate(context.Context, events.DeltaGenerateEvent) error }) (*db.UpdateDeltaJob, error) {
+func (svc *Service) workerArtifactDownloadURL(artifactID uuid.UUID) string {
+	base := svc.publicAppURL
+	if base == "" {
+		base = ""
+	}
+	base = strings.TrimRight(base, "/")
+	if base == "" {
+		return fmt.Sprintf("/api/v1/worker/artifacts/%s/download", artifactID)
+	}
+	return fmt.Sprintf("%s/api/v1/worker/artifacts/%s/download", base, artifactID)
+}
+
+func (svc *Service) GenerateDelta(ctx context.Context, orgID, releaseID uuid.UUID, publisher interface {
+	PublishDeltaGenerate(context.Context, events.DeltaGenerateEvent) error
+}) (*db.UpdateDeltaJob, error) {
 	release, err := svc.repo.GetUpdateRelease(ctx, releaseID)
 	if err != nil {
 		return nil, fmt.Errorf("release not found: %w", err)
@@ -964,7 +975,7 @@ func (svc *Service) GenerateDelta(ctx context.Context, orgID, releaseID uuid.UUI
 	}
 
 	if publisher != nil {
-		_ = publisher.PublishDeltaGenerate(ctx, events.DeltaGenerateEvent{
+		if err := publisher.PublishDeltaGenerate(ctx, events.DeltaGenerateEvent{
 			Type:             "delta.generate",
 			JobID:            job.ID.String(),
 			OrganizationID:   orgID.String(),
@@ -972,193 +983,35 @@ func (svc *Service) GenerateDelta(ctx context.Context, orgID, releaseID uuid.UUI
 			SourceReleaseID:  sourceRelease.ID.String(),
 			SourceArtifactID: sourceArtifact.ID.String(),
 			TargetArtifactID: targetArtifact.ID.String(),
-		})
+		}); err != nil {
+			errMsg := err.Error()
+			completedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+			svc.repo.UpdateDeltaJobStatus(ctx, db.UpdateDeltaJobStatusParams{
+				ID:           job.ID,
+				Status:       "failed",
+				ErrorMessage: &errMsg,
+				CompletedAt:  completedAt,
+			})
+			return nil, fmt.Errorf("publish delta job: %w", err)
+		}
 	}
 
 	return &job, nil
 }
 
-func (svc *Service) generateDeltaFromArtifacts(ctx context.Context, sourceArtifact, targetArtifact *db.UpdateArtifact, sourceRelease, targetRelease db.UpdateRelease) (uuid.UUID, error) {
-	backend, kind, err := svc.storageForProduct(ctx, targetRelease.ProductID)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("storage backend: %w", err)
-	}
-
-	fromDir, err := os.MkdirTemp("", "clave-delta-from-")
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("temp dir: %w", err)
-	}
-	defer os.RemoveAll(fromDir)
-	toDir, err := os.MkdirTemp("", "clave-delta-to-")
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("temp dir: %w", err)
-	}
-	defer os.RemoveAll(toDir)
-
-	sourceKey := svc.artifactStorageKey(*sourceArtifact)
-	targetKey := svc.artifactStorageKey(*targetArtifact)
-
-	if err := downloadAndExtract(ctx, backend, sourceKey, fromDir); err != nil {
-		return uuid.Nil, fmt.Errorf("extract source: %w", err)
-	}
-	if err := downloadAndExtract(ctx, backend, targetKey, toDir); err != nil {
-		return uuid.Nil, fmt.Errorf("extract target: %w", err)
-	}
-
-	fromManifest, fromManifestSHA, err := delta.BuildManifest(fromDir)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("build source manifest: %w", err)
-	}
-	toManifest, toManifestSHA, err := delta.BuildManifest(toDir)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("build target manifest: %w", err)
-	}
-
-	sourceSHA := ""
-	if sourceArtifact.ChecksumSha256 != nil {
-		sourceSHA = *sourceArtifact.ChecksumSha256
-	}
-	targetSHA := ""
-	if targetArtifact.ChecksumSha256 != nil {
-		targetSHA = *targetArtifact.ChecksumSha256
-	}
-
-	fromMeta := delta.ReleaseMeta{
-		Version:        sourceRelease.Version,
-		ManifestSHA256: fromManifestSHA,
-		ArtifactSHA256: sourceSHA,
-	}
-	if sourceRelease.BuildNumber != nil {
-		fromMeta.Build = *sourceRelease.BuildNumber
-	}
-	toMeta := delta.ReleaseMeta{
-		Version:        targetRelease.Version,
-		ManifestSHA256: toManifestSHA,
-		ArtifactSHA256: targetSHA,
-	}
-	if targetRelease.BuildNumber != nil {
-		toMeta.Build = *targetRelease.BuildNumber
-	}
-
-	dm := delta.Diff(fromManifest, toManifest, fromMeta, toMeta)
-	deltaBytes, err := delta.BuildDelta(dm, toManifest, toDir)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("build delta archive: %w", err)
-	}
-
-	artifactID := uuid.New()
-	ext := ".delta.zip"
-	storedFilename := artifactID.String() + ext
-	storageKey := artifactID.String() + "/" + storedFilename
-
-	deltaSHA := sha256.Sum256(deltaBytes)
-	deltaChecksum := fmt.Sprintf("%x", deltaSHA)
-
-	sizeBytes, err := backend.Put(ctx, storageKey, bytes.NewReader(deltaBytes))
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("store delta: %w", err)
-	}
-
-	downloadURL := svc.artifactDownloadURL(artifactID)
-	mimeType := "application/zip"
-	backendName := string(kind)
-	
-	md := map[string]any{
-		"format":               "clave.delta/v1",
-		"fromVersion":          fromMeta.Version,
-		"fromBuild":            fromMeta.Build,
-		"fromManifestSha256":   fromManifestSHA,
-		"fromArtifactSha256":   sourceSHA,
-		"toVersion":            toMeta.Version,
-		"toBuild":              toMeta.Build,
-		"toManifestSha256":     toManifestSHA,
-		"toArtifactSha256":     targetSHA,
-	}
-	mdJSON, _ := json.Marshal(md)
-
-	artifact, err := svc.repo.InsertUpdateArtifact(ctx, db.InsertUpdateArtifactParams{
-		ID:                   artifactID,
-		ReleaseID:            targetRelease.ID,
-		ArtifactType:         "delta",
-		Os:                   targetArtifact.Os,
-		Arch:                 targetArtifact.Arch,
-		Url:                  downloadURL,
-		SizeBytes:            &sizeBytes,
-		ChecksumSha256:       &deltaChecksum,
-		Metadata:             mdJSON,
-		Filename:             &storedFilename,
-		MimeType:             &mimeType,
-		MinimumSystemVersion: nil,
-		StorageBackend:       &backendName,
-		StorageKey:           &storageKey,
-	})
-	if err != nil {
-		_ = backend.Delete(ctx, storageKey)
-		return uuid.Nil, fmt.Errorf("insert delta artifact: %w", err)
-	}
-
-	return artifact.ID, nil
-}
-
-func downloadAndExtract(ctx context.Context, backend storage.Backend, key, destDir string) error {
-	rc, err := backend.Open(ctx, key)
-	if err != nil {
-		return fmt.Errorf("open %s: %w", key, err)
-	}
-	defer rc.Close()
-
-	data, err := io.ReadAll(rc)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", key, err)
-	}
-
-	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		return fmt.Errorf("read zip %s: %w", key, err)
-	}
-
-	for _, f := range r.File {
-		path := filepath.Join(destDir, filepath.FromSlash(f.Name))
-		if strings.Contains(f.Name, "..") || filepath.IsAbs(f.Name) {
-			continue
-		}
-		if f.FileInfo().IsDir() {
-			os.MkdirAll(path, 0755)
-			continue
-		}
-		os.MkdirAll(filepath.Dir(path), 0755)
-		rc2, err := f.Open()
-		if err != nil {
-			return err
-		}
-		out, err := os.Create(path)
-		if err != nil {
-			rc2.Close()
-			return err
-		}
-		_, err = io.Copy(out, rc2)
-		rc2.Close()
-		out.Close()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type DeltaJobDTO struct {
-	ID                 string `json:"id"`
-	Status             string `json:"status"`
-	SourceArtifactURL  string `json:"sourceArtifactUrl"`
-	TargetArtifactURL  string `json:"targetArtifactUrl"`
-	SourceArtifactSHA  string `json:"sourceArtifactSha256"`
-	TargetArtifactSHA  string `json:"targetArtifactSha256"`
-	SourceVersion      string `json:"sourceVersion"`
-	SourceBuild        string `json:"sourceBuild,omitempty"`
-	TargetVersion      string `json:"targetVersion"`
-	TargetBuild        string `json:"targetBuild,omitempty"`
-	Os                 string `json:"os"`
-	Arch               string `json:"arch"`
+	ID                string `json:"id"`
+	Status            string `json:"status"`
+	SourceArtifactURL string `json:"sourceArtifactUrl"`
+	TargetArtifactURL string `json:"targetArtifactUrl"`
+	SourceArtifactSHA string `json:"sourceArtifactSha256"`
+	TargetArtifactSHA string `json:"targetArtifactSha256"`
+	SourceVersion     string `json:"sourceVersion"`
+	SourceBuild       string `json:"sourceBuild,omitempty"`
+	TargetVersion     string `json:"targetVersion"`
+	TargetBuild       string `json:"targetBuild,omitempty"`
+	Os                string `json:"os"`
+	Arch              string `json:"arch"`
 }
 
 func (svc *Service) GetDeltaJobForWorker(ctx context.Context, jobID uuid.UUID) (*DeltaJobDTO, error) {
@@ -1186,14 +1039,14 @@ func (svc *Service) GetDeltaJobForWorker(ctx context.Context, jobID uuid.UUID) (
 	}
 
 	dto := &DeltaJobDTO{
-		ID:                  job.ID.String(),
-		Status:              job.Status,
-		SourceArtifactURL:   sourceArtifact.Url,
-		TargetArtifactURL:   targetArtifact.Url,
-		SourceVersion:       sourceRelease.Version,
-		TargetVersion:       targetRelease.Version,
-		Os:                  targetArtifact.Os,
-		Arch:                targetArtifact.Arch,
+		ID:                job.ID.String(),
+		Status:            job.Status,
+		SourceArtifactURL: svc.workerArtifactDownloadURL(sourceArtifact.ID),
+		TargetArtifactURL: svc.workerArtifactDownloadURL(targetArtifact.ID),
+		SourceVersion:     sourceRelease.Version,
+		TargetVersion:     targetRelease.Version,
+		Os:                targetArtifact.Os,
+		Arch:              targetArtifact.Arch,
 	}
 	if sourceArtifact.ChecksumSha256 != nil {
 		dto.SourceArtifactSHA = *sourceArtifact.ChecksumSha256
@@ -1271,12 +1124,41 @@ func (svc *Service) CompleteDeltaJob(ctx context.Context, jobID uuid.UUID, delta
 
 	sourceRelease, _ := svc.repo.GetUpdateRelease(ctx, job.SourceReleaseID)
 
+	var fromManifestSHA, toManifestSHA string
+	if zr, zerr := zip.NewReader(bytes.NewReader(deltaData), int64(len(deltaData))); zerr == nil {
+		for _, zf := range zr.File {
+			if zf.Name != "delta.json" {
+				continue
+			}
+			rc, rerr := zf.Open()
+			if rerr != nil {
+				break
+			}
+			var dm struct {
+				From struct {
+					ManifestSHA256 string `json:"manifestSha256"`
+				} `json:"from"`
+				To struct {
+					ManifestSHA256 string `json:"manifestSha256"`
+				} `json:"to"`
+			}
+			if json.NewDecoder(rc).Decode(&dm) == nil {
+				fromManifestSHA = dm.From.ManifestSHA256
+				toManifestSHA = dm.To.ManifestSHA256
+			}
+			rc.Close()
+			break
+		}
+	}
+
 	md := map[string]any{
 		"format":             "clave.delta/v1",
 		"fromVersion":        sourceRelease.Version,
 		"fromArtifactSha256": sourceSHA,
+		"fromManifestSha256": fromManifestSHA,
 		"toVersion":          targetRelease.Version,
 		"toArtifactSha256":   targetSHA,
+		"toManifestSha256":   toManifestSHA,
 	}
 	if sourceRelease.BuildNumber != nil {
 		md["fromBuild"] = *sourceRelease.BuildNumber
@@ -1311,10 +1193,10 @@ func (svc *Service) CompleteDeltaJob(ctx context.Context, jobID uuid.UUID, delta
 	pgDelta := pgtype.UUID{Bytes: artifactID, Valid: true}
 	completedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	_, err = svc.repo.UpdateDeltaJobStatus(ctx, db.UpdateDeltaJobStatusParams{
-		ID:               jobID,
-		Status:           "succeeded",
-		DeltaArtifactID:  pgDelta,
-		CompletedAt:      completedAt,
+		ID:              jobID,
+		Status:          "succeeded",
+		DeltaArtifactID: pgDelta,
+		CompletedAt:     completedAt,
 	})
 	return err
 }
