@@ -19,3 +19,29 @@ export function errMessage(error: unknown): string {
   const msg = error instanceof Error ? error.message : String(error)
   return scrub(msg)
 }
+
+type Level = "info" | "warn" | "error"
+
+// Structured, PII-safe logger. String fields are scrubbed of email addresses;
+// pass already-masked values (e.g. maskEmail()) for recipients.
+function emit(level: Level, msg: string, fields?: Record<string, unknown>) {
+  const entry: Record<string, unknown> = {
+    ts: new Date().toISOString(),
+    level,
+    msg,
+  }
+  if (fields) {
+    for (const [k, v] of Object.entries(fields)) {
+      entry[k] = typeof v === "string" ? scrub(v) : v
+    }
+  }
+  const line = JSON.stringify(entry)
+  if (level === "error") console.error(line)
+  else console.log(line)
+}
+
+export const log = {
+  info: (msg: string, fields?: Record<string, unknown>) => emit("info", msg, fields),
+  warn: (msg: string, fields?: Record<string, unknown>) => emit("warn", msg, fields),
+  error: (msg: string, fields?: Record<string, unknown>) => emit("error", msg, fields),
+}

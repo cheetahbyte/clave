@@ -15,14 +15,15 @@ export async function sendEmail(opts: {
   subject: string
   html: string
   text: string
-}) {
-  await transport.sendMail({
+}): Promise<{ messageId: string }> {
+  const info = await transport.sendMail({
     from: FROM,
     to: opts.to,
     subject: opts.subject,
     html: opts.html,
     text: opts.text,
   })
+  return { messageId: info.messageId }
 }
 
 export async function verifyMailer() {

@@ -1,36 +1,44 @@
 import { consumeEmailEvents, closeQueue } from "./queue.ts"
 import { sendEmail, verifyMailer } from "./mailer.ts"
 import { renderEmail } from "./templates.ts"
-import { maskEmail, errMessage } from "./log.ts"
+import { maskEmail, errMessage, log } from "./log.ts"
 
 async function main() {
   await verifyMailer()
-  console.log("SMTP transport verified")
+  log.info("SMTP transport verified")
 
   await consumeEmailEvents(async (event) => {
     const { type, email } = event
-    console.log(`Processing "${type}" for ${maskEmail(email)}`)
+    const recipient = maskEmail(email)
+    const startedAt = Date.now()
+
+    log.info("event received", { type, recipient })
 
     const rendered = await renderEmail(event)
-    await sendEmail({
+    const { messageId } = await sendEmail({
       to: email,
       subject: rendered.subject,
       html: rendered.html,
       text: rendered.text,
     })
 
-    console.log(`Sent "${type}" to ${maskEmail(email)}`)
+    log.info("email sent", {
+      type,
+      recipient,
+      messageId,
+      durationMs: Date.now() - startedAt,
+    })
   })
 
-  console.log("Email worker started, waiting for events")
+  log.info("email worker started, waiting for events")
 }
 
 async function shutdown(signal: string) {
-  console.log(`${signal} received, shutting down`)
+  log.info("shutting down", { signal })
   try {
     await closeQueue()
   } catch (error) {
-    console.error("Error during shutdown:", errMessage(error))
+    log.error("error during shutdown", { err: errMessage(error) })
   }
   process.exit(0)
 }
@@ -39,6 +47,6 @@ process.on("SIGINT", () => shutdown("SIGINT"))
 process.on("SIGTERM", () => shutdown("SIGTERM"))
 
 main().catch((error) => {
-  console.error("Fatal error:", errMessage(error))
+  log.error("fatal error", { err: errMessage(error) })
   process.exit(1)
 })
