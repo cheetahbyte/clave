@@ -21,7 +21,7 @@ func main() {
 	cfg.ConfigureLogging()
 
 	if cfg.RunMigrations {
-		app.RunMigrations(cfg.DatabaseURL)
+		app.RunMigrations(cfg.DatabaseURL, cfg.MigrationsDir)
 	}
 
 	handler, err := app.NewRouter(cfg)

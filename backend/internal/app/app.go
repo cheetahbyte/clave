@@ -45,13 +45,13 @@ func Close() {
 	}
 }
 
-func RunMigrations(databaseURL string) {
+func RunMigrations(databaseURL, migrationsDir string) {
 	log.Println("running database migrations")
 	migDb, err := sql.Open("pgx", databaseURL)
 	if err != nil {
 		log.Fatalf("failed to open migration connection: %v", err)
 	}
-	if err := goose.Up(migDb, "./migrations"); err != nil {
+	if err := goose.Up(migDb, migrationsDir); err != nil {
 		log.Fatalf("migration failed: %v", err)
 	}
 	migDb.Close()

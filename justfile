@@ -21,11 +21,11 @@ dev-fe:
 
 migrate:
     @echo "Running backend migrations..."
-    goose up
+    goose -dir backend/migrations up
 
 reset-be:
     @echo "Rolling back all backend migrations..."
-    goose reset
+    goose -dir backend/migrations reset
 
 seed-be:
     psql "$DATABASE_URL" -f database/seed-backend.sql

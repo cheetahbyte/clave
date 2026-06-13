@@ -53,7 +53,7 @@ jobs:
           GOOSE_DBSTRING: ${{ env.DATABASE_URL }}
         run: |
           go install github.com/pressly/goose/v3/cmd/goose@latest
-          goose -dir migrations up
+          goose -dir backend/migrations up
 
       - name: Build server
         working-directory: backend

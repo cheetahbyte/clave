@@ -42,6 +42,7 @@ type Config struct {
 
 	UpdateArtifactStoragePath string
 
+	MigrationsDir          string
 	OTELEnabled            bool
 	OTELServiceName        string
 	OTELExporterEndpoint   string
@@ -65,6 +66,7 @@ func Load() (*Config, error) {
 		RunMigrations:    truthy(os.Getenv("RUN_MIGRATIONS")),
 		VerboseLogging:   verboseLoggingEnabled(),
 		Dev:              truthy(os.Getenv("DEV")),
+		MigrationsDir:     getEnv("MIGRATIONS_DIR", "./migrations"),
 		LicenseHMACSecret: os.Getenv("LICENSE_HMAC_SECRET"),
 		OTELEnabled:            truthy(os.Getenv("OTEL_ENABLED")),
 		OTELServiceName:        getEnv("OTEL_SERVICE_NAME", "clave-api"),
