@@ -311,7 +311,7 @@ function UploadArtifactDialog({
   const [artifactType, setArtifactType] = useState("dmg");
   const [os, setOs] = useState("macos");
   const [arch, setArch] = useState("universal");
-  const [metadata, setMetadata] = useState("");
+  const metadata = "";
   const fileRef = useRef<HTMLInputElement>(null);
 
   const mutation = useMutation({
