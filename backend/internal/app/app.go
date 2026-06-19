@@ -170,7 +170,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 
 	ssAuth := middleware.RequireSelfServiceAuth(cfg.LicenseJWTPublicKey)
 	adminAuth := middleware.RequireAdmin(sessionManager)
-	adminVerified := middleware.RequireAdminVerified(sessionManager, q)
+	adminVerified := middleware.RequireAdminVerified(sessionManager)
 
 	r := chi.NewRouter()
 	api.Register(r, api.Config{

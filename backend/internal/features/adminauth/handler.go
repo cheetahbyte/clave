@@ -134,16 +134,6 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 
 	profile.MfaVerified = h.sessions.GetBool(r.Context(), "admin_mfa_verified")
 
-	// If 2FA is not enabled in the DB, treat as verified. This handles the
-	// case where 2FA was reset (CLI or dev endpoint) but the session flag
-	// is stale. Fix the session so subsequent requests skip this check.
-	if !profile.MfaEnabled {
-		profile.MfaVerified = true
-		if !h.sessions.GetBool(r.Context(), "admin_mfa_verified") {
-			h.sessions.Put(r.Context(), "admin_mfa_verified", true)
-		}
-	}
-
 	helpers.WriteJSON(w, http.StatusOK, profile)
 }
 
@@ -294,7 +284,8 @@ func (h *Handler) Disable2FA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Clear the MFA-verified flag so the session no longer requires it.
+	// Mark the session as MFA-verified since 2FA has been disabled.
+	// The dev-mode login bypass also sets this for new logins.
 	h.sessions.Put(r.Context(), "admin_mfa_verified", true)
 
 	h.audit(r, "admin.2fa_disabled", "admin", adminID, orgID)
