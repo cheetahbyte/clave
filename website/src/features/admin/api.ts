@@ -64,6 +64,29 @@ export function listOrganizations(): Promise<Organization[]> {
   return adminFetch<Organization[]>("/api/v1/admin/organizations");
 }
 
+export interface MCPTokenInfo {
+  exists: boolean;
+  prefix?: string;
+  regeneratedAt?: string;
+  lastUsedAt?: string;
+}
+
+export interface RegenerateMCPTokenResponse {
+  token: string;
+  prefix: string;
+  regeneratedAt: string;
+}
+
+export function getMCPToken(): Promise<MCPTokenInfo> {
+  return adminFetch<MCPTokenInfo>("/api/v1/admin/mcp-token");
+}
+
+export function regenerateMCPToken(): Promise<RegenerateMCPTokenResponse> {
+  return adminFetch<RegenerateMCPTokenResponse>("/api/v1/admin/mcp-token/regenerate", {
+    method: "POST",
+  });
+}
+
 export function createOrganization(name: string): Promise<Organization> {
   return adminFetch<Organization>("/api/v1/admin/organizations", {
     method: "POST",

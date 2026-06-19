@@ -1,11 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { getCurrentAdmin, listOrganizations } from "@/features/admin/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import {
+  getCurrentAdmin,
+  getMCPToken,
+  listOrganizations,
+  regenerateMCPToken,
+} from "@/features/admin/api";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Copy, ExternalLink, Users } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Copy, ExternalLink, KeyRound, RefreshCw, ShieldAlert, Users } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_dash/settings/")({
@@ -13,6 +21,10 @@ export const Route = createFileRoute("/_dash/settings/")({
 });
 
 function SettingsPage() {
+  const queryClient = useQueryClient();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [newMCPToken, setNewMCPToken] = useState<string | null>(null);
+
   const { data: admin } = useQuery({
     queryKey: ["currentAdmin"],
     queryFn: getCurrentAdmin,
@@ -21,6 +33,24 @@ function SettingsPage() {
   const { data: orgs } = useQuery({
     queryKey: ["adminOrganizations"],
     queryFn: listOrganizations,
+  });
+
+  const { data: mcpToken } = useQuery({
+    queryKey: ["mcpToken"],
+    queryFn: getMCPToken,
+  });
+
+  const regenerateMut = useMutation({
+    mutationFn: regenerateMCPToken,
+    onSuccess: (data) => {
+      setNewMCPToken(data.token);
+      toast.success("MCP token regenerated");
+      queryClient.invalidateQueries({ queryKey: ["mcpToken"] });
+      setConfirmOpen(false);
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to regenerate MCP token");
+    },
   });
 
   const org = orgs?.find((o) => o.id === admin?.organizationId);
@@ -132,7 +162,96 @@ function SettingsPage() {
             ) : null}
           </CardContent>
         </Card>
+
+        <Card className="max-w-xl lg:col-span-2 lg:max-w-none">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="size-5" />
+              MCP access token
+            </CardTitle>
+            <CardDescription>
+              Use this organization token for MCP clients calling <code>/api/v1/mcp</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div>
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                  Status
+                </p>
+                <p className="mt-1 font-medium">{mcpToken?.exists ? "Configured" : "Not created"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                  Prefix
+                </p>
+                <p className="mt-1 font-mono text-xs">{mcpToken?.prefix ?? "—"}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                  Last used
+                </p>
+                <p className="mt-1 font-medium">
+                  {mcpToken?.lastUsedAt ? new Date(mcpToken.lastUsedAt).toLocaleString() : "Never"}
+                </p>
+              </div>
+            </div>
+
+            {newMCPToken ? (
+              <Alert>
+                <ShieldAlert className="size-4" />
+                <AlertTitle>Copy token now</AlertTitle>
+                <AlertDescription>
+                  <div className="flex w-full items-center gap-2 pt-2">
+                    <code className="bg-muted flex-1 truncate rounded-md px-3 py-2 font-mono text-xs">
+                      {newMCPToken}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-8 shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(newMCPToken);
+                        toast.success("Copied");
+                      }}
+                    >
+                      <Copy className="size-4" />
+                    </Button>
+                  </div>
+                  <p className="pt-2">This raw token is shown once. Store it in your MCP client.</p>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={() => setConfirmOpen(true)}>
+                <RefreshCw className="size-4" />
+                {mcpToken?.exists ? "Regenerate token" : "Create token"}
+              </Button>
+              {mcpToken?.regeneratedAt ? (
+                <span className="text-muted-foreground text-xs">
+                  Last regenerated {new Date(mcpToken.regeneratedAt).toLocaleString()}
+                </span>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={mcpToken?.exists ? "Regenerate MCP token?" : "Create MCP token?"}
+        description={
+          mcpToken?.exists
+            ? "Existing MCP clients using the old token will stop working immediately."
+            : "A new bearer token will be created for this organization. It will be shown once."
+        }
+        confirmLabel={mcpToken?.exists ? "Regenerate" : "Create token"}
+        destructive={Boolean(mcpToken?.exists)}
+        pending={regenerateMut.isPending}
+        onConfirm={() => regenerateMut.mutate()}
+      />
     </AdminShell>
   );
 }
