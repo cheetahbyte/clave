@@ -21,10 +21,11 @@ var sensitiveRate = httprate.Limit(5, 1*time.Minute, httprate.WithKeyFuncs(func(
 }, httprate.KeyByEndpoint))
 
 type ClientHandlers struct {
-	Activate    http.HandlerFunc
-	Validate    http.HandlerFunc
-	TrialStart  http.HandlerFunc
-	CheckUpdate http.HandlerFunc
+	Activate       http.HandlerFunc
+	Validate       http.HandlerFunc
+	TrialStart     http.HandlerFunc
+	CheckUpdate    http.HandlerFunc
+	UpdateChannels http.HandlerFunc
 }
 
 type SelfServiceHandlers struct {
@@ -67,33 +68,33 @@ type LicenseAdminHandlers struct {
 }
 
 type UpdateAdminHandlers struct {
-	ListProviders                http.HandlerFunc
-	ListConfigs                  http.HandlerFunc
-	SaveConfig                   http.HandlerFunc
-	DeleteConfig                 http.HandlerFunc
-	NativeFeed                   http.HandlerFunc
-	Changelog                    http.HandlerFunc
-	SparkleFeed                  http.HandlerFunc
-	SparklePublicKey             http.HandlerFunc
-	ListChannels                 http.HandlerFunc
-	CreateChannel                http.HandlerFunc
-	UpdateChannel                http.HandlerFunc
-	DeleteChannel                http.HandlerFunc
-	ListReleases                 http.HandlerFunc
-	CreateRelease                http.HandlerFunc
-	UploadArtifact               http.HandlerFunc
-	PublishRelease               http.HandlerFunc
-	YankRelease                  http.HandlerFunc
-	DeleteRelease                http.HandlerFunc
-	AdminListChangelogs          http.HandlerFunc
-	AdminCreateChangelog         http.HandlerFunc
-	AdminUpdateChangelog         http.HandlerFunc
-	AdminDeleteChangelog         http.HandlerFunc
-	AdminAttachReleaseChangelog  http.HandlerFunc
-	DownloadArtifact             http.HandlerFunc
-	GetStorageConfig             http.HandlerFunc
-	SaveStorageConfig            http.HandlerFunc
-	TestStorageConfig            http.HandlerFunc
+	ListProviders               http.HandlerFunc
+	ListConfigs                 http.HandlerFunc
+	SaveConfig                  http.HandlerFunc
+	DeleteConfig                http.HandlerFunc
+	NativeFeed                  http.HandlerFunc
+	Changelog                   http.HandlerFunc
+	SparkleFeed                 http.HandlerFunc
+	SparklePublicKey            http.HandlerFunc
+	ListChannels                http.HandlerFunc
+	CreateChannel               http.HandlerFunc
+	UpdateChannel               http.HandlerFunc
+	DeleteChannel               http.HandlerFunc
+	ListReleases                http.HandlerFunc
+	CreateRelease               http.HandlerFunc
+	UploadArtifact              http.HandlerFunc
+	PublishRelease              http.HandlerFunc
+	YankRelease                 http.HandlerFunc
+	DeleteRelease               http.HandlerFunc
+	AdminListChangelogs         http.HandlerFunc
+	AdminCreateChangelog        http.HandlerFunc
+	AdminUpdateChangelog        http.HandlerFunc
+	AdminDeleteChangelog        http.HandlerFunc
+	AdminAttachReleaseChangelog http.HandlerFunc
+	DownloadArtifact            http.HandlerFunc
+	GetStorageConfig            http.HandlerFunc
+	SaveStorageConfig           http.HandlerFunc
+	TestStorageConfig           http.HandlerFunc
 }
 
 type OrganizationHandlers struct {
@@ -189,6 +190,7 @@ func Register(r *chi.Mux, cfg Config) {
 					enc.Post("/licenses/validate", c.Validate)
 					enc.Post("/trials/start", c.TrialStart)
 					enc.Post("/updates/check", c.CheckUpdate)
+					enc.Post("/updates/channels", c.UpdateChannels)
 				})
 			})
 

@@ -13,6 +13,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/observability"
+	"github.com/cheetahbyte/clave/internal/shared/clientchannels"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -21,14 +22,31 @@ type Service struct {
 	repo     *Repository
 	signer   signing.Provider
 	licenses *license.Service
+	channels clientchannels.Lister
 }
 
-func NewService(q *db.Queries, pool *pgxpool.Pool, signer signing.Provider, licenses *license.Service) *Service {
+func NewService(q *db.Queries, pool *pgxpool.Pool, signer signing.Provider, licenses *license.Service, channels clientchannels.Lister) *Service {
 	return &Service{
 		repo:     NewRepository(q, pool),
 		signer:   signer,
 		licenses: licenses,
+		channels: channels,
 	}
+}
+
+func (svc *Service) availableUpdateChannels(ctx context.Context, productID uuid.UUID, features []string) []clientchannels.Channel {
+	if svc.channels == nil {
+		return []clientchannels.Channel{}
+	}
+	channels, err := svc.channels.AvailableChannels(ctx, productID, features)
+	if err != nil {
+		slog.Warn("failed to list available update channels", "productId", productID, "err", err)
+		return []clientchannels.Channel{}
+	}
+	if channels == nil {
+		return []clientchannels.Channel{}
+	}
+	return channels
 }
 
 func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (ActivateResponse, error) {
@@ -124,10 +142,11 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 	}
 	observability.CountActivationAttempt(ctx, "success", "")
 	return ActivateResponse{
-		ActivationID: act.ID,
-		Token:        signed,
-		ValidUntil:   claims.ExpiresAt.Unix(),
-		MaskedEmail:  maskEmail(lic.CustomerEmail),
+		ActivationID:   act.ID,
+		Token:          signed,
+		ValidUntil:     claims.ExpiresAt.Unix(),
+		MaskedEmail:    maskEmail(lic.CustomerEmail),
+		UpdateChannels: svc.availableUpdateChannels(ctx, lic.ProductID, lic.Features),
 	}, nil
 }
 

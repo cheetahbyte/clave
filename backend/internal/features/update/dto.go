@@ -1,28 +1,38 @@
 package update
 
+import "github.com/cheetahbyte/clave/internal/shared/clientchannels"
+
 type CheckRequest struct {
 	Token   string `json:"token" validate:"required"`
 	Version string `json:"version" validate:"required"`
 
-	Build                   string `json:"build,omitempty"`
-	Platform                string `json:"platform,omitempty"`
-	Channel                 string `json:"channel,omitempty"`
-	Arch                    string `json:"arch,omitempty"`
-	OSVersion               string `json:"osVersion,omitempty"`
-	ClientID                string `json:"clientId,omitempty"`
+	Build     string `json:"build,omitempty"`
+	Platform  string `json:"platform,omitempty"`
+	Channel   string `json:"channel,omitempty"`
+	Arch      string `json:"arch,omitempty"`
+	OSVersion string `json:"osVersion,omitempty"`
+	ClientID  string `json:"clientId,omitempty"`
 }
 
 type CheckResponse struct {
-	CurrentVersion  string        `json:"currentVersion"`
-	LatestVersion   string        `json:"latestVersion"`
-	UpdateAvailable bool          `json:"updateAvailable"`
-	DownloadURL     string        `json:"downloadUrl,omitempty"`
-	Kind            string        `json:"kind,omitempty"`
-	ReleaseNotes    string        `json:"releaseNotes,omitempty"`
-	Changelog       string        `json:"changelog,omitempty"`
-	ChangelogURL    string        `json:"changelogUrl,omitempty"`
-	Artifacts       []ArtifactDTO `json:"artifacts,omitempty"`
+	CurrentVersion  string         `json:"currentVersion"`
+	LatestVersion   string         `json:"latestVersion"`
+	UpdateAvailable bool           `json:"updateAvailable"`
+	DownloadURL     string         `json:"downloadUrl,omitempty"`
+	Kind            string         `json:"kind,omitempty"`
+	ReleaseNotes    string         `json:"releaseNotes,omitempty"`
+	Changelog       string         `json:"changelog,omitempty"`
+	ChangelogURL    string         `json:"changelogUrl,omitempty"`
+	Artifacts       []ArtifactDTO  `json:"artifacts,omitempty"`
 	Metadata        map[string]any `json:"metadata,omitempty"`
+}
+
+type ChannelsRequest struct {
+	Token string `json:"token" validate:"required"`
+}
+
+type ChannelsResponse struct {
+	UpdateChannels []clientchannels.Channel `json:"updateChannels"`
 }
 
 type ChannelDTO struct {
@@ -42,10 +52,10 @@ type SaveChannelRequest struct {
 }
 
 type SaveProductUpdateConfigRequest struct {
-	Platform    string `json:"platform" validate:"required"`
-	Channel     string `json:"channel" validate:"required"`
-	ProviderKey string `json:"providerKey" validate:"required"`
-	Enabled     bool   `json:"enabled"`
+	Platform    string         `json:"platform" validate:"required"`
+	Channel     string         `json:"channel" validate:"required"`
+	ProviderKey string         `json:"providerKey" validate:"required"`
+	Enabled     bool           `json:"enabled"`
 	Config      map[string]any `json:"config"`
 }
 
@@ -101,20 +111,20 @@ type AttachChangelogRequest struct {
 }
 
 type ReleaseDTO struct {
-	ID           string         `json:"id"`
-	ProductID    string         `json:"productId"`
-	ProductName  string         `json:"productName"`
-	Channel      string         `json:"channel"`
-	ChannelID    string         `json:"channelId"`
-	Platform     string         `json:"platform"`
-	Version      string         `json:"version"`
-	BuildNumber  string         `json:"buildNumber,omitempty"`
-	Status       string         `json:"status"`
-	ReleaseNotes string         `json:"releaseNotes,omitempty"`
-	ChangelogID  string         `json:"changelogId,omitempty"`
-	PublishedAt  *string        `json:"publishedAt,omitempty"`
-	CreatedAt    *string        `json:"createdAt,omitempty"`
-	Artifacts    []ArtifactDTO  `json:"artifacts,omitempty"`
+	ID           string        `json:"id"`
+	ProductID    string        `json:"productId"`
+	ProductName  string        `json:"productName"`
+	Channel      string        `json:"channel"`
+	ChannelID    string        `json:"channelId"`
+	Platform     string        `json:"platform"`
+	Version      string        `json:"version"`
+	BuildNumber  string        `json:"buildNumber,omitempty"`
+	Status       string        `json:"status"`
+	ReleaseNotes string        `json:"releaseNotes,omitempty"`
+	ChangelogID  string        `json:"changelogId,omitempty"`
+	PublishedAt  *string       `json:"publishedAt,omitempty"`
+	CreatedAt    *string       `json:"createdAt,omitempty"`
+	Artifacts    []ArtifactDTO `json:"artifacts,omitempty"`
 }
 
 type ArtifactDTOFull struct {

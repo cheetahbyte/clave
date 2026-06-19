@@ -41,11 +41,18 @@ A couple of things that trip people up:
   "activationId": "<uuid>",
   "token": "<jwt>",
   "validUntil": 1234567890,
-  "maskedEmail": "u***@e***.com"
+  "maskedEmail": "u***@e***.com",
+  "updateChannels": [
+    {
+      "name": "stable",
+      "isDefault": true,
+      "description": "Production releases"
+    }
+  ]
 }
 ```
 
-Stash `token` and `validUntil` in an encrypted local cache; you'll lean on both during offline grace periods. `maskedEmail` is fine to show the user (something like "licensed to u***@e***.com") - it never contains the full address.
+Stash `token` and `validUntil` in an encrypted local cache; you'll lean on both during offline grace periods. `maskedEmail` is fine to show the user (something like "licensed to u***@e***.com") - it never contains the full address. `updateChannels` lists the update channels this license can use.
 
 ---
 
@@ -66,11 +73,18 @@ Run this on every launch, and again every few hours while the app is open.
 ```json
 {
   "token": "<refreshed jwt>",
-  "validUntil": 1234567890
+  "validUntil": 1234567890,
+  "updateChannels": [
+    {
+      "name": "stable",
+      "isDefault": true,
+      "description": "Production releases"
+    }
+  ]
 }
 ```
 
-Whatever token comes back, swap it in for your cached one.
+Whatever token comes back, swap it in for your cached one. Also refresh your local list of available update channels from `updateChannels`.
 
 ---
 
@@ -101,7 +115,13 @@ Worth noting:
   "activationId": "<uuid>",
   "token": "<jwt>",
   "validUntil": 1234567890,
-  "maskedEmail": ""
+  "maskedEmail": "",
+  "updateChannels": [
+    {
+      "name": "stable",
+      "isDefault": true
+    }
+  ]
 }
 ```
 
@@ -150,6 +170,40 @@ A 403 or 404 means the license is genuinely no good, so don't retry those. For 5
 ---
 
 ## Checking for Updates
+
+### Available Update Channels
+
+`POST /api/v1/client/updates/channels`
+
+Use this when your client needs to refresh the channel list without activating or validating first. The server returns only channels this license can access; feature-gated channels are hidden unless the license has every required feature.
+
+```json
+{
+  "token": "<jwt from activation or validation>"
+}
+```
+
+**You'll get back:**
+```json
+{
+  "updateChannels": [
+    {
+      "name": "stable",
+      "isDefault": true,
+      "description": "Production releases"
+    },
+    {
+      "name": "beta",
+      "isDefault": false,
+      "description": "Early access releases"
+    }
+  ]
+}
+```
+
+Use `name` as the `channel` value in update checks. If you're not giving users a channel picker, use the channel where `isDefault` is `true`, falling back to `stable` if the list is empty.
+
+### Check for an Update
 
 `POST /api/v1/client/updates/check`
 

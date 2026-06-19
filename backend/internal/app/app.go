@@ -93,8 +93,6 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	signer := signing.New(cfg.LicenseJWTPublicKey, cfg.LicenseJWTPrivateKey, cfg.LicenseHMACSecret)
 
 	licenseSvc := license.NewService(q, pool, signer)
-	activationSvc := activation.NewService(q, pool, signer, licenseSvc)
-	validationSvc := validation.NewService(signer, licenseSvc)
 
 	updateRepo := update.NewRepository(q, pool)
 
@@ -103,6 +101,8 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	)
 
 	updateSvc := update.NewService(licenseSvc, signer, updateRepo, updateRegistry, cfg.PublicAppURL, cfg.UpdateArtifactStoragePath, cfg.SparkleEd25519PublicKey, cfg.SparkleEd25519PrivateKey)
+	activationSvc := activation.NewService(q, pool, signer, licenseSvc, updateSvc)
+	validationSvc := validation.NewService(signer, licenseSvc, updateSvc)
 	selfServiceRepo := selfservice.NewRepository(q, pool)
 	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer, licenseSvc)
 
@@ -171,10 +171,11 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	r := chi.NewRouter()
 	api.Register(r, api.Config{
 		Client: api.ClientHandlers{
-			Activate:    activationH.Activate,
-			Validate:    validationH.Validate,
-			TrialStart:  activationH.StartTrial,
-			CheckUpdate: updateH.Check,
+			Activate:       activationH.Activate,
+			Validate:       validationH.Validate,
+			TrialStart:     activationH.StartTrial,
+			CheckUpdate:    updateH.Check,
+			UpdateChannels: updateH.ClientChannels,
 		},
 		SelfService: api.SelfServiceHandlers{
 			RequestLink:   selfserviceH.RequestLink,

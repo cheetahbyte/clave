@@ -4,8 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
+
+	problem "github.com/cheetahbyte/problems"
 
 	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/shared/clientchannels"
 	"github.com/google/uuid"
 )
 
@@ -38,6 +43,74 @@ func (svc *Service) ListChannels(ctx context.Context, productID uuid.UUID) ([]Ch
 		out[i] = channelToDTO(ch)
 	}
 	return out, nil
+}
+
+func (svc *Service) AvailableChannels(ctx context.Context, productID uuid.UUID, features []string) ([]clientchannels.Channel, error) {
+	rows, err := svc.repo.GetChannelsForProduct(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]clientchannels.Channel, 0, len(rows))
+	for _, ch := range rows {
+		if !hasAllFeatures(features, ch.RequiredFeatures) {
+			continue
+		}
+		dto := clientchannels.Channel{
+			Name:      ch.Name,
+			IsDefault: ch.IsDefault,
+		}
+		if ch.Description != nil {
+			dto.Description = *ch.Description
+		}
+		out = append(out, dto)
+	}
+	return out, nil
+}
+
+func (svc *Service) ClientChannels(ctx context.Context, data ChannelsRequest) (ChannelsResponse, error) {
+	instance := "/updates/channels"
+
+	claims, err := svc.signer.ParseJWT(data.Token)
+	if err != nil {
+		return ChannelsResponse{}, problem.Of(401).
+			Append(problem.Title("Invalid token")).
+			Append(problem.Instance(instance))
+	}
+
+	licenseID, err := license.LicenseIDFromSubject(claims.Subject)
+	if err != nil {
+		return ChannelsResponse{}, problem.Of(401).
+			Append(problem.Title("Invalid token")).
+			Append(problem.Instance(instance))
+	}
+
+	lic, err := svc.licenses.GetByID(ctx, licenseID)
+	if err != nil || lic == nil {
+		return ChannelsResponse{}, problem.Of(404).
+			Append(problem.Title("License not found")).
+			Append(problem.Instance(instance))
+	}
+
+	if !lic.Active {
+		return ChannelsResponse{}, problem.Of(403).
+			Append(problem.Title("License revoked")).
+			Append(problem.Instance(instance))
+	}
+
+	if !lic.ExpiresAt.IsZero() && time.Now().UTC().After(lic.ExpiresAt.UTC()) {
+		return ChannelsResponse{}, problem.Of(403).
+			Append(problem.Title("License expired")).
+			Append(problem.Instance(instance))
+	}
+
+	channels, err := svc.AvailableChannels(ctx, lic.ProductID, lic.Features)
+	if err != nil {
+		return ChannelsResponse{}, problem.Of(500).
+			Append(problem.Title("Failed to list update channels")).
+			Append(problem.Instance(instance))
+	}
+
+	return ChannelsResponse{UpdateChannels: channels}, nil
 }
 
 func normalizeFeatures(in []string) []string {

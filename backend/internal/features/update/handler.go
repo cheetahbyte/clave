@@ -64,6 +64,21 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, result)
 }
 
+func (h *Handler) ClientChannels(w http.ResponseWriter, r *http.Request) {
+	var data ChannelsRequest
+	if !helpers.DecodeValidated(w, r, &data) {
+		return
+	}
+
+	result, err := h.svc.ClientChannels(r.Context(), data)
+	if err != nil {
+		helpers.WriteError(w, r, err)
+		return
+	}
+
+	helpers.WriteJSON(w, http.StatusOK, result)
+}
+
 func (h *Handler) AdminListProviders(w http.ResponseWriter, r *http.Request) {
 	providers := h.svc.ListProviders(r.Context())
 	helpers.WriteJSON(w, http.StatusOK, providers)

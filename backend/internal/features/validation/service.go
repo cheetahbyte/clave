@@ -2,25 +2,45 @@ package validation
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	problem "github.com/cheetahbyte/problems"
 
 	"github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/observability"
+	"github.com/cheetahbyte/clave/internal/shared/clientchannels"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
+	"github.com/google/uuid"
 )
 
 type Service struct {
 	licenses *license.Service
 	signer   *signing.Service
+	channels clientchannels.Lister
 }
 
-func NewService(signer *signing.Service, licenses *license.Service) *Service {
+func NewService(signer *signing.Service, licenses *license.Service, channels clientchannels.Lister) *Service {
 	return &Service{
 		signer:   signer,
 		licenses: licenses,
+		channels: channels,
 	}
+}
+
+func (svc *Service) availableUpdateChannels(ctx context.Context, productID uuid.UUID, features []string) []clientchannels.Channel {
+	if svc.channels == nil {
+		return []clientchannels.Channel{}
+	}
+	channels, err := svc.channels.AvailableChannels(ctx, productID, features)
+	if err != nil {
+		slog.Warn("failed to list available update channels", "productId", productID, "err", err)
+		return []clientchannels.Channel{}
+	}
+	if channels == nil {
+		return []clientchannels.Channel{}
+	}
+	return channels
 }
 
 func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (ValidateResponse, error) {
@@ -91,7 +111,8 @@ func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (Validat
 
 	observability.CountLicenseValidation(ctx, "success")
 	return ValidateResponse{
-		Token:      newToken,
-		ValidUntil: newClaims.ExpiresAt.Unix(),
+		Token:          newToken,
+		ValidUntil:     newClaims.ExpiresAt.Unix(),
+		UpdateChannels: svc.availableUpdateChannels(ctx, lic.ProductID, lic.Features),
 	}, nil
 }
