@@ -87,13 +87,15 @@ returning d.id;
 select * from licenses
 where id = sqlc.arg('license_id')
   and customer_email = sqlc.arg('customer_email')
-  and organization_id = sqlc.arg('organization_id');
+  and organization_id = sqlc.arg('organization_id')
+  and is_active = true;
 
 -- name: RevokeSelfServiceLicense :one
 update licenses set is_active = false
 where id = sqlc.arg('license_id')
   and customer_email = sqlc.arg('customer_email')
   and organization_id = sqlc.arg('organization_id')
+  and is_active = true
 returning id;
 
 -- name: DeactivateActiveTrialsByEmailProduct :exec

@@ -295,6 +295,7 @@ select lookup_digest, key_phc, customer_email, max_activations, is_active, expir
 where id = $1
   and customer_email = $2
   and organization_id = $3
+  and is_active = true
 `
 
 type GetSelfServiceLicenseParams struct {
@@ -471,6 +472,7 @@ update licenses set is_active = false
 where id = $1
   and customer_email = $2
   and organization_id = $3
+  and is_active = true
 returning id
 `
 

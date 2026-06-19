@@ -287,3 +287,83 @@ func TestSelfServiceCrossOrgIsolation(t *testing.T) {
 		t.Error("victim license must remain active after cross-org revoke attempt")
 	}
 }
+
+func TestSelfServiceCannotReuseInactiveLicense(t *testing.T) {
+	requireE2E(t)
+	pool := newPool(t)
+
+	orgID := orgIDBySlug(t, pool, "default")
+	productID := createProduct(t, pool, orgID, uniqueName("E2E Revoke Safety"))
+	email := uniqueEmail()
+	oldLicenseID := createLicense(t, pool, orgID, productID, email, 3)
+
+	c := authenticate(t, email, "default")
+
+	// first revoke should work and return an active replacement
+	resp := doMethod(t, c, http.MethodPost, "/api/v1/self-service/licenses/"+oldLicenseID.String()+"/revoke")
+	if resp.StatusCode != http.StatusOK {
+		drain(resp)
+		t.Fatalf("first revoke status = %d, want 200", resp.StatusCode)
+	}
+	firstRevoke := decode[struct {
+		OK           bool   `json:"ok"`
+		NewLicenseID string `json:"newLicenseId"`
+	}](t, resp)
+	if !firstRevoke.OK {
+		t.Error("first revoke response should be ok")
+	}
+	newID, err := uuid.Parse(firstRevoke.NewLicenseID)
+	if err != nil {
+		t.Fatalf("parse new license id: %v", err)
+	}
+
+	if !licenseActive(t, pool, newID) {
+		t.Fatal("new replacement license should be active")
+	}
+
+	// second revoke against same old license id should fail (inactive source)
+	resp = doMethod(t, c, http.MethodPost, "/api/v1/self-service/licenses/"+oldLicenseID.String()+"/revoke")
+	if resp.StatusCode != http.StatusNotFound {
+		drain(resp)
+		t.Fatalf("second revoke status = %d, want 404", resp.StatusCode)
+	}
+	drain(resp)
+
+	var activeCount int
+	err = pool.QueryRow(context.Background(), `
+		select count(*) from licenses
+		where organization_id = $1 and product_id = $2 and lower(customer_email) = lower($3) and is_active = true`,
+		orgID, productID, email,
+	).Scan(&activeCount)
+	if err != nil {
+		t.Fatalf("count active replacements: %v", err)
+	}
+	if activeCount != 1 {
+		t.Fatalf("expected 1 active license after repeated revoke attempts, got %d", activeCount)
+	}
+
+	// simulate admin revoked license and ensure self-service cannot replace it
+	_, err = pool.Exec(context.Background(), `update licenses set is_active = false where id = $1`, newID)
+	if err != nil {
+		t.Fatalf("deactivate replacement license: %v", err)
+	}
+
+	resp = doMethod(t, c, http.MethodPost, "/api/v1/self-service/licenses/"+newID.String()+"/revoke")
+	if resp.StatusCode != http.StatusNotFound {
+		drain(resp)
+		t.Fatalf("admin-revoked source revoke status = %d, want 404", resp.StatusCode)
+	}
+	drain(resp)
+
+	err = pool.QueryRow(context.Background(), `
+		select count(*) from licenses
+		where organization_id = $1 and product_id = $2 and lower(customer_email) = lower($3)
+	`, orgID, productID, email,
+	).Scan(&activeCount)
+	if err != nil {
+		t.Fatalf("count total customer license rows: %v", err)
+	}
+	if activeCount != 2 {
+		t.Fatalf("expected 2 total licenses for source email/product, got %d", activeCount)
+	}
+}
