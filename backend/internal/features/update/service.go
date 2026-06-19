@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -292,12 +291,9 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 		decision.ChangelogURL = svc.ChangelogURL(*releaseID)
 	}
 
-	// Carry the caller's license token onto download URLs so the client can
-	// fetch feature-gated artifacts from the channel-gated /download endpoint.
-	decision.DownloadURL = appendDownloadToken(decision.DownloadURL, data.Token)
-	for i := range decision.Artifacts {
-		decision.Artifacts[i].URL = appendDownloadToken(decision.Artifacts[i].URL, data.Token)
-	}
+	// Note: download URLs intentionally do NOT carry the caller's license
+	// token. The /download endpoint accepts the token via Authorization: Bearer
+	// only, so the URL stays safe to log, cache, and share.
 
 	_ = svc.repo.InsertUpdateCheck(ctx, dbConfig.OrganizationID, claims.ProductID, licenseID,
 		platform, channel, string(provider.Key()),
@@ -541,7 +537,7 @@ func (svc *Service) RenderReleaseChangelog(ctx context.Context, releaseID uuid.U
 	return RenderChangelogHTML(title, body)
 }
 
-func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID, platform, channel, token string) ([]byte, error) {
+func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID, platform, channel string) ([]byte, error) {
 	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
 		ProductID: productID,
 		Name:      channel,
@@ -575,9 +571,6 @@ func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID,
 
 	for i, rel := range releases {
 		artifacts := artifactMap[rel.ID]
-		for j := range artifacts {
-			artifacts[j].Url = appendDownloadToken(artifacts[j].Url, token)
-		}
 		policy, _ := svc.repo.GetReleasePolicy(ctx, rel.ID)
 		changelogBody := changelogBodyByRelease[rel.ID]
 		changelogURL := ""
@@ -595,16 +588,12 @@ func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID,
 	return GenerateNativeFeed(product, platform, channel, inputs)
 }
 
-func (svc *Service) GenerateSparkleAppcast(ctx context.Context, productID uuid.UUID, channel, arch, token string) ([]byte, error) {
+func (svc *Service) GenerateSparkleAppcast(ctx context.Context, productID uuid.UUID, channel, arch string) ([]byte, error) {
 	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
 		ProductID: productID,
 		Name:      channel,
 	})
 	if err != nil {
-		return nil, err
-	}
-
-	if err := svc.authorizeChannel(ctx, ch, productID, token); err != nil {
 		return nil, err
 	}
 
@@ -633,9 +622,6 @@ func (svc *Service) GenerateSparkleAppcast(ctx context.Context, productID uuid.U
 
 	for i, rel := range releases {
 		artifacts := artifactMap[rel.ID]
-		for j := range artifacts {
-			artifacts[j].Url = appendDownloadToken(artifacts[j].Url, token)
-		}
 		policy, _ := svc.repo.GetReleasePolicy(ctx, rel.ID)
 		changelogBody := changelogBodyByRelease[rel.ID]
 		changelogURL := ""
@@ -1040,20 +1026,6 @@ func (svc *Service) artifactStorageKey(artifact db.UpdateArtifact) string {
 func (svc *Service) DeleteRelease(ctx context.Context, releaseID uuid.UUID) error {
 	_, err := svc.repo.DeleteUpdateRelease(ctx, releaseID)
 	return err
-}
-
-// appendDownloadToken adds a license token to an artifact download URL so the
-// updater carries it to the (channel-gated) /download endpoint. No-op when the
-// token is empty (open channels need none).
-func appendDownloadToken(rawURL, token string) string {
-	if token == "" {
-		return rawURL
-	}
-	sep := "?"
-	if strings.Contains(rawURL, "?") {
-		sep = "&"
-	}
-	return rawURL + sep + "token=" + url.QueryEscape(token)
 }
 
 func safeString(s *string) string {

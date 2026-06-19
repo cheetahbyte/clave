@@ -281,23 +281,23 @@ func (h *Handler) NativeFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feed, err := h.svc.GenerateNativeFeed(r.Context(), productID, platform, channel, feedToken(r))
+	feed, err := h.svc.GenerateNativeFeed(r.Context(), productID, platform, channel)
 	if err != nil {
 		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "feed not found"})
 		return
 	}
 
+	setPrivateCacheHeaders(w)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write(feed)
 }
 
-// feedToken extracts a license token from the query string (?token=) or an
-// Authorization: Bearer header, used to gate feature-restricted channels.
+// feedToken extracts a license token from an Authorization: Bearer header,
+// used to gate feature-restricted channels. Query string tokens are no longer
+// accepted because the token would otherwise be written into returned feed
+// URLs, which would be logged in caches, proxies, and clients.
 func feedToken(r *http.Request) string {
-	if t := strings.TrimSpace(r.URL.Query().Get("token")); t != "" {
-		return t
-	}
 	auth := r.Header.Get("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
@@ -333,12 +333,18 @@ func (h *Handler) SparkleFeed(w http.ResponseWriter, r *http.Request) {
 	channel := chi.URLParam(r, "channel")
 	arch := strings.TrimSpace(r.URL.Query().Get("arch"))
 
-	appcast, err := h.svc.GenerateSparkleAppcast(r.Context(), productID, channel, arch, feedToken(r))
+	if err := h.svc.AuthorizeChannelAccess(r.Context(), productID, channel, feedToken(r)); err != nil {
+		helpers.WriteJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
+		return
+	}
+
+	appcast, err := h.svc.GenerateSparkleAppcast(r.Context(), productID, channel, arch)
 	if err != nil {
 		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
 
+	setPrivateCacheHeaders(w)
 	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write(appcast)
@@ -663,11 +669,13 @@ func (h *Handler) DownloadArtifact(w http.ResponseWriter, r *http.Request) {
 	// S3-backed artifacts redirect to a short-lived presigned URL so the
 	// transfer goes client->storage directly instead of through the app.
 	if dl.RedirectURL != "" {
+		setPrivateCacheHeaders(w)
 		http.Redirect(w, r, dl.RedirectURL, http.StatusFound)
 		return
 	}
 
 	defer dl.Body.Close()
+	setPrivateCacheHeaders(w)
 	w.Header().Set("Content-Type", dl.MimeType)
 	if dl.Size > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(dl.Size, 10))
@@ -829,4 +837,11 @@ func (h *Handler) verifyReleaseOwnership(ctx context.Context, orgID, releaseID u
 		return fmt.Errorf("release not found in organization")
 	}
 	return nil
+}
+
+// setPrivateCacheHeaders disables intermediate caching and referrer leakage
+// on responses that may contain or grant access to license-gated artifacts.
+func setPrivateCacheHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
 }

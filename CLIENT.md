@@ -265,7 +265,7 @@ https://your-instance/api/v1/updates/products/<productId>/macos/<channel>/appcas
 
 **Architecture**: Append `?arch=arm64` or `?arch=x64` to select a specific artifact variant. The feed picks an exact arch match first, then falls back to `universal`. Omitting `arch` defaults to `universal`.
 
-**Channel gating**: Channels with required features need a license token. Pass it via `?token=<jwt>` or `Authorization: Bearer <jwt>`.
+**Channel gating**: Channels with required features need a license token. Pass it via `Authorization: Bearer <jwt>`. The query-string form (`?token=<jwt>`) is no longer accepted, since license JWTs in URLs end up in proxy, cache, and client logs.
 
 **What's included**: Only full-file downloadable artifacts (`dmg`, `zip`, `pkg`). Delta artifacts are not served.
 
