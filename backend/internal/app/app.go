@@ -137,7 +137,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	sessionManager.Cookie.Path = "/"
 	sessionManager.Cookie.Persist = true
 
-	adminAuthH := adminauth.NewHandler(adminAuthSvc, sessionManager, cfg.AdminTOTPEncryptionKey, auditSvc)
+	adminAuthH := adminauth.NewHandler(adminAuthSvc, sessionManager, cfg.AdminTOTPEncryptionKey, auditSvc, cfg.Dev)
 
 	orgRepo := organization.NewRepository(q)
 	orgSvc := organization.NewService(orgRepo, []byte(cfg.SelfServiceTokenPepper))
@@ -170,7 +170,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 
 	ssAuth := middleware.RequireSelfServiceAuth(cfg.LicenseJWTPublicKey)
 	adminAuth := middleware.RequireAdmin(sessionManager)
-	adminVerified := middleware.RequireAdminVerified(sessionManager)
+	adminVerified := middleware.RequireAdminVerified(sessionManager, q)
 
 	r := chi.NewRouter()
 	api.Register(r, api.Config{

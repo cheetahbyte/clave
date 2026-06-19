@@ -46,3 +46,11 @@ func (r *Repository) CreateAdmin(ctx context.Context, email, passwordHash, role 
 		Role:         role,
 	})
 }
+
+func (r *Repository) DisableTOTP(ctx context.Context, id uuid.UUID) error {
+	return r.q.DisableTOTP(ctx, id)
+}
+
+func (r *Repository) InvalidateRecoveryCodes(ctx context.Context, adminID uuid.UUID) error {
+	return r.q.InvalidateRecoveryCodes(ctx, adminID)
+}

@@ -191,6 +191,12 @@ export async function verify2FA(code: string): Promise<{ ok: boolean }> {
   });
 }
 
+export async function disable2FA(): Promise<{ ok: boolean }> {
+  return adminFetch<{ ok: boolean }>("/api/v1/admin/auth/2fa/disable", {
+    method: "POST",
+  });
+}
+
 export interface AdminOverview {
   totalLicenses: number;
   activeLicenses: number;

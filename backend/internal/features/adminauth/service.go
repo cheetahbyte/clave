@@ -204,6 +204,21 @@ func (s *Service) Verify(ctx context.Context, adminID uuid.UUID, code string) er
 	return nil
 }
 
+// Disable2FA turns off TOTP for an admin and invalidates any recovery codes.
+// Intended for local testing / account recovery via the dev-only HTTP route,
+// or the resetadmin2fa CLI.
+func (s *Service) Disable2FA(ctx context.Context, adminID uuid.UUID) error {
+	if err := s.repo.DisableTOTP(ctx, adminID); err != nil {
+		slog.Error("failed to disable totp", "err", err)
+		return errors.New("failed to disable 2FA")
+	}
+	if err := s.repo.InvalidateRecoveryCodes(ctx, adminID); err != nil {
+		slog.Error("failed to invalidate recovery codes", "err", err)
+		return errors.New("failed to invalidate recovery codes")
+	}
+	return nil
+}
+
 func (s *Service) decryptSecret(enc, nonce []byte) (string, error) {
 	plain, err := encryption.AESDecrypt(enc, nonce, s.totpKey)
 	if err != nil {

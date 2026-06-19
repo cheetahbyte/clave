@@ -19,10 +19,11 @@ type Handler struct {
 	sessions *scs.SessionManager
 	totpKey  []byte
 	auditSvc *audit.Service
+	dev      bool
 }
 
-func NewHandler(svc *Service, sessions *scs.SessionManager, totpKey []byte, auditSvc *audit.Service) *Handler {
-	return &Handler{svc: svc, sessions: sessions, totpKey: totpKey, auditSvc: auditSvc}
+func NewHandler(svc *Service, sessions *scs.SessionManager, totpKey []byte, auditSvc *audit.Service, dev bool) *Handler {
+	return &Handler{svc: svc, sessions: sessions, totpKey: totpKey, auditSvc: auditSvc, dev: dev}
 }
 
 func (h *Handler) audit(r *http.Request, action, resourceType string, adminID, orgID uuid.UUID) {
@@ -77,11 +78,17 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.dev && !resp.MfaEnabled {
+		resp.MfaSetupRequired = false
+		resp.MfaVerificationRequired = false
+		resp.MfaVerified = true
+	}
+
 	h.sessions.Put(r.Context(), "admin_user_id", resp.ID.String())
 	h.sessions.Put(r.Context(), "admin_email", resp.Email)
 	h.sessions.Put(r.Context(), "admin_role", resp.Role)
 	h.sessions.Put(r.Context(), "admin_organization_id", resp.OrganizationID.String())
-	h.sessions.Put(r.Context(), "admin_mfa_verified", false)
+	h.sessions.Put(r.Context(), "admin_mfa_verified", resp.MfaVerified)
 
 	h.audit(r, "admin.login", "admin", resp.ID, resp.OrganizationID)
 	helpers.WriteJSON(w, http.StatusOK, resp)
@@ -126,6 +133,16 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	profile.MfaVerified = h.sessions.GetBool(r.Context(), "admin_mfa_verified")
+
+	// If 2FA is not enabled in the DB, treat as verified. This handles the
+	// case where 2FA was reset (CLI or dev endpoint) but the session flag
+	// is stale. Fix the session so subsequent requests skip this check.
+	if !profile.MfaEnabled {
+		profile.MfaVerified = true
+		if !h.sessions.GetBool(r.Context(), "admin_mfa_verified") {
+			h.sessions.Put(r.Context(), "admin_mfa_verified", true)
+		}
+	}
 
 	helpers.WriteJSON(w, http.StatusOK, profile)
 }
@@ -255,4 +272,31 @@ func (h *Handler) CSRFToken(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, CSRFTokenResponse{
 		Token: csrf.Token(r),
 	})
+}
+
+// Disable2FA is a dev-only convenience endpoint that turns off 2FA for the
+// authenticated admin without requiring a TOTP code. Returns 404 in production.
+func (h *Handler) Disable2FA(w http.ResponseWriter, r *http.Request) {
+	if !h.dev {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		return
+	}
+
+	adminID, ok := middleware.AdminIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	orgID, _ := middleware.AdminOrganizationIDFromContext(r.Context())
+
+	if err := h.svc.Disable2FA(r.Context(), adminID); err != nil {
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	// Clear the MFA-verified flag so the session no longer requires it.
+	h.sessions.Put(r.Context(), "admin_mfa_verified", true)
+
+	h.audit(r, "admin.2fa_disabled", "admin", adminID, orgID)
+	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

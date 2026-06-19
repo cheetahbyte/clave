@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/alexedwards/scs/v2"
+	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	problem "github.com/cheetahbyte/problems"
 	"github.com/golang-jwt/jwt/v5"
@@ -197,7 +198,7 @@ func RequireAdmin(sm *scs.SessionManager) func(http.Handler) http.Handler {
 	}
 }
 
-func RequireAdminVerified(sm *scs.SessionManager) func(http.Handler) http.Handler {
+func RequireAdminVerified(sm *scs.SessionManager, q *db.Queries) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx, err := adminSessionContext(r, sm)
@@ -210,15 +211,26 @@ func RequireAdminVerified(sm *scs.SessionManager) func(http.Handler) http.Handle
 			}
 
 			mfaVerified := sm.GetBool(r.Context(), "admin_mfa_verified")
-			if !mfaVerified {
-				p := problem.Of(403).
-					Append(problem.Title("2FA Required")).
-					Append(problem.Detail("Two-factor authentication must be completed first"))
-				p.WriteTo(w)
+			if mfaVerified {
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			next.ServeHTTP(w, r.WithContext(ctx))
+			// Session flag is stale — check the DB. If 2FA is no longer
+			// enabled (e.g. reset via CLI or dev endpoint), allow through
+			// and fix the session so we don't hit the DB every request.
+			adminID, _ := AdminIDFromContext(ctx)
+			admin, err := q.GetAdminById(r.Context(), adminID)
+			if err != nil || !admin.TotpEnabled {
+				sm.Put(r.Context(), "admin_mfa_verified", true)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			p := problem.Of(403).
+				Append(problem.Title("2FA Required")).
+				Append(problem.Detail("Two-factor authentication must be completed first"))
+			p.WriteTo(w)
 		})
 	}
 }
