@@ -20,6 +20,8 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
+const claveVersion = __CLAVE_VERSION__
+
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -45,6 +47,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar variant="inset" {...props}>
       <SidebarHeader>
+        <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
+          <div className="text-xl font-semibold tracking-tight">Clave</div>
+          <div className="text-muted-foreground text-xs">v{claveVersion}</div>
+        </div>
         <OrgSwitcher />
         <ProductSwitcher />
       </SidebarHeader>

@@ -141,3 +141,13 @@ Clients should talk to the server over HTTPS only and pin the server's TLS certi
 ```bash
 just test          # or: cd backend && go test ./...
 ```
+
+## Versioning
+
+Clave itself uses [Semantic Versioning](https://semver.org/):
+
+- `MAJOR` for incompatible API or license-flow changes.
+- `MINOR` for backwards-compatible features.
+- `PATCH` for backwards-compatible fixes.
+
+The admin UI shows the running Clave version in its sidebar footer.
