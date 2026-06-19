@@ -19,6 +19,7 @@ JOIN activations a ON a.device_id = d.id
 JOIN licenses l ON l.id = d.license_id
 JOIN products p ON p.id = l.product_id
 WHERE l.organization_id = $1::uuid
+  AND a.deactivated_at IS NULL
   AND ($2::text IS NULL
        OR d.hostname ILIKE '%' || $2::text || '%'
        OR l.customer_email ILIKE '%' || $2::text || '%'
@@ -76,23 +77,28 @@ func (q *Queries) CreateDevice(ctx context.Context, arg CreateDeviceParams) (Dev
 	return i, err
 }
 
-const deleteAdminDeviceByOrganization = `-- name: DeleteAdminDeviceByOrganization :one
-DELETE FROM devices
-WHERE devices.id = $1
-  AND license_id IN (
-      SELECT l.id FROM licenses l
-      WHERE l.organization_id = $2::uuid
-  )
-RETURNING devices.id
+const deactivateAdminDeviceByOrganization = `-- name: DeactivateAdminDeviceByOrganization :one
+UPDATE activations a
+SET deactivated_at = now(),
+    deactivation_reason = $1
+FROM devices d
+JOIN licenses l ON l.id = d.license_id
+WHERE a.device_id = d.id
+  AND a.license_id = l.id
+  AND d.id = $2
+  AND l.organization_id = $3::uuid
+  AND a.deactivated_at IS NULL
+RETURNING d.id
 `
 
-type DeleteAdminDeviceByOrganizationParams struct {
-	ID             uuid.UUID `json:"id"`
+type DeactivateAdminDeviceByOrganizationParams struct {
+	Reason         *string   `json:"reason"`
+	DeviceID       uuid.UUID `json:"device_id"`
 	OrganizationID uuid.UUID `json:"organization_id"`
 }
 
-func (q *Queries) DeleteAdminDeviceByOrganization(ctx context.Context, arg DeleteAdminDeviceByOrganizationParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, deleteAdminDeviceByOrganization, arg.ID, arg.OrganizationID)
+func (q *Queries) DeactivateAdminDeviceByOrganization(ctx context.Context, arg DeactivateAdminDeviceByOrganizationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deactivateAdminDeviceByOrganization, arg.Reason, arg.DeviceID, arg.OrganizationID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -138,6 +144,7 @@ JOIN activations a ON a.device_id = d.id
 JOIN licenses l ON l.id = d.license_id
 JOIN products p ON p.id = l.product_id
 WHERE l.organization_id = $1::uuid
+  AND a.deactivated_at IS NULL
   AND ($2::text IS NULL
        OR d.hostname ILIKE '%' || $2::text || '%'
        OR l.customer_email ILIKE '%' || $2::text || '%'

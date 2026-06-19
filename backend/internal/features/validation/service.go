@@ -2,30 +2,59 @@ package validation
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
 	problem "github.com/cheetahbyte/problems"
 
+	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/shared/clientchannels"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type Service struct {
+	q        *db.Queries
 	licenses *license.Service
 	signer   *signing.Service
 	channels clientchannels.Lister
 }
 
-func NewService(signer *signing.Service, licenses *license.Service, channels clientchannels.Lister) *Service {
+func NewService(q *db.Queries, signer *signing.Service, licenses *license.Service, channels clientchannels.Lister) *Service {
 	return &Service{
+		q:        q,
 		signer:   signer,
 		licenses: licenses,
 		channels: channels,
 	}
+}
+
+func (svc *Service) activeActivationID(ctx context.Context, licenseID uuid.UUID, claims *signing.LicenseClaims) (uuid.UUID, error) {
+	hwidHash := svc.signer.HMACSign(claims.HWID, signing.DontNormalizeKey)
+	if claims.ActivationID != uuid.Nil {
+		act, err := svc.q.GetActiveActivationByID(ctx, db.GetActiveActivationByIDParams{
+			ActivationID: claims.ActivationID,
+			LicenseID:    licenseID,
+			HwidHash:     hwidHash,
+		})
+		if err != nil {
+			return uuid.Nil, err
+		}
+		return act.ID, nil
+	}
+
+	act, err := svc.q.GetActiveActivationByLicenseAndHwidHash(ctx, db.GetActiveActivationByLicenseAndHwidHashParams{
+		LicenseID: licenseID,
+		HwidHash:  hwidHash,
+	})
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return act.ID, nil
 }
 
 func (svc *Service) availableUpdateChannels(ctx context.Context, productID uuid.UUID, features []string) []clientchannels.Channel {
@@ -88,6 +117,20 @@ func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (Validat
 			Append(problem.Instance(instance))
 	}
 
+	activationID, err := svc.activeActivationID(ctx, licenseID, claims)
+	if err != nil {
+		observability.CountLicenseValidation(ctx, "failure")
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ValidateResponse{}, problem.Of(403).
+				Append(problem.Title("Activation deactivated")).
+				Append(problem.Detail("This device has been deactivated for the license")).
+				Append(problem.Instance(instance))
+		}
+		return ValidateResponse{}, problem.Of(500).
+			Append(problem.Title("Activation check failed")).
+			Append(problem.Instance(instance))
+	}
+
 	tokenTTL := 7 * 24 * time.Hour
 	if !lic.ExpiresAt.IsZero() {
 		remaining := time.Until(lic.ExpiresAt)
@@ -100,6 +143,7 @@ func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (Validat
 		lic.ProductID.String(),
 		lic.Features,
 		claims.HWID,
+		activationID,
 		tokenTTL,
 	)
 	if err != nil {

@@ -102,7 +102,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 
 	updateSvc := update.NewService(licenseSvc, signer, updateRepo, updateRegistry, cfg.PublicAppURL, cfg.UpdateArtifactStoragePath, cfg.SparkleEd25519PublicKey, cfg.SparkleEd25519PrivateKey)
 	activationSvc := activation.NewService(q, pool, signer, licenseSvc, updateSvc)
-	validationSvc := validation.NewService(signer, licenseSvc, updateSvc)
+	validationSvc := validation.NewService(q, signer, licenseSvc, updateSvc)
 	selfServiceRepo := selfservice.NewRepository(q, pool)
 	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer, licenseSvc)
 

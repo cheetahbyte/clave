@@ -38,7 +38,9 @@ func (r *Repository) ListDevices(ctx context.Context, licenseID uuid.UUID, email
 }
 
 func (r *Repository) DeleteDevice(ctx context.Context, licenseID uuid.UUID, deviceID uuid.UUID, email string, orgID uuid.UUID) error {
-	_, err := r.q.DeleteSelfServiceDevice(ctx, db.DeleteSelfServiceDeviceParams{
+	reason := "self_service"
+	_, err := r.q.DeactivateSelfServiceDevice(ctx, db.DeactivateSelfServiceDeviceParams{
+		Reason:         &reason,
 		DeviceID:       deviceID,
 		LicenseID:      licenseID,
 		CustomerEmail:  email,

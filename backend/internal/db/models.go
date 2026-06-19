@@ -12,11 +12,13 @@ import (
 )
 
 type Activation struct {
-	DeviceID    uuid.UUID          `json:"device_id"`
-	CheckedInAt pgtype.Timestamptz `json:"checked_in_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	ID          uuid.UUID          `json:"id"`
-	LicenseID   uuid.UUID          `json:"license_id"`
+	DeviceID           uuid.UUID          `json:"device_id"`
+	CheckedInAt        pgtype.Timestamptz `json:"checked_in_at"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	ID                 uuid.UUID          `json:"id"`
+	LicenseID          uuid.UUID          `json:"license_id"`
+	DeactivatedAt      pgtype.Timestamptz `json:"deactivated_at"`
+	DeactivationReason *string            `json:"deactivation_reason"`
 }
 
 type AdminAuditLog struct {

@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	problem "github.com/cheetahbyte/problems"
 
 	"github.com/cheetahbyte/clave/internal/db"
-	"github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/shared/clientchannels"
 	"github.com/google/uuid"
 )
@@ -70,37 +68,9 @@ func (svc *Service) AvailableChannels(ctx context.Context, productID uuid.UUID, 
 func (svc *Service) ClientChannels(ctx context.Context, data ChannelsRequest) (ChannelsResponse, error) {
 	instance := "/updates/channels"
 
-	claims, err := svc.signer.ParseJWT(data.Token)
+	_, lic, _, err := svc.parseActiveLicenseToken(ctx, data.Token, instance)
 	if err != nil {
-		return ChannelsResponse{}, problem.Of(401).
-			Append(problem.Title("Invalid token")).
-			Append(problem.Instance(instance))
-	}
-
-	licenseID, err := license.LicenseIDFromSubject(claims.Subject)
-	if err != nil {
-		return ChannelsResponse{}, problem.Of(401).
-			Append(problem.Title("Invalid token")).
-			Append(problem.Instance(instance))
-	}
-
-	lic, err := svc.licenses.GetByID(ctx, licenseID)
-	if err != nil || lic == nil {
-		return ChannelsResponse{}, problem.Of(404).
-			Append(problem.Title("License not found")).
-			Append(problem.Instance(instance))
-	}
-
-	if !lic.Active {
-		return ChannelsResponse{}, problem.Of(403).
-			Append(problem.Title("License revoked")).
-			Append(problem.Instance(instance))
-	}
-
-	if !lic.ExpiresAt.IsZero() && time.Now().UTC().After(lic.ExpiresAt.UTC()) {
-		return ChannelsResponse{}, problem.Of(403).
-			Append(problem.Title("License expired")).
-			Append(problem.Instance(instance))
+		return ChannelsResponse{}, err
 	}
 
 	channels, err := svc.AvailableChannels(ctx, lic.ProductID, lic.Features)

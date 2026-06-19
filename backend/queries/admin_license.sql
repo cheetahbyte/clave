@@ -6,7 +6,7 @@ SELECT
     (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR product_id = sqlc.narg('product_id')::uuid) AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_licenses,
     (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR product_id = sqlc.narg('product_id')::uuid) AND expires_at IS NOT NULL AND expires_at <= now()) AS expired_licenses,
     (SELECT count(*) FROM products WHERE organization_id = sqlc.arg('organization_id')::uuid) AS total_products,
-    (SELECT count(*) FROM activations a JOIN licenses l ON a.license_id = l.id WHERE l.organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR l.product_id = sqlc.narg('product_id')::uuid)) AS total_activations,
+    (SELECT count(*) FROM activations a JOIN licenses l ON a.license_id = l.id WHERE l.organization_id = sqlc.arg('organization_id')::uuid AND a.deactivated_at IS NULL AND (sqlc.narg('product_id')::uuid IS NULL OR l.product_id = sqlc.narg('product_id')::uuid)) AS total_activations,
     (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR product_id = sqlc.narg('product_id')::uuid) AND is_trial = true) AS total_trials,
     (SELECT count(*) FROM licenses WHERE organization_id = sqlc.arg('organization_id')::uuid AND (sqlc.narg('product_id')::uuid IS NULL OR product_id = sqlc.narg('product_id')::uuid) AND is_trial = true AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_trials;
 
@@ -20,7 +20,7 @@ SELECT
     lt.expires_at,
     lt.is_trial,
     p.name AS product_name,
-    (SELECT count(*) FROM activations WHERE license_id = lt.id) AS activation_count
+    (SELECT count(*) FROM activations WHERE license_id = lt.id AND deactivated_at IS NULL) AS activation_count
 FROM licenses lt
 JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
@@ -56,7 +56,7 @@ SELECT
     lt.expires_at,
     lt.is_trial,
     p.name AS product_name,
-    (SELECT count(*) FROM activations WHERE license_id = lt.id) AS activation_count
+    (SELECT count(*) FROM activations WHERE license_id = lt.id AND deactivated_at IS NULL) AS activation_count
 FROM licenses lt
 JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
@@ -89,7 +89,7 @@ SELECT
     lt.features,
     p.name AS product_name,
     p.id AS product_id,
-    (SELECT count(*) FROM activations WHERE license_id = lt.id) AS activation_count
+    (SELECT count(*) FROM activations WHERE license_id = lt.id AND deactivated_at IS NULL) AS activation_count
 FROM licenses lt
 JOIN products p ON lt.product_id = p.id
 WHERE lt.id = $1 AND lt.organization_id = sqlc.arg('organization_id')::uuid;
@@ -107,7 +107,7 @@ SELECT
 FROM activations a
 JOIN devices d ON a.device_id = d.id
 JOIN licenses l ON a.license_id = l.id
-WHERE a.license_id = $1 AND l.organization_id = sqlc.arg('organization_id')::uuid
+WHERE a.license_id = $1 AND l.organization_id = sqlc.arg('organization_id')::uuid AND a.deactivated_at IS NULL
 ORDER BY a.created_at DESC;
 
 -- name: GetAdminTimeseriesByOrganization :many
@@ -160,7 +160,7 @@ SELECT
     lt.expires_at,
     lt.is_trial,
     p.name AS product_name,
-    (SELECT count(*) FROM activations WHERE license_id = lt.id) AS activation_count
+    (SELECT count(*) FROM activations WHERE license_id = lt.id AND deactivated_at IS NULL) AS activation_count
 FROM licenses lt
 JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = sqlc.arg('organization_id')::uuid

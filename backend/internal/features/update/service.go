@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,6 +23,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/cheetahbyte/clave/internal/shared/storage"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -128,34 +130,85 @@ func (svc *Service) storageForProduct(ctx context.Context, productID uuid.UUID) 
 	return backend, kind, nil
 }
 
-func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse, error) {
-	instance := "/updates/check"
+func (svc *Service) activeActivationID(ctx context.Context, licenseID uuid.UUID, claims *signing.LicenseClaims) (uuid.UUID, error) {
+	hwidHash := svc.signer.HMACSign(claims.HWID, signing.DontNormalizeKey)
+	if claims.ActivationID != uuid.Nil {
+		act, err := svc.repo.GetActiveActivationByID(ctx, db.GetActiveActivationByIDParams{
+			ActivationID: claims.ActivationID,
+			LicenseID:    licenseID,
+			HwidHash:     hwidHash,
+		})
+		if err != nil {
+			return uuid.Nil, err
+		}
+		return act.ID, nil
+	}
 
-	claims, err := svc.signer.ParseJWT(data.Token)
+	act, err := svc.repo.GetActiveActivationByLicenseAndHwidHash(ctx, db.GetActiveActivationByLicenseAndHwidHashParams{
+		LicenseID: licenseID,
+		HwidHash:  hwidHash,
+	})
 	if err != nil {
-		return CheckResponse{}, problem.Of(401).
+		return uuid.Nil, err
+	}
+	return act.ID, nil
+}
+
+func (svc *Service) parseActiveLicenseToken(ctx context.Context, token string, instance string) (uuid.UUID, *license.License, *signing.LicenseClaims, error) {
+	claims, err := svc.signer.ParseJWT(token)
+	if err != nil {
+		return uuid.Nil, nil, nil, problem.Of(401).
 			Append(problem.Title("Invalid token")).
 			Append(problem.Instance(instance))
 	}
 
 	licenseID, err := license.LicenseIDFromSubject(claims.Subject)
 	if err != nil {
-		return CheckResponse{}, problem.Of(401).
+		return uuid.Nil, nil, nil, problem.Of(401).
 			Append(problem.Title("Invalid token")).
 			Append(problem.Instance(instance))
 	}
 
 	lic, err := svc.licenses.GetByID(ctx, licenseID)
 	if err != nil || lic == nil {
-		return CheckResponse{}, problem.Of(404).
+		return uuid.Nil, nil, nil, problem.Of(404).
 			Append(problem.Title("License not found")).
 			Append(problem.Instance(instance))
 	}
 
 	if !lic.Active {
-		return CheckResponse{}, problem.Of(403).
+		return uuid.Nil, nil, nil, problem.Of(403).
 			Append(problem.Title("License revoked")).
 			Append(problem.Instance(instance))
+	}
+
+	if !lic.ExpiresAt.IsZero() && time.Now().UTC().After(lic.ExpiresAt.UTC()) {
+		return uuid.Nil, nil, nil, problem.Of(403).
+			Append(problem.Title("License expired")).
+			Append(problem.Instance(instance))
+	}
+
+	if _, err := svc.activeActivationID(ctx, licenseID, claims); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, nil, nil, problem.Of(403).
+				Append(problem.Title("Activation deactivated")).
+				Append(problem.Detail("This device has been deactivated for the license")).
+				Append(problem.Instance(instance))
+		}
+		return uuid.Nil, nil, nil, problem.Of(500).
+			Append(problem.Title("Activation check failed")).
+			Append(problem.Instance(instance))
+	}
+
+	return licenseID, lic, claims, nil
+}
+
+func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse, error) {
+	instance := "/updates/check"
+
+	licenseID, lic, claims, err := svc.parseActiveLicenseToken(ctx, data.Token, instance)
+	if err != nil {
+		return CheckResponse{}, err
 	}
 
 	platform := strings.TrimSpace(data.Platform)
@@ -420,7 +473,7 @@ func (svc *Service) AuthorizeChannelAccess(ctx context.Context, productID uuid.U
 		// Unknown channel: nothing to gate, let feed generation 404.
 		return nil
 	}
-	return svc.authorizeChannel(ch, productID, token)
+	return svc.authorizeChannel(ctx, ch, productID, token)
 }
 
 // AuthorizeArtifactAccess gates a direct artifact download by the feature
@@ -443,7 +496,7 @@ func (svc *Service) AuthorizeArtifactAccess(ctx context.Context, artifactID uuid
 	}
 	for _, ch := range channels {
 		if ch.ID == release.ChannelID {
-			return svc.authorizeChannel(ch, release.ProductID, token)
+			return svc.authorizeChannel(ctx, ch, release.ProductID, token)
 		}
 	}
 	return nil
@@ -451,14 +504,14 @@ func (svc *Service) AuthorizeArtifactAccess(ctx context.Context, artifactID uuid
 
 // authorizeChannel enforces a channel's required-features against a license
 // token. An empty required-features set is always allowed.
-func (svc *Service) authorizeChannel(ch db.UpdateChannel, productID uuid.UUID, token string) error {
+func (svc *Service) authorizeChannel(ctx context.Context, ch db.UpdateChannel, productID uuid.UUID, token string) error {
 	if len(ch.RequiredFeatures) == 0 {
 		return nil
 	}
 	if token == "" {
 		return fmt.Errorf("license token required for this channel")
 	}
-	claims, err := svc.signer.ParseJWT(token)
+	_, _, claims, err := svc.parseActiveLicenseToken(ctx, token, "/updates/feed")
 	if err != nil {
 		return fmt.Errorf("invalid license token")
 	}
@@ -551,7 +604,7 @@ func (svc *Service) GenerateSparkleAppcast(ctx context.Context, productID uuid.U
 		return nil, err
 	}
 
-	if err := svc.authorizeChannel(ch, productID, token); err != nil {
+	if err := svc.authorizeChannel(ctx, ch, productID, token); err != nil {
 		return nil, err
 	}
 

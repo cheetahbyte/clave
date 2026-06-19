@@ -147,6 +147,17 @@ func deviceExists(t *testing.T, pool *pgxpool.Pool, deviceID uuid.UUID) bool {
 	return n > 0
 }
 
+func deviceHasActiveActivation(t *testing.T, pool *pgxpool.Pool, deviceID uuid.UUID) bool {
+	t.Helper()
+	var n int
+	err := pool.QueryRow(context.Background(),
+		`select count(*) from activations where device_id = $1 and deactivated_at is null`, deviceID).Scan(&n)
+	if err != nil {
+		t.Fatalf("count active activation: %v", err)
+	}
+	return n > 0
+}
+
 // --- http helpers ---
 
 func httpClient(t *testing.T) *http.Client {

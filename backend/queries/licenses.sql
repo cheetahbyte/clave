@@ -63,19 +63,24 @@ from activations a
 join devices d on a.device_id = d.id
 join licenses l on a.license_id = l.id
 where a.license_id = $1
+  and a.deactivated_at is null
   and l.customer_email = $2
   and l.organization_id = $3
 order by a.checked_in_at desc nulls last;
 
--- name: DeleteSelfServiceDevice :one
-delete from devices d
-where d.id = sqlc.arg('device_id')
-  and d.license_id in (
-    select l.id from licenses l
-    where l.id = sqlc.arg('license_id')
-      and l.customer_email = sqlc.arg('customer_email')
-      and l.organization_id = sqlc.arg('organization_id')
-  )
+-- name: DeactivateSelfServiceDevice :one
+update activations a
+set deactivated_at = now(),
+    deactivation_reason = sqlc.arg('reason')
+from devices d
+join licenses l on l.id = d.license_id
+where a.device_id = d.id
+  and a.license_id = l.id
+  and d.id = sqlc.arg('device_id')
+  and l.id = sqlc.arg('license_id')
+  and l.customer_email = sqlc.arg('customer_email')
+  and l.organization_id = sqlc.arg('organization_id')
+  and a.deactivated_at is null
 returning d.id;
 
 -- name: GetSelfServiceLicense :one
@@ -119,6 +124,7 @@ WITH trial_activations AS (
       AND lower(l.customer_email) = lower(sqlc.arg('customer_email'))
       AND l.is_trial = true
       AND l.is_active = true
+      AND a.deactivated_at IS NULL
       AND (l.expires_at IS NULL OR l.expires_at > now())
     ORDER BY d.hwid_hash, a.checked_in_at DESC NULLS LAST
 ),

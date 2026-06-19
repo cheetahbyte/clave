@@ -237,17 +237,17 @@ export function LicenseDetails({ license, orgSlug }: LicenseDetailsProps) {
       <ConfirmDialog
         open={deviceToRemove !== null}
         onOpenChange={(open) => !open && setDeviceToRemove(null)}
-        title="Remove device"
+        title="Deactivate device"
         description={
           <>
             This frees up the seat used by{" "}
             <span className="font-medium text-slate-900 dark:text-slate-50">
               {deviceToRemove?.name || "this device"}
             </span>
-            . It will need to reactivate to use the license again.
+            . This frees up its seat. It will need to reactivate to use the license again.
           </>
         }
-        confirmLabel="Remove device"
+        confirmLabel="Deactivate device"
         pending={removeDevice.isPending}
         onConfirm={() => deviceToRemove && removeDevice.mutate(deviceToRemove.id)}
       />

@@ -12,7 +12,7 @@ import (
 )
 
 const activateLicense = `-- name: ActivateLicense :one
-insert into activations (device_id, license_id) values($1, $2) returning device_id, checked_in_at, created_at, id, license_id
+insert into activations (device_id, license_id) values($1, $2) returning device_id, checked_in_at, created_at, id, license_id, deactivated_at, deactivation_reason
 `
 
 type ActivateLicenseParams struct {
@@ -29,12 +29,14 @@ func (q *Queries) ActivateLicense(ctx context.Context, arg ActivateLicenseParams
 		&i.CreatedAt,
 		&i.ID,
 		&i.LicenseID,
+		&i.DeactivatedAt,
+		&i.DeactivationReason,
 	)
 	return i, err
 }
 
 const countActivations = `-- name: CountActivations :one
-select count(*) from activations where license_id = $1
+select count(*) from activations where license_id = $1 and deactivated_at is null
 `
 
 func (q *Queries) CountActivations(ctx context.Context, licenseID uuid.UUID) (int64, error) {
@@ -45,7 +47,7 @@ func (q *Queries) CountActivations(ctx context.Context, licenseID uuid.UUID) (in
 }
 
 const getActivationByLicenseAndDevice = `-- name: GetActivationByLicenseAndDevice :one
-select device_id, checked_in_at, created_at, id, license_id from activations where license_id = $1 and device_id = $2
+select device_id, checked_in_at, created_at, id, license_id, deactivated_at, deactivation_reason from activations where license_id = $1 and device_id = $2 and deactivated_at is null
 `
 
 type GetActivationByLicenseAndDeviceParams struct {
@@ -62,12 +64,14 @@ func (q *Queries) GetActivationByLicenseAndDevice(ctx context.Context, arg GetAc
 		&i.CreatedAt,
 		&i.ID,
 		&i.LicenseID,
+		&i.DeactivatedAt,
+		&i.DeactivationReason,
 	)
 	return i, err
 }
 
 const getActivationsForLicense = `-- name: GetActivationsForLicense :many
-select device_id, checked_in_at, created_at, id, license_id from activations where license_id = $1
+select device_id, checked_in_at, created_at, id, license_id, deactivated_at, deactivation_reason from activations where license_id = $1 and deactivated_at is null
 `
 
 func (q *Queries) GetActivationsForLicense(ctx context.Context, licenseID uuid.UUID) ([]Activation, error) {
@@ -85,6 +89,8 @@ func (q *Queries) GetActivationsForLicense(ctx context.Context, licenseID uuid.U
 			&i.CreatedAt,
 			&i.ID,
 			&i.LicenseID,
+			&i.DeactivatedAt,
+			&i.DeactivationReason,
 		); err != nil {
 			return nil, err
 		}
@@ -94,4 +100,64 @@ func (q *Queries) GetActivationsForLicense(ctx context.Context, licenseID uuid.U
 		return nil, err
 	}
 	return items, nil
+}
+
+const getActiveActivationByID = `-- name: GetActiveActivationByID :one
+select a.device_id, a.checked_in_at, a.created_at, a.id, a.license_id, a.deactivated_at, a.deactivation_reason
+from activations a
+join devices d on d.id = a.device_id
+where a.id = $1
+  and a.license_id = $2
+  and d.hwid_hash = $3
+  and a.deactivated_at is null
+`
+
+type GetActiveActivationByIDParams struct {
+	ActivationID uuid.UUID `json:"activation_id"`
+	LicenseID    uuid.UUID `json:"license_id"`
+	HwidHash     []byte    `json:"hwid_hash"`
+}
+
+func (q *Queries) GetActiveActivationByID(ctx context.Context, arg GetActiveActivationByIDParams) (Activation, error) {
+	row := q.db.QueryRow(ctx, getActiveActivationByID, arg.ActivationID, arg.LicenseID, arg.HwidHash)
+	var i Activation
+	err := row.Scan(
+		&i.DeviceID,
+		&i.CheckedInAt,
+		&i.CreatedAt,
+		&i.ID,
+		&i.LicenseID,
+		&i.DeactivatedAt,
+		&i.DeactivationReason,
+	)
+	return i, err
+}
+
+const getActiveActivationByLicenseAndHwidHash = `-- name: GetActiveActivationByLicenseAndHwidHash :one
+select a.device_id, a.checked_in_at, a.created_at, a.id, a.license_id, a.deactivated_at, a.deactivation_reason
+from activations a
+join devices d on d.id = a.device_id
+where a.license_id = $1
+  and d.hwid_hash = $2
+  and a.deactivated_at is null
+`
+
+type GetActiveActivationByLicenseAndHwidHashParams struct {
+	LicenseID uuid.UUID `json:"license_id"`
+	HwidHash  []byte    `json:"hwid_hash"`
+}
+
+func (q *Queries) GetActiveActivationByLicenseAndHwidHash(ctx context.Context, arg GetActiveActivationByLicenseAndHwidHashParams) (Activation, error) {
+	row := q.db.QueryRow(ctx, getActiveActivationByLicenseAndHwidHash, arg.LicenseID, arg.HwidHash)
+	var i Activation
+	err := row.Scan(
+		&i.DeviceID,
+		&i.CheckedInAt,
+		&i.CreatedAt,
+		&i.ID,
+		&i.LicenseID,
+		&i.DeactivatedAt,
+		&i.DeactivationReason,
+	)
+	return i, err
 }

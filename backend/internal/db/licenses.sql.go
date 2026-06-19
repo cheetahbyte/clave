@@ -130,6 +130,43 @@ func (q *Queries) DeactivateActiveTrialsByEmailProduct(ctx context.Context, arg 
 	return err
 }
 
+const deactivateSelfServiceDevice = `-- name: DeactivateSelfServiceDevice :one
+update activations a
+set deactivated_at = now(),
+    deactivation_reason = $1
+from devices d
+join licenses l on l.id = d.license_id
+where a.device_id = d.id
+  and a.license_id = l.id
+  and d.id = $2
+  and l.id = $3
+  and l.customer_email = $4
+  and l.organization_id = $5
+  and a.deactivated_at is null
+returning d.id
+`
+
+type DeactivateSelfServiceDeviceParams struct {
+	Reason         *string   `json:"reason"`
+	DeviceID       uuid.UUID `json:"device_id"`
+	LicenseID      uuid.UUID `json:"license_id"`
+	CustomerEmail  string    `json:"customer_email"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) DeactivateSelfServiceDevice(ctx context.Context, arg DeactivateSelfServiceDeviceParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, deactivateSelfServiceDevice,
+		arg.Reason,
+		arg.DeviceID,
+		arg.LicenseID,
+		arg.CustomerEmail,
+		arg.OrganizationID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const deleteAdminLicense = `-- name: DeleteAdminLicense :one
 DELETE FROM licenses
 WHERE id = $1 AND organization_id = $2::uuid
@@ -143,37 +180,6 @@ type DeleteAdminLicenseParams struct {
 
 func (q *Queries) DeleteAdminLicense(ctx context.Context, arg DeleteAdminLicenseParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, deleteAdminLicense, arg.ID, arg.OrganizationID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
-const deleteSelfServiceDevice = `-- name: DeleteSelfServiceDevice :one
-delete from devices d
-where d.id = $1
-  and d.license_id in (
-    select l.id from licenses l
-    where l.id = $2
-      and l.customer_email = $3
-      and l.organization_id = $4
-  )
-returning d.id
-`
-
-type DeleteSelfServiceDeviceParams struct {
-	DeviceID       uuid.UUID `json:"device_id"`
-	LicenseID      uuid.UUID `json:"license_id"`
-	CustomerEmail  string    `json:"customer_email"`
-	OrganizationID uuid.UUID `json:"organization_id"`
-}
-
-func (q *Queries) DeleteSelfServiceDevice(ctx context.Context, arg DeleteSelfServiceDeviceParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, deleteSelfServiceDevice,
-		arg.DeviceID,
-		arg.LicenseID,
-		arg.CustomerEmail,
-		arg.OrganizationID,
-	)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -416,6 +422,7 @@ from activations a
 join devices d on a.device_id = d.id
 join licenses l on a.license_id = l.id
 where a.license_id = $1
+  and a.deactivated_at is null
   and l.customer_email = $2
   and l.organization_id = $3
 order by a.checked_in_at desc nulls last
@@ -493,6 +500,7 @@ WITH trial_activations AS (
       AND lower(l.customer_email) = lower($4)
       AND l.is_trial = true
       AND l.is_active = true
+      AND a.deactivated_at IS NULL
       AND (l.expires_at IS NULL OR l.expires_at > now())
     ORDER BY d.hwid_hash, a.checked_in_at DESC NULLS LAST
 ),

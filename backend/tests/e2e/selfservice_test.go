@@ -157,8 +157,11 @@ func TestSelfServiceFullFlow(t *testing.T) {
 		t.Fatalf("remove device status = %d, want 200", resp.StatusCode)
 	}
 	drain(resp)
-	if deviceExists(t, pool, dev1) {
-		t.Error("device should be deleted from db")
+	if !deviceExists(t, pool, dev1) {
+		t.Error("device should remain in db after deactivation")
+	}
+	if deviceHasActiveActivation(t, pool, dev1) {
+		t.Error("device activation should be deactivated")
 	}
 
 	// list devices again — expect 1
@@ -268,6 +271,9 @@ func TestSelfServiceCrossOrgIsolation(t *testing.T) {
 	}
 	if !deviceExists(t, pool, devB) {
 		t.Error("victim device must still exist after cross-org delete attempt")
+	}
+	if !deviceHasActiveActivation(t, pool, devB) {
+		t.Error("victim activation must remain active after cross-org delete attempt")
 	}
 
 	// attacker must not revoke org B's license

@@ -128,7 +128,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 		return ActivateResponse{}, p
 	}
 
-	signed, claims, err := svc.signer.IssueAndSignLicenseToken(lic, lic.ProductID.String(), lic.Features, data.Device.HWID, 24*7*time.Hour)
+	signed, claims, err := svc.signer.IssueAndSignLicenseToken(lic, lic.ProductID.String(), lic.Features, data.Device.HWID, act.ID, 24*7*time.Hour)
 	if err != nil {
 		slog.Error("failed to sign jwt", "licenseId", lic.ID, "err", err)
 		observability.CountActivationAttempt(ctx, "failure", "internal")

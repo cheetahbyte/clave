@@ -91,7 +91,7 @@ function DevicesPage() {
       queryClient.invalidateQueries({ queryKey: ["adminOverview"] });
       setDeleting(null);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to remove device"),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to deactivate device"),
   });
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
@@ -204,7 +204,7 @@ function DevicesPage() {
                       {d.checkedInAt ? new Date(d.checkedInAt).toLocaleDateString() : "Never"}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => setDeleting(d)} title="Remove device">
+                      <Button variant="ghost" size="icon" onClick={() => setDeleting(d)} title="Deactivate device">
                         <Trash2 className="size-4" />
                       </Button>
                     </TableCell>
@@ -231,8 +231,8 @@ function DevicesPage() {
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={() => setDeleting(null)}
-        title="Remove device?"
-        description={deleting ? `This will permanently remove "${deleting.hostname ?? 'Unknown device'}" and its activation.` : ""}
+        title="Deactivate device?"
+        description={deleting ? `This will deactivate "${deleting.hostname ?? 'Unknown device'}" and free its activation seat.` : ""}
         pending={deleteMut.isPending}
         onConfirm={() => deleting && deleteMut.mutate(deleting.deviceId)}
       />

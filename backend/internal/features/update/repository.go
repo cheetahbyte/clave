@@ -66,6 +66,14 @@ func (r *Repository) GetChannelByProductAndName(ctx context.Context, params db.G
 	return r.q.GetChannelByProductAndName(ctx, params)
 }
 
+func (r *Repository) GetActiveActivationByID(ctx context.Context, params db.GetActiveActivationByIDParams) (db.Activation, error) {
+	return r.q.GetActiveActivationByID(ctx, params)
+}
+
+func (r *Repository) GetActiveActivationByLicenseAndHwidHash(ctx context.Context, params db.GetActiveActivationByLicenseAndHwidHashParams) (db.Activation, error) {
+	return r.q.GetActiveActivationByLicenseAndHwidHash(ctx, params)
+}
+
 func (r *Repository) GetChannelsForProduct(ctx context.Context, productID uuid.UUID) ([]db.UpdateChannel, error) {
 	return r.q.GetChannelsForProduct(ctx, productID)
 }

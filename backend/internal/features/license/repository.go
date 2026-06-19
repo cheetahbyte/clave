@@ -278,8 +278,8 @@ func (r *Repository) CountAdminDevices(ctx context.Context, params db.CountAdmin
 	return r.q.CountAdminDevicesByOrganization(ctx, params)
 }
 
-func (r *Repository) DeleteAdminDevice(ctx context.Context, params db.DeleteAdminDeviceByOrganizationParams) (uuid.UUID, error) {
-	return r.q.DeleteAdminDeviceByOrganization(ctx, params)
+func (r *Repository) DeleteAdminDevice(ctx context.Context, params db.DeactivateAdminDeviceByOrganizationParams) (uuid.UUID, error) {
+	return r.q.DeactivateAdminDeviceByOrganization(ctx, params)
 }
 
 func uuidToPG(id uuid.UUID) pgtype.UUID {

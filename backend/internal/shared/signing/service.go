@@ -21,7 +21,7 @@ const (
 type Provider interface {
 	HMACSign(n string, normalized bool) []byte
 	ParseJWT(tokenString string) (*LicenseClaims, error)
-	IssueAndSignLicenseToken(license LicenseInfo, audience string, features []string, hwid string, tokenTTL time.Duration) (string, *LicenseClaims, error)
+	IssueAndSignLicenseToken(license LicenseInfo, audience string, features []string, hwid string, activationID uuid.UUID, tokenTTL time.Duration) (string, *LicenseClaims, error)
 	IssueAndSignSelfServiceToken(claims jwt.MapClaims) (string, error)
 }
 
@@ -83,7 +83,7 @@ func (svc *Service) ParseJWT(tokenString string) (*LicenseClaims, error) {
 	return claims, nil
 }
 
-func (svc *Service) IssueAndSignLicenseToken(license LicenseInfo, audience string, features []string, hwid string, tokenTTL time.Duration) (string, *LicenseClaims, error) {
+func (svc *Service) IssueAndSignLicenseToken(license LicenseInfo, audience string, features []string, hwid string, activationID uuid.UUID, tokenTTL time.Duration) (string, *LicenseClaims, error) {
 	if tokenTTL <= 0 {
 		return "", nil, errors.New("tokenTTL must be > 0")
 	}
@@ -101,10 +101,11 @@ func (svc *Service) IssueAndSignLicenseToken(license LicenseInfo, audience strin
 	}
 
 	claims := &LicenseClaims{
-		ProductID:  license.GetProductID(),
-		HWID:       hwid,
-		Features:   features,
-		LicenseExp: licenseExp,
+		ProductID:    license.GetProductID(),
+		HWID:         hwid,
+		ActivationID: activationID,
+		Features:     features,
+		LicenseExp:   licenseExp,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   "lic_" + license.GetID().String(),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -131,10 +132,11 @@ func (svc *Service) IssueAndSignSelfServiceToken(claims jwt.MapClaims) (string, 
 }
 
 type LicenseClaims struct {
-	ProductID  uuid.UUID `json:"product_id"`
-	HWID       string    `json:"hwid,omitempty"`
-	Features   []string  `json:"features,omitempty"`
-	LicenseExp *int64    `json:"license_exp,omitempty"`
+	ProductID    uuid.UUID `json:"product_id"`
+	HWID         string    `json:"hwid,omitempty"`
+	ActivationID uuid.UUID `json:"activation_id,omitempty"`
+	Features     []string  `json:"features,omitempty"`
+	LicenseExp   *int64    `json:"license_exp,omitempty"`
 
 	jwt.RegisteredClaims
 }

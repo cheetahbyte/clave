@@ -298,8 +298,10 @@ func (svc *Service) AdminListDevices(ctx context.Context, orgID uuid.UUID, q str
 }
 
 func (svc *Service) AdminDeleteDevice(ctx context.Context, orgID, deviceID uuid.UUID) error {
-	_, err := svc.repo.DeleteAdminDevice(ctx, db.DeleteAdminDeviceByOrganizationParams{
-		ID:             deviceID,
+	reason := "admin"
+	_, err := svc.repo.DeleteAdminDevice(ctx, db.DeactivateAdminDeviceByOrganizationParams{
+		Reason:         &reason,
+		DeviceID:       deviceID,
 		OrganizationID: orgID,
 	})
 	return err
