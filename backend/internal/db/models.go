@@ -90,6 +90,16 @@ type License struct {
 	TrialHwidHash  []byte             `json:"trial_hwid_hash"`
 }
 
+type McpToken struct {
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	TokenID        string             `json:"token_id"`
+	TokenHash      []byte             `json:"token_hash"`
+	TokenPrefix    string             `json:"token_prefix"`
+	CreatedBy      pgtype.UUID        `json:"created_by"`
+	RegeneratedAt  pgtype.Timestamptz `json:"regenerated_at"`
+	LastUsedAt     pgtype.Timestamptz `json:"last_used_at"`
+}
+
 type Organization struct {
 	ID        uuid.UUID          `json:"id"`
 	Name      string             `json:"name"`

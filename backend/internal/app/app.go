@@ -16,6 +16,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/features/adminauth"
 	"github.com/cheetahbyte/clave/internal/features/audit"
 	"github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/features/mcpserver"
 	"github.com/cheetahbyte/clave/internal/features/organization"
 	"github.com/cheetahbyte/clave/internal/features/selfservice"
 	"github.com/cheetahbyte/clave/internal/features/update"
@@ -117,6 +118,8 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	appURL := cfg.PublicAppURL
 	auditRepo := audit.NewRepository(q)
 	auditSvc := audit.NewService(auditRepo)
+	mcpSvc := mcpserver.NewService(q)
+	mcpH := mcpserver.NewHandler(mcpSvc, auditSvc)
 	licenseH := license.NewHandler(licenseSvc, auditSvc, publisher, appURL)
 	activationH := activation.NewHandler(activationSvc)
 	validationH := validation.NewHandler(validationSvc)
@@ -179,6 +182,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 		Organization: orgH,
 		SelfService:  selfserviceH,
 		Audit:        auditH,
+		MCP:          mcpH,
 		Middleware: routing.MiddlewareConfig{
 			SSAuth:       ssAuth,
 			AdminAuth:    adminAuth,

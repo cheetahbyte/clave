@@ -61,7 +61,11 @@ type Config struct {
 	}
 	SelfService SelfServiceRoutes
 	Audit       AdminRoutes
-	Middleware  routing.MiddlewareConfig
+	MCP         interface {
+		AdminRoutes
+		http.Handler
+	}
+	Middleware routing.MiddlewareConfig
 }
 
 func verboseLogger(next http.Handler) http.Handler {
@@ -111,6 +115,8 @@ func Register(r *chi.Mux, cfg Config) {
 				helpers.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 			})
 
+			v1.Mount("/mcp", cfg.MCP)
+
 			v1.Route("/client", func(client chi.Router) {
 				client.Group(func(enc chi.Router) {
 					if mw.Verbose {
@@ -135,6 +141,7 @@ func Register(r *chi.Mux, cfg Config) {
 					cfg.Update.RegisterAdminRoutes(protected)
 					cfg.Audit.RegisterAdminRoutes(protected)
 					cfg.Organization.RegisterAdminRoutes(protected)
+					cfg.MCP.RegisterAdminRoutes(protected)
 				})
 
 				cfg.Organization.RegisterPublicRoutes(admin, mw)
