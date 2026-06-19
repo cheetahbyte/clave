@@ -173,11 +173,25 @@ func (svc *Service) OrgSlug(ctx context.Context, orgID uuid.UUID) string {
 }
 
 func (svc *Service) GetByID(ctx context.Context, licenseID uuid.UUID) (*License, error) {
-	return svc.repo.GetByID(ctx, licenseID)
+	lic, err := svc.repo.GetByID(ctx, licenseID)
+	if err != nil {
+		return nil, err
+	}
+	if lic == nil {
+		return nil, ErrNotFound
+	}
+	return lic, nil
 }
 
 func (svc *Service) GetByDigest(ctx context.Context, digest []byte) (*License, error) {
-	return svc.repo.GetByDigest(ctx, digest)
+	lic, err := svc.repo.GetByDigest(ctx, digest)
+	if err != nil {
+		return nil, err
+	}
+	if lic == nil {
+		return nil, ErrNotFound
+	}
+	return lic, nil
 }
 
 func (svc *Service) ListByCustomerEmail(ctx context.Context, email string) ([]db.ListByCustomerEmailRow, error) {

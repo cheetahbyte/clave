@@ -54,7 +54,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 	lookupDigest := svc.signer.HMACSign(data.LicenseKey, signing.NormalizeKey)
 
 	lic, err := svc.licenses.GetByDigest(ctx, lookupDigest)
-	if err != nil {
+	if err != nil || lic == nil {
 		slog.Warn("license not found", "err", err)
 		observability.CountActivationAttempt(ctx, "failure", "not_found")
 
