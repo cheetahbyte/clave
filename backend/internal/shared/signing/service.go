@@ -16,6 +16,10 @@ import (
 const (
 	NormalizeKey     = true
 	DontNormalizeKey = false
+
+	// ClockSkewLeeway is the tolerance applied to nbf when parsing tokens
+	// for refresh, mirroring the -30s NotBefore skew used at issue time.
+	ClockSkewLeeway = 30 * time.Second
 )
 
 type Provider interface {
@@ -78,6 +82,49 @@ func (svc *Service) ParseJWT(tokenString string) (*LicenseClaims, error) {
 
 	if !token.Valid {
 		return nil, errors.New("invalid token")
+	}
+
+	return claims, nil
+}
+
+// ParseJWTForRefresh parses a license JWT for the /licenses/validate refresh
+// path. Unlike ParseJWT, it accepts tokens whose exp has already passed as
+// long as they are within maxExpiredAge of expiry, so a client that missed
+// its refresh window can still recover a fresh token.
+//
+// Signature, algorithm, structure, nbf and exp presence are still enforced.
+// Use ParseJWT for any path that must reject expired tokens outright
+// (update checks, gated downloads).
+func (svc *Service) ParseJWTForRefresh(tokenString string, maxExpiredAge time.Duration) (*LicenseClaims, error) {
+	if maxExpiredAge <= 0 {
+		return nil, errors.New("maxExpiredAge must be > 0")
+	}
+
+	claims := &LicenseClaims{}
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
+		if t.Method != jwt.SigningMethodEdDSA {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return svc.publicKey, nil
+	}, jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}), jwt.WithoutClaimsValidation())
+	if err != nil {
+		return nil, fmt.Errorf("invalid token signature or structure: %w", err)
+	}
+	if token == nil || !token.Valid {
+		return nil, errors.New("invalid token signature or structure")
+	}
+
+	now := time.Now().UTC()
+
+	if claims.ExpiresAt == nil {
+		return nil, errors.New("missing exp claim")
+	}
+	if now.After(claims.ExpiresAt.Time.Add(maxExpiredAge)) {
+		return nil, errors.New("token expired beyond refresh grace")
+	}
+
+	if claims.NotBefore != nil && now.Add(ClockSkewLeeway).Before(claims.NotBefore.Time) {
+		return nil, errors.New("token not active yet")
 	}
 
 	return claims, nil

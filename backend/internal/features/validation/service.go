@@ -75,7 +75,7 @@ func (svc *Service) availableUpdateChannels(ctx context.Context, productID uuid.
 func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (ValidateResponse, error) {
 	instance := "/licenses/validate"
 
-	claims, err := svc.signer.ParseJWT(data.Token)
+	claims, err := svc.signer.ParseJWTForRefresh(data.Token, 7*24*time.Hour)
 	if err != nil {
 		observability.CountLicenseValidation(ctx, "failure")
 		return ValidateResponse{}, problem.Of(401).

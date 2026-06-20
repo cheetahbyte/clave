@@ -3,8 +3,8 @@ package validation
 import "github.com/cheetahbyte/clave/internal/shared/clientchannels"
 
 type ValidateRequest struct {
-	Token    string `json:"token"`
-	DeviceID string `json:"deviceId"`
+	Token    string `json:"token" validate:"required"`
+	DeviceID string `json:"deviceId" validate:"required"`
 }
 
 type ValidateResponse struct {

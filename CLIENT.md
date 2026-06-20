@@ -60,7 +60,7 @@ Stash `token` and `validUntil` in an encrypted local cache; you'll lean on both 
 
 `POST /api/v1/client/licenses/validate`
 
-Run this on every launch, and again every few hours while the app is open.
+Run this on every launch, and again every few hours while the app is open. Refresh **before** `validUntil` rather than at it — a margin of at least an hour (or ~10% of the token's TTL) avoids races where the token expires mid-request.
 
 ```json
 {
@@ -85,6 +85,8 @@ Run this on every launch, and again every few hours while the app is open.
 ```
 
 Whatever token comes back, swap it in for your cached one. Also refresh your local list of available update channels from `updateChannels`.
+
+If the cached token has only recently expired (within the same seven-day window as the offline grace period), `/validate` can still accept it and return a fresh token after rechecking the license, device, and activation state. So a missed refresh is recoverable — but don't rely on it. Refresh early, treat the grace window as a safety net, not the schedule.
 
 ---
 
@@ -150,13 +152,13 @@ Seven days is a sensible grace period. Don't push it past the token's TTL (also 
 | Status | Meaning |
 |--------|---------|
 | 400 | Bad request — malformed JSON, missing required field, or invalid value |
-| 401 | Invalid or expired token |
-| 403 | License revoked or expired |
+| 401 | Token unusable — invalid, malformed, bad signature, or expired beyond the refresh grace window |
+| 403 | Token parsed, but the license/device is no longer valid — license revoked or expired, HWID mismatch, or activation deactivated |
 | 404 | License not found |
 | 409 | Activation limit reached, or this device already used its trial |
 | 500 | Server error - fall back to the cache |
 
-A 403 or 404 means the license is genuinely no good, so don't retry those. For 5xx responses or plain network failures, lean on the cached token and your grace-period logic.
+A `401` means the token itself is no good, so the client can't recover by retrying the same token — fall back to the cache and your grace-period logic, or re-activate if the grace window has passed. A `403` or `404` means the license is genuinely no good, so don't retry those. For 5xx responses or plain network failures, lean on the cached token and your grace-period logic.
 
 ---
 
