@@ -27,7 +27,7 @@ func orgIDFromRequest(req *mcp.CallToolRequest) (uuid.UUID, error) {
 // ============ find-license ============
 
 type FindLicenseInput struct {
-	Query string `json:"query" jsonschema:"description=Email, license ID (UUID), or license key (LIC-XXXX-...)"`
+	Query string `json:"query" jsonschema:"Email, license ID (UUID), or license key (LIC-XXXX-...)"`
 }
 
 type LicenseResult struct {
@@ -89,10 +89,10 @@ func (t *LicenseTools) FindLicense(ctx context.Context, req *mcp.CallToolRequest
 // ============ create-license ============
 
 type CreateLicenseInput struct {
-	Email          string   `json:"email" jsonschema:"description=Customer email address"`
-	ProductID      string   `json:"productId" jsonschema:"description=Product UUID"`
-	Features       []string `json:"features,omitempty" jsonschema:"description=Optional feature keys to grant on the license"`
-	MaxActivations int32    `json:"maxActivations,omitempty" jsonschema:"description=Maximum device activations (default 1)"`
+	Email          string   `json:"email" jsonschema:"Customer email address"`
+	ProductID      string   `json:"productId" jsonschema:"Product UUID"`
+	Features       []string `json:"features,omitempty" jsonschema:"Optional feature keys to grant on the license"`
+	MaxActivations int32    `json:"maxActivations,omitempty" jsonschema:"Maximum device activations (default 1)"`
 }
 
 type CreateLicenseOutput struct {
@@ -132,7 +132,7 @@ func (t *LicenseTools) CreateLicense(ctx context.Context, req *mcp.CallToolReque
 // ============ revoke-license ============
 
 type RevokeLicenseInput struct {
-	Identifier string `json:"identifier" jsonschema:"description=License ID (UUID) or license key (LIC-XXXX-...)"`
+	Identifier string `json:"identifier" jsonschema:"License ID (UUID) or license key (LIC-XXXX-...)"`
 }
 
 type RevokeLicenseOutput struct {
@@ -160,7 +160,7 @@ func (t *LicenseTools) RevokeLicense(ctx context.Context, req *mcp.CallToolReque
 // ============ list-licenses ============
 
 type ListLicensesInput struct {
-	Limit int32 `json:"limit,omitempty" jsonschema:"description=Number of recent licenses to return (default 10, max 20)"`
+	Limit int32 `json:"limit,omitempty" jsonschema:"Number of recent licenses to return (default 10, max 20)"`
 }
 
 type ListLicensesOutput struct {
