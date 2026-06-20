@@ -201,6 +201,28 @@ func seedProductFeatures(t *testing.T, pool *pgxpool.Pool, orgID, productID uuid
 	}
 }
 
+func requireSameStringSet(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("expected %d items, got %d (%v)", len(want), len(got), got)
+	}
+	remaining := map[string]int{}
+	for _, v := range want {
+		remaining[v]++
+	}
+	for _, v := range got {
+		remaining[v]--
+	}
+	for v, n := range remaining {
+		if n > 0 {
+			t.Errorf("missing item %q in %v", v, got)
+		}
+		if n < 0 {
+			t.Errorf("unexpected item %q in %v", v, got)
+		}
+	}
+}
+
 func assignLicenseFeatures(t *testing.T, pool *pgxpool.Pool, licenseID uuid.UUID, keys []string) {
 	t.Helper()
 	_, err := pool.Exec(context.Background(), `

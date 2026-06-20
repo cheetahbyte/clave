@@ -413,14 +413,7 @@ func TestSelfServiceResetRetainsFeatures(t *testing.T) {
 	}
 
 	newFeatures := licenseFeatures(t, pool, newID)
-	if len(newFeatures) != len(features) {
-		t.Fatalf("replacement: expected %d features, got %d (%v)", len(features), len(newFeatures), newFeatures)
-	}
-	for i, k := range features {
-		if newFeatures[i] != k {
-			t.Errorf("replacement feature[%d] = %q, want %q", i, newFeatures[i], k)
-		}
-	}
+	requireSameStringSet(t, newFeatures, features)
 
 	var newArrFeatures []string
 	err = pool.QueryRow(context.Background(),
@@ -428,7 +421,5 @@ func TestSelfServiceResetRetainsFeatures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read replacement licenses.features: %v", err)
 	}
-	if len(newArrFeatures) != len(features) {
-		t.Fatalf("replacement licenses.features: expected %d, got %d (%v)", len(features), len(newArrFeatures), newArrFeatures)
-	}
+	requireSameStringSet(t, newArrFeatures, features)
 }
