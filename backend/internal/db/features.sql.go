@@ -101,6 +101,24 @@ func (q *Queries) ArchiveProductFeature(ctx context.Context, id uuid.UUID) (Prod
 	return i, err
 }
 
+const copyLicenseFeatures = `-- name: CopyLicenseFeatures :exec
+INSERT INTO license_features (license_id, feature_id, source, source_window_id)
+SELECT $1::uuid, feature_id, source, source_window_id
+FROM license_features
+WHERE license_id = $2::uuid
+ON CONFLICT (license_id, feature_id) DO NOTHING
+`
+
+type CopyLicenseFeaturesParams struct {
+	NewLicenseID uuid.UUID `json:"new_license_id"`
+	OldLicenseID uuid.UUID `json:"old_license_id"`
+}
+
+func (q *Queries) CopyLicenseFeatures(ctx context.Context, arg CopyLicenseFeaturesParams) error {
+	_, err := q.db.Exec(ctx, copyLicenseFeatures, arg.NewLicenseID, arg.OldLicenseID)
+	return err
+}
+
 const createFeatureWindow = `-- name: CreateFeatureWindow :one
 INSERT INTO product_feature_windows (organization_id, product_id, feature_id, starts_at, ends_at, applies_to, is_active)
 VALUES ($1, $2, $3, $4, $5, $6, $7)

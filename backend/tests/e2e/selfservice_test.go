@@ -367,3 +367,68 @@ func TestSelfServiceCannotReuseInactiveLicense(t *testing.T) {
 		t.Fatalf("expected 2 total licenses for source email/product, got %d", activeCount)
 	}
 }
+
+func TestSelfServiceResetRetainsFeatures(t *testing.T) {
+	requireE2E(t)
+	pool := newPool(t)
+
+	orgID := orgIDBySlug(t, pool, "default")
+	productID := createProduct(t, pool, orgID, uniqueName("E2E Features Retain"))
+	email := uniqueEmail()
+	licenseID := createLicense(t, pool, orgID, productID, email, 3)
+
+	features := []string{"pro", "beta", "early-access"}
+	seedProductFeatures(t, pool, orgID, productID, features)
+	assignLicenseFeatures(t, pool, licenseID, features)
+
+	oldFeatures := licenseFeatures(t, pool, licenseID)
+	if len(oldFeatures) != len(features) {
+		t.Fatalf("seed: expected %d features, got %d", len(features), len(oldFeatures))
+	}
+
+	c := authenticate(t, email, "default")
+
+	resp := doMethod(t, c, http.MethodPost, "/api/v1/self-service/licenses/"+licenseID.String()+"/revoke")
+	if resp.StatusCode != http.StatusOK {
+		drain(resp)
+		t.Fatalf("revoke status = %d, want 200", resp.StatusCode)
+	}
+	revokeResp := decode[struct {
+		OK           bool   `json:"ok"`
+		NewLicenseID string `json:"newLicenseId"`
+	}](t, resp)
+	if !revokeResp.OK {
+		t.Fatal("revoke response should be ok")
+	}
+	newID, err := uuid.Parse(revokeResp.NewLicenseID)
+	if err != nil {
+		t.Fatalf("invalid new license id: %v", err)
+	}
+
+	if !licenseActive(t, pool, newID) {
+		t.Error("replacement license should be active")
+	}
+	if licenseActive(t, pool, licenseID) {
+		t.Error("old license should be inactive after reset")
+	}
+
+	newFeatures := licenseFeatures(t, pool, newID)
+	if len(newFeatures) != len(features) {
+		t.Fatalf("replacement: expected %d features, got %d (%v)", len(features), len(newFeatures), newFeatures)
+	}
+	for i, k := range features {
+		if newFeatures[i] != k {
+			t.Errorf("replacement feature[%d] = %q, want %q", i, newFeatures[i], k)
+		}
+	}
+
+	var newArrFeatures []string
+	err = pool.QueryRow(context.Background(),
+		`select features from licenses where id = $1`, newID).Scan(&newArrFeatures)
+	if err != nil {
+		t.Fatalf("read replacement licenses.features: %v", err)
+	}
+	if len(newArrFeatures) != len(features) {
+		t.Fatalf("replacement licenses.features: expected %d, got %d (%v)", len(features), len(newArrFeatures), newArrFeatures)
+	}
+}

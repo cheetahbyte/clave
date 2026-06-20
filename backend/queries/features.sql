@@ -63,6 +63,13 @@ FROM product_features pf
 WHERE pf.organization_id = $2 AND pf.product_id = $4 AND pf.key = $5
 ON CONFLICT (license_id, feature_id) DO NOTHING;
 
+-- name: CopyLicenseFeatures :exec
+INSERT INTO license_features (license_id, feature_id, source, source_window_id)
+SELECT sqlc.arg('new_license_id')::uuid, feature_id, source, source_window_id
+FROM license_features
+WHERE license_id = sqlc.arg('old_license_id')::uuid
+ON CONFLICT (license_id, feature_id) DO NOTHING;
+
 -- ============ update_channel_required_features ============
 
 -- name: GetChannelRequiredFeatureKeys :many

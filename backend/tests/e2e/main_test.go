@@ -158,6 +158,69 @@ func deviceHasActiveActivation(t *testing.T, pool *pgxpool.Pool, deviceID uuid.U
 	return n > 0
 }
 
+func licenseFeatures(t *testing.T, pool *pgxpool.Pool, licenseID uuid.UUID) []string {
+	t.Helper()
+	keys := make([]string, 0)
+	rows, err := pool.Query(context.Background(), `
+		select pf.key
+		from license_features lf
+		join product_features pf on pf.id = lf.feature_id
+		where lf.license_id = $1
+		order by pf.key
+	`, licenseID)
+	if err != nil {
+		t.Fatalf("query license features: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			t.Fatalf("scan license feature: %v", err)
+		}
+		keys = append(keys, k)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows: %v", err)
+	}
+	return keys
+}
+
+func seedProductFeatures(t *testing.T, pool *pgxpool.Pool, orgID, productID uuid.UUID, keys []string) {
+	t.Helper()
+	for _, k := range keys {
+		var id uuid.UUID
+		err := pool.QueryRow(context.Background(), `
+			insert into product_features (organization_id, product_id, key)
+			values ($1, $2, $3)
+			on conflict (organization_id, product_id, key) do update set key = excluded.key
+			returning id
+		`, orgID, productID, k).Scan(&id)
+		if err != nil {
+			t.Fatalf("seed product feature %q: %v", k, err)
+		}
+	}
+}
+
+func assignLicenseFeatures(t *testing.T, pool *pgxpool.Pool, licenseID uuid.UUID, keys []string) {
+	t.Helper()
+	_, err := pool.Exec(context.Background(), `
+		insert into license_features (license_id, feature_id, source)
+		select $1, pf.id, 'manual'
+		from product_features pf
+		where pf.key = any($2::text[])
+		on conflict (license_id, feature_id) do nothing
+	`, licenseID, keys)
+	if err != nil {
+		t.Fatalf("assign license features: %v", err)
+	}
+	_, err = pool.Exec(context.Background(), `
+		update licenses set features = $2::text[] where id = $1
+	`, licenseID, keys)
+	if err != nil {
+		t.Fatalf("backfill licenses.features: %v", err)
+	}
+}
+
 // --- http helpers ---
 
 func httpClient(t *testing.T) *http.Client {

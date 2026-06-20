@@ -18,6 +18,15 @@ func NewRepository(q *db.Queries, pool *pgxpool.Pool) *Repository {
 	return &Repository{q: q, pool: pool}
 }
 
+// normalizeFeatures guarantees a non-nil slice so pgx encodes '{}' instead of
+// NULL for the NOT NULL licenses.features column.
+func normalizeFeatures(in []string) []string {
+	if in == nil {
+		return []string{}
+	}
+	return in
+}
+
 func (r *Repository) GetOrganizationBySlug(ctx context.Context, slug string) (db.Organization, error) {
 	return r.q.GetOrganizationBySlug(ctx, slug)
 }
@@ -105,9 +114,19 @@ func (r *Repository) ReplaceLicense(ctx context.Context, oldLicenseID uuid.UUID,
 		ExpiresAt:      oldRow.ExpiresAt,
 		IsTrial:        oldRow.IsTrial,
 		TrialHwidHash:  oldRow.TrialHwidHash,
+		Features:       normalizeFeatures(oldRow.Features),
 	})
 	if err != nil {
 		return db.License{}, fmt.Errorf("create replacement: %w", err)
+	}
+
+	// Copy license_features join-table rows so feature assignments (including
+	// source and source_window_id) survive the reset.
+	if err := qtx.CopyLicenseFeatures(ctx, db.CopyLicenseFeaturesParams{
+		NewLicenseID: newRow.ID,
+		OldLicenseID: oldLicenseID,
+	}); err != nil {
+		return db.License{}, fmt.Errorf("copy license features: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
