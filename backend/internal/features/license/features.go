@@ -44,9 +44,9 @@ func (svc *Service) applyFeatureWindows(ctx context.Context, orgID, productID uu
 
 	now := time.Now().UTC()
 	rows, err := svc.repo.q.GetActiveFeatureWindowsForProduct(ctx, db.GetActiveFeatureWindowsForProductParams{
-		ProductID:  productID,
-		StartsAt:   pgtype.Timestamptz{Time: now, Valid: true},
-		AppliesTo:  appliesTo,
+		ProductID: productID,
+		StartsAt:  pgtype.Timestamptz{Time: now, Valid: true},
+		AppliesTo: appliesTo,
 	})
 	if err != nil {
 		slog.Warn("failed to lookup active feature windows", "productId", productID, "err", err)
@@ -108,12 +108,12 @@ func (svc *Service) syncLicenseFeatures(ctx context.Context, qtx *db.Queries, li
 // ============ Product Feature Catalog ============
 
 type ProductFeatureDTO struct {
-	ID          string  `json:"id"`
-	ProductID   string  `json:"productId"`
-	Key         string  `json:"key"`
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	Archived    bool    `json:"archived"`
+	ID          string     `json:"id"`
+	ProductID   string     `json:"productId"`
+	Key         string     `json:"key"`
+	Name        *string    `json:"name"`
+	Description *string    `json:"description"`
+	Archived    bool       `json:"archived"`
 	CreatedAt   *time.Time `json:"createdAt"`
 }
 
@@ -201,12 +201,12 @@ func (svc *Service) DeleteProductFeature(ctx context.Context, orgID, featureID u
 
 func productFeatureToDTO(pf db.ProductFeature) ProductFeatureDTO {
 	dto := ProductFeatureDTO{
-		ID:        pf.ID.String(),
-		ProductID: pf.ProductID.String(),
-		Key:       pf.Key,
-		Name:      pf.Name,
+		ID:          pf.ID.String(),
+		ProductID:   pf.ProductID.String(),
+		Key:         pf.Key,
+		Name:        pf.Name,
 		Description: pf.Description,
-		Archived:  pf.ArchivedAt.Valid,
+		Archived:    pf.ArchivedAt.Valid,
 	}
 	if pf.CreatedAt.Valid {
 		t := pf.CreatedAt.Time
@@ -218,15 +218,15 @@ func productFeatureToDTO(pf db.ProductFeature) ProductFeatureDTO {
 // ============ Feature Windows ============
 
 type FeatureWindowDTO struct {
-	ID          string     `json:"id"`
-	ProductID   string     `json:"productId"`
-	FeatureKey  string     `json:"featureKey"`
-	FeatureID   string     `json:"featureId"`
-	StartsAt    *time.Time `json:"startsAt"`
-	EndsAt      *time.Time `json:"endsAt"`
-	AppliesTo   string     `json:"appliesTo"`
-	IsActive    bool       `json:"isActive"`
-	CreatedAt   *time.Time `json:"createdAt"`
+	ID         string     `json:"id"`
+	ProductID  string     `json:"productId"`
+	FeatureKey string     `json:"featureKey"`
+	FeatureID  string     `json:"featureId"`
+	StartsAt   *time.Time `json:"startsAt"`
+	EndsAt     *time.Time `json:"endsAt"`
+	AppliesTo  string     `json:"appliesTo"`
+	IsActive   bool       `json:"isActive"`
+	CreatedAt  *time.Time `json:"createdAt"`
 }
 
 type CreateFeatureWindowRequest struct {

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -320,4 +321,155 @@ func (svc *Service) AdminDeleteDevice(ctx context.Context, orgID, deviceID uuid.
 		OrganizationID: orgID,
 	})
 	return err
+}
+
+// ============ MCP-facing lookup / revoke / list ============
+
+// AdminFindLicense looks up licenses by email, license ID, or license key.
+// It tries UUID first (license ID), then HMAC digest (license key), then
+// falls back to email. Returns one or more results.
+func (svc *Service) AdminFindLicense(ctx context.Context, orgID uuid.UUID, query string) ([]LicenseLookupResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, errors.New("query is required")
+	}
+
+	// 1. Try UUID (license ID).
+	if id, err := uuid.Parse(query); err == nil {
+		detail, err := svc.AdminLicenseDetail(ctx, orgID, id)
+		if err == nil {
+			return []LicenseLookupResult{detailToLookupResult(detail)}, nil
+		}
+	}
+
+	// 2. Try license key (HMAC digest).
+	digest := svc.signer.HMACSign(query, signing.NormalizeKey)
+	row, err := svc.repo.GetAdminLicenseByDigest(ctx, orgID, digest)
+	if err == nil {
+		return []LicenseLookupResult{rowToLookupResult(row)}, nil
+	}
+
+	// 3. Fall back to email.
+	rows, err := svc.repo.GetAdminLicensesByEmail(ctx, orgID, query)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]LicenseLookupResult, len(rows))
+	for i, r := range rows {
+		results[i] = emailRowToLookupResult(r)
+	}
+	return results, nil
+}
+
+// AdminRevokeLicense disables a license by ID or license key. It sets
+// is_active=false but does not delete the row.
+func (svc *Service) AdminRevokeLicense(ctx context.Context, orgID uuid.UUID, identifier string) error {
+	identifier = strings.TrimSpace(identifier)
+	if identifier == "" {
+		return errors.New("identifier is required")
+	}
+
+	// 1. Try UUID (license ID).
+	if id, err := uuid.Parse(identifier); err == nil {
+		if err := svc.repo.RevokeAdminLicense(ctx, orgID, id); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
+		}
+		return nil
+	}
+
+	// 2. Try license key (HMAC digest).
+	digest := svc.signer.HMACSign(identifier, signing.NormalizeKey)
+	if err := svc.repo.RevokeAdminLicenseByDigest(ctx, orgID, digest); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+// AdminListRecentLicenses returns the most recently created licenses for
+// the organization, including features and activation counts.
+func (svc *Service) AdminListRecentLicenses(ctx context.Context, orgID uuid.UUID, limit int32) ([]LicenseLookupResult, error) {
+	if limit < 1 {
+		limit = 10
+	}
+	if limit > 20 {
+		limit = 20
+	}
+
+	rows, err := svc.repo.ListAdminRecentLicensesByOrganization(ctx, orgID, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]LicenseLookupResult, len(rows))
+	for i, r := range rows {
+		results[i] = LicenseLookupResult{
+			ID:              r.ID.String(),
+			CustomerEmail:   r.CustomerEmail,
+			ProductName:     r.ProductName,
+			IsActive:        r.IsActive,
+			IsTrial:         r.IsTrial,
+			MaxActivations:  r.MaxActivations,
+			ActivationCount: r.ActivationCount,
+			Features:        r.Features,
+			CreatedAt:       timePtr(r.CreatedAt),
+			ExpiresAt:       timePtr(r.ExpiresAt),
+		}
+	}
+	return results, nil
+}
+
+// --- helpers ---
+
+func detailToLookupResult(d *AdminLicenseDetailResponse) LicenseLookupResult {
+	return LicenseLookupResult{
+		ID:              d.ID,
+		CustomerEmail:   d.CustomerEmail,
+		ProductName:     d.ProductName,
+		ProductID:       d.ProductID,
+		IsActive:        d.IsActive,
+		IsTrial:         d.IsTrial,
+		MaxActivations:  d.MaxActivations,
+		ActivationCount: d.ActivationCount,
+		Features:        d.Features,
+		CreatedAt:       d.CreatedAt,
+		ExpiresAt:       d.ExpiresAt,
+	}
+}
+
+func rowToLookupResult(r db.GetAdminLicenseByDigestRow) LicenseLookupResult {
+	return LicenseLookupResult{
+		ID:              r.ID.String(),
+		CustomerEmail:   r.CustomerEmail,
+		ProductName:     r.ProductName,
+		ProductID:       r.ProductID.String(),
+		IsActive:        r.IsActive,
+		IsTrial:         r.IsTrial,
+		MaxActivations:  r.MaxActivations,
+		ActivationCount: r.ActivationCount,
+		Features:        r.Features,
+		CreatedAt:       timePtr(r.CreatedAt),
+		ExpiresAt:       timePtr(r.ExpiresAt),
+	}
+}
+
+func emailRowToLookupResult(r db.GetAdminLicensesByEmailRow) LicenseLookupResult {
+	return LicenseLookupResult{
+		ID:              r.ID.String(),
+		CustomerEmail:   r.CustomerEmail,
+		ProductName:     r.ProductName,
+		ProductID:       r.ProductID.String(),
+		IsActive:        r.IsActive,
+		IsTrial:         r.IsTrial,
+		MaxActivations:  r.MaxActivations,
+		ActivationCount: r.ActivationCount,
+		Features:        r.Features,
+		CreatedAt:       timePtr(r.CreatedAt),
+		ExpiresAt:       timePtr(r.ExpiresAt),
+	}
 }

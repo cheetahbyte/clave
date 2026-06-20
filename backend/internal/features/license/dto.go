@@ -3,12 +3,14 @@ package license
 import "time"
 
 type CreationRequest struct {
-	ProductID      string `json:"productId" validate:"required,uuid"`
-	MaxActivations int32  `json:"maxActivations" validate:"required,gte=1"`
-	CustomerEmail  string `json:"customerEmail" validate:"required,email"`
-	IsTrial        bool   `json:"isTrial"`
-	TrialDays      int    `json:"trialDays" validate:"omitempty,gte=1,lte=365"`
-	SendEmail      bool   `json:"sendEmail"`
+	ProductID      string     `json:"productId" validate:"required,uuid"`
+	MaxActivations int32      `json:"maxActivations" validate:"required,gte=1"`
+	CustomerEmail  string     `json:"customerEmail" validate:"required,email"`
+	IsTrial        bool       `json:"isTrial"`
+	TrialDays      int        `json:"trialDays" validate:"omitempty,gte=1,lte=365"`
+	SendEmail      bool       `json:"sendEmail"`
+	Features       []string   `json:"features"`
+	ExpiresAt      *time.Time `json:"expiresAt"`
 }
 
 type CreationResponse struct {
@@ -123,4 +125,21 @@ type AdminDeviceListResponse struct {
 	Total    int64             `json:"total"`
 	Page     int               `json:"page"`
 	PageSize int               `json:"pageSize"`
+}
+
+// LicenseLookupResult is the output of a find-license lookup. It carries
+// everything a support agent needs in one shot: who owns it, what product,
+// which features, expiry, and how many devices are linked.
+type LicenseLookupResult struct {
+	ID              string     `json:"id"`
+	CustomerEmail   string     `json:"customerEmail"`
+	ProductName     string     `json:"productName"`
+	ProductID       string     `json:"productId"`
+	IsActive        bool       `json:"isActive"`
+	IsTrial         bool       `json:"isTrial"`
+	MaxActivations  int32      `json:"maxActivations"`
+	ActivationCount int64      `json:"activationCount"`
+	Features        []string   `json:"features"`
+	CreatedAt       *time.Time `json:"createdAt"`
+	ExpiresAt       *time.Time `json:"expiresAt"`
 }

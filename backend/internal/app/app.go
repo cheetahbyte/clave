@@ -119,7 +119,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	auditRepo := audit.NewRepository(q)
 	auditSvc := audit.NewService(auditRepo)
 	mcpSvc := mcpserver.NewService(q)
-	mcpH := mcpserver.NewHandler(mcpSvc, auditSvc)
+	mcpH := mcpserver.NewHandler(mcpSvc, licenseSvc, auditSvc)
 	licenseH := license.NewHandler(licenseSvc, auditSvc, publisher, appURL)
 	activationH := activation.NewHandler(activationSvc)
 	validationH := validation.NewHandler(validationSvc)

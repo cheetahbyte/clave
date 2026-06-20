@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/cheetahbyte/clave/internal/features/audit"
+	"github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
 	"github.com/go-chi/chi/v5"
@@ -14,15 +15,16 @@ import (
 )
 
 type Handler struct {
-	svc      *Service
-	auditSvc *audit.Service
-	http     http.Handler
+	svc        *Service
+	licenseSvc *license.Service
+	auditSvc   *audit.Service
+	http       http.Handler
 }
 
-func NewHandler(svc *Service, auditSvc *audit.Service) *Handler {
-	h := &Handler{svc: svc, auditSvc: auditSvc}
+func NewHandler(svc *Service, licenseSvc *license.Service, auditSvc *audit.Service) *Handler {
+	h := &Handler{svc: svc, licenseSvc: licenseSvc, auditSvc: auditSvc}
 	mcpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
-		return newMCPServer()
+		return newMCPServer(licenseSvc)
 	}, nil)
 	h.http = mcpauth.RequireBearerToken(h.tokenVerifier, nil)(mcpHandler)
 	return h
