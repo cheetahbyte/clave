@@ -237,6 +237,8 @@ Only `version` and `token` are required. Defaults when omitted:
   "downloadUrl": "https://releases.example.com/myapp-1.1.0.dmg",
   "kind": "update_available",
   "releaseNotes": "Bug fixes and performance improvements.",
+  "changelog": "## 1.1.0\n- Fixed crash on launch",
+  "changelogUrl": "https://your-instance/api/v1/updates/releases/<releaseId>/changelog.html",
   "artifacts": [
     {
       "type": "full",
@@ -253,7 +255,56 @@ Only `version` and `token` are required. Defaults when omitted:
 
 `kind` can be `"no_update"`, `"update_available"`, `"mandatory_update"`, or `"error"`. Use this to decide whether to show a dismissible update prompt or a mandatory upgrade screen.
 
+`releaseNotes` is short inline text. `changelog` carries the full changelog body (Markdown) when one is attached to the release; `changelogUrl` points at a rendered HTML version. Both are optional and omitted when absent.
+
 The `clientId` field enables deterministic staged rollouts. Send a stable, unique value (e.g. a hash of the machine ID) so the server can consistently bucket your client for percentage-based releases.
+
+---
+
+### Native Feed (all platforms)
+
+`GET /api/v1/updates/products/<productId>/<platform>/<channel>/feed.json`
+
+A static JSON feed listing every published release for a product/platform/channel, with full artifact and rollout metadata. Use this when you want to drive updates yourself rather than calling `/updates/check` per launch, or on platforms without a Sparkle-style framework. The `/updates/check` endpoint is the simpler choice for most clients; reach for the feed when you need the whole release list at once.
+
+**Channel gating**: Channels with required features need a license token. Pass it via `Authorization: Bearer <jwt>`. The query-string form (`?token=<jwt>`) is not accepted, since the token would leak into the artifact URLs the feed returns (and from there into proxy, cache, and client logs).
+
+**You'll get back:**
+```json
+{
+  "schema": "clave.native.feed/v1",
+  "product": "MyApp",
+  "platform": "macos",
+  "channel": "stable",
+  "generatedAt": "2026-01-01T00:00:00Z",
+  "releases": [
+    {
+      "version": "1.1.0",
+      "build": "42",
+      "releaseNotes": "Bug fixes and performance improvements.",
+      "changelog": "## 1.1.0\n- Fixed crash on launch",
+      "changelogUrl": "https://your-instance/api/v1/updates/releases/<releaseId>/changelog.html",
+      "publishedAt": "2026-01-01T00:00:00Z",
+      "mandatory": false,
+      "rolloutPercentage": 100,
+      "minimumSystemVersion": "13.0",
+      "artifacts": [
+        {
+          "type": "full",
+          "arch": "arm64",
+          "os": "macos",
+          "url": "https://releases.example.com/myapp-1.1.0-arm64.dmg",
+          "sizeBytes": 52428800,
+          "sha256": "abc123...",
+          "signature": "..."
+        }
+      ]
+    }
+  ]
+}
+```
+
+Releases are ordered newest-first. Honor `mandatory` and `rolloutPercentage` yourself — the feed lists every release, so you decide which one to offer. Pick the artifact whose `arch`/`os` matches the running machine. `signature` is the Ed25519 signature when artifact signing is configured (see [Sparkle Appcast](#sparkle-appcast-macos)).
 
 ---
 
