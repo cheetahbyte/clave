@@ -230,6 +230,36 @@ func (r *Repository) ListAdminLicenseActivationsByOrganization(ctx context.Conte
 	})
 }
 
+func (r *Repository) GetAdminLicensesByEmail(ctx context.Context, orgID uuid.UUID, email string) ([]db.GetAdminLicensesByEmailRow, error) {
+	return r.q.GetAdminLicensesByEmail(ctx, db.GetAdminLicensesByEmailParams{
+		OrganizationID: orgID,
+		CustomerEmail:  email,
+	})
+}
+
+func (r *Repository) GetAdminLicenseByDigest(ctx context.Context, orgID uuid.UUID, digest []byte) (db.GetAdminLicenseByDigestRow, error) {
+	return r.q.GetAdminLicenseByDigest(ctx, db.GetAdminLicenseByDigestParams{
+		LookupDigest:   digest,
+		OrganizationID: orgID,
+	})
+}
+
+func (r *Repository) RevokeAdminLicense(ctx context.Context, orgID, id uuid.UUID) error {
+	_, err := r.q.RevokeAdminLicense(ctx, db.RevokeAdminLicenseParams{
+		ID:             id,
+		OrganizationID: orgID,
+	})
+	return err
+}
+
+func (r *Repository) RevokeAdminLicenseByDigest(ctx context.Context, orgID uuid.UUID, digest []byte) error {
+	_, err := r.q.RevokeAdminLicenseByDigest(ctx, db.RevokeAdminLicenseByDigestParams{
+		LookupDigest:   digest,
+		OrganizationID: orgID,
+	})
+	return err
+}
+
 func (r *Repository) UpdateAdminLicense(ctx context.Context, params db.UpdateAdminLicenseParams) error {
 	_, err := r.q.UpdateAdminLicense(ctx, params)
 	if err != nil {

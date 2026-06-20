@@ -69,9 +69,10 @@ func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data Creati
 	email := strings.ToLower(strings.TrimSpace(data.CustomerEmail))
 	productUUID := pgtype.UUID{Bytes: [16]byte(productID), Valid: true}
 
-	// Apply active feature windows for this product.
+	// Apply active feature windows for this product, then merge any manually
+	// requested features on top.
 	windowFeatures, windowMap := svc.applyFeatureWindows(ctx, orgID, productID, data.IsTrial)
-	allFeatures := dedupeFeatures(windowFeatures)
+	allFeatures := dedupeFeatures(append(windowFeatures, data.Features...))
 
 	expiresAt := pgtype.Timestamptz{}
 	if data.IsTrial {
@@ -90,6 +91,8 @@ func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data Creati
 			days = defaultTrialDays
 		}
 		expiresAt = pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, days), Valid: true}
+	} else if data.ExpiresAt != nil {
+		expiresAt = pgtype.Timestamptz{Time: (*data.ExpiresAt).UTC(), Valid: true}
 	}
 
 	_, err = svc.repo.CreateLicenseTx(ctx, db.CreateLicenseParams{

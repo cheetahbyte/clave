@@ -19,6 +19,7 @@ SELECT
     lt.created_at,
     lt.expires_at,
     lt.is_trial,
+    lt.features,
     p.name AS product_name,
     (SELECT count(*) FROM activations WHERE license_id = lt.id AND deactivated_at IS NULL) AS activation_count
 FROM licenses lt
@@ -26,6 +27,57 @@ JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
 ORDER BY lt.created_at DESC
 LIMIT sqlc.arg('limit');
+
+-- name: GetAdminLicensesByEmail :many
+SELECT
+    lt.id,
+    lt.customer_email,
+    lt.is_active,
+    lt.max_activations,
+    lt.created_at,
+    lt.expires_at,
+    lt.is_trial,
+    lt.features,
+    p.name AS product_name,
+    p.id AS product_id,
+    (SELECT count(*) FROM activations WHERE license_id = lt.id AND deactivated_at IS NULL) AS activation_count
+FROM licenses lt
+JOIN products p ON lt.product_id = p.id
+WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
+  AND lower(lt.customer_email) = lower(sqlc.arg('customer_email'))
+ORDER BY lt.created_at DESC;
+
+-- name: GetAdminLicenseByDigest :one
+SELECT
+    lt.id,
+    lt.customer_email,
+    lt.is_active,
+    lt.max_activations,
+    lt.created_at,
+    lt.expires_at,
+    lt.is_trial,
+    lt.features,
+    p.name AS product_name,
+    p.id AS product_id,
+    (SELECT count(*) FROM activations WHERE license_id = lt.id AND deactivated_at IS NULL) AS activation_count
+FROM licenses lt
+JOIN products p ON lt.product_id = p.id
+WHERE lt.lookup_digest = sqlc.arg('lookup_digest')
+  AND lt.organization_id = sqlc.arg('organization_id')::uuid;
+
+-- name: RevokeAdminLicense :one
+UPDATE licenses SET is_active = false
+WHERE id = sqlc.arg('id')::uuid
+  AND organization_id = sqlc.arg('organization_id')::uuid
+  AND is_active = true
+RETURNING id;
+
+-- name: RevokeAdminLicenseByDigest :one
+UPDATE licenses SET is_active = false
+WHERE lookup_digest = sqlc.arg('lookup_digest')
+  AND organization_id = sqlc.arg('organization_id')::uuid
+  AND is_active = true
+RETURNING id;
 
 -- name: CountAdminLicensesByOrganization :one
 SELECT count(*)

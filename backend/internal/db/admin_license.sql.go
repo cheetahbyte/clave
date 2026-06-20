@@ -53,6 +53,63 @@ func (q *Queries) CountAdminLicensesByOrganization(ctx context.Context, arg Coun
 	return count, err
 }
 
+const getAdminLicenseByDigest = `-- name: GetAdminLicenseByDigest :one
+SELECT
+    lt.id,
+    lt.customer_email,
+    lt.is_active,
+    lt.max_activations,
+    lt.created_at,
+    lt.expires_at,
+    lt.is_trial,
+    lt.features,
+    p.name AS product_name,
+    p.id AS product_id,
+    (SELECT count(*) FROM activations WHERE license_id = lt.id AND deactivated_at IS NULL) AS activation_count
+FROM licenses lt
+JOIN products p ON lt.product_id = p.id
+WHERE lt.lookup_digest = $1
+  AND lt.organization_id = $2::uuid
+`
+
+type GetAdminLicenseByDigestParams struct {
+	LookupDigest   []byte    `json:"lookup_digest"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+type GetAdminLicenseByDigestRow struct {
+	ID              uuid.UUID          `json:"id"`
+	CustomerEmail   string             `json:"customer_email"`
+	IsActive        bool               `json:"is_active"`
+	MaxActivations  int32              `json:"max_activations"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	IsTrial         bool               `json:"is_trial"`
+	Features        []string           `json:"features"`
+	ProductName     string             `json:"product_name"`
+	ProductID       uuid.UUID          `json:"product_id"`
+	ActivationCount int64              `json:"activation_count"`
+}
+
+func (q *Queries) GetAdminLicenseByDigest(ctx context.Context, arg GetAdminLicenseByDigestParams) (GetAdminLicenseByDigestRow, error) {
+	row := q.db.QueryRow(ctx, getAdminLicenseByDigest, arg.LookupDigest, arg.OrganizationID)
+	var i GetAdminLicenseByDigestRow
+	err := row.Scan(
+		&i.ID,
+		&i.CustomerEmail,
+		&i.IsActive,
+		&i.MaxActivations,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.IsTrial,
+		&i.Features,
+		&i.ProductName,
+		&i.ProductID,
+		&i.ActivationCount,
+	)
+	return i, err
+}
+
 const getAdminLicenseDetailByOrganization = `-- name: GetAdminLicenseDetailByOrganization :one
 SELECT
     lt.id,
@@ -107,6 +164,77 @@ func (q *Queries) GetAdminLicenseDetailByOrganization(ctx context.Context, arg G
 		&i.ActivationCount,
 	)
 	return i, err
+}
+
+const getAdminLicensesByEmail = `-- name: GetAdminLicensesByEmail :many
+SELECT
+    lt.id,
+    lt.customer_email,
+    lt.is_active,
+    lt.max_activations,
+    lt.created_at,
+    lt.expires_at,
+    lt.is_trial,
+    lt.features,
+    p.name AS product_name,
+    p.id AS product_id,
+    (SELECT count(*) FROM activations WHERE license_id = lt.id AND deactivated_at IS NULL) AS activation_count
+FROM licenses lt
+JOIN products p ON lt.product_id = p.id
+WHERE lt.organization_id = $1::uuid
+  AND lower(lt.customer_email) = lower($2)
+ORDER BY lt.created_at DESC
+`
+
+type GetAdminLicensesByEmailParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	CustomerEmail  string    `json:"customer_email"`
+}
+
+type GetAdminLicensesByEmailRow struct {
+	ID              uuid.UUID          `json:"id"`
+	CustomerEmail   string             `json:"customer_email"`
+	IsActive        bool               `json:"is_active"`
+	MaxActivations  int32              `json:"max_activations"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+	IsTrial         bool               `json:"is_trial"`
+	Features        []string           `json:"features"`
+	ProductName     string             `json:"product_name"`
+	ProductID       uuid.UUID          `json:"product_id"`
+	ActivationCount int64              `json:"activation_count"`
+}
+
+func (q *Queries) GetAdminLicensesByEmail(ctx context.Context, arg GetAdminLicensesByEmailParams) ([]GetAdminLicensesByEmailRow, error) {
+	rows, err := q.db.Query(ctx, getAdminLicensesByEmail, arg.OrganizationID, arg.CustomerEmail)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetAdminLicensesByEmailRow{}
+	for rows.Next() {
+		var i GetAdminLicensesByEmailRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CustomerEmail,
+			&i.IsActive,
+			&i.MaxActivations,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.IsTrial,
+			&i.Features,
+			&i.ProductName,
+			&i.ProductID,
+			&i.ActivationCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getAdminOverviewStatsByOrganization = `-- name: GetAdminOverviewStatsByOrganization :one
@@ -394,6 +522,7 @@ SELECT
     lt.created_at,
     lt.expires_at,
     lt.is_trial,
+    lt.features,
     p.name AS product_name,
     (SELECT count(*) FROM activations WHERE license_id = lt.id AND deactivated_at IS NULL) AS activation_count
 FROM licenses lt
@@ -416,6 +545,7 @@ type ListAdminRecentLicensesByOrganizationRow struct {
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
 	IsTrial         bool               `json:"is_trial"`
+	Features        []string           `json:"features"`
 	ProductName     string             `json:"product_name"`
 	ActivationCount int64              `json:"activation_count"`
 }
@@ -437,6 +567,7 @@ func (q *Queries) ListAdminRecentLicensesByOrganization(ctx context.Context, arg
 			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.IsTrial,
+			&i.Features,
 			&i.ProductName,
 			&i.ActivationCount,
 		); err != nil {
@@ -528,4 +659,44 @@ func (q *Queries) ListAdminTrialsByOrganization(ctx context.Context, arg ListAdm
 		return nil, err
 	}
 	return items, nil
+}
+
+const revokeAdminLicense = `-- name: RevokeAdminLicense :one
+UPDATE licenses SET is_active = false
+WHERE id = $1::uuid
+  AND organization_id = $2::uuid
+  AND is_active = true
+RETURNING id
+`
+
+type RevokeAdminLicenseParams struct {
+	ID             uuid.UUID `json:"id"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) RevokeAdminLicense(ctx context.Context, arg RevokeAdminLicenseParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, revokeAdminLicense, arg.ID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const revokeAdminLicenseByDigest = `-- name: RevokeAdminLicenseByDigest :one
+UPDATE licenses SET is_active = false
+WHERE lookup_digest = $1
+  AND organization_id = $2::uuid
+  AND is_active = true
+RETURNING id
+`
+
+type RevokeAdminLicenseByDigestParams struct {
+	LookupDigest   []byte    `json:"lookup_digest"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) RevokeAdminLicenseByDigest(ctx context.Context, arg RevokeAdminLicenseByDigestParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, revokeAdminLicenseByDigest, arg.LookupDigest, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
