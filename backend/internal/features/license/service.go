@@ -69,6 +69,10 @@ func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data Creati
 	email := strings.ToLower(strings.TrimSpace(data.CustomerEmail))
 	productUUID := pgtype.UUID{Bytes: [16]byte(productID), Valid: true}
 
+	// Apply active feature windows for this product.
+	windowFeatures, windowMap := svc.applyFeatureWindows(ctx, orgID, productID, data.IsTrial)
+	allFeatures := dedupeFeatures(windowFeatures)
+
 	expiresAt := pgtype.Timestamptz{}
 	if data.IsTrial {
 		// Enforce one trial per customer + product.
@@ -97,7 +101,8 @@ func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data Creati
 		CustomerEmail:  email,
 		ExpiresAt:      expiresAt,
 		IsTrial:        data.IsTrial,
-	}, data.IsTrial, data.MaxActivations)
+		Features:       allFeatures,
+	}, data.IsTrial, data.MaxActivations, allFeatures, windowMap)
 	if err != nil {
 		slog.Error("failed to create license", "err", err.Error())
 		return CreationResponse{}, errors.New("failed to create license")
@@ -132,7 +137,11 @@ func (svc *Service) NewTrialLicense(ctx context.Context, orgID uuid.UUID, produc
 	}
 	expiresAt := pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, trialDays), Valid: true}
 
-	_, err = svc.repo.Create(ctx, db.CreateLicenseParams{
+	// Apply active feature windows for trials.
+	windowFeatures, windowMap := svc.applyFeatureWindows(ctx, orgID, productID, true)
+	allFeatures := dedupeFeatures(windowFeatures)
+
+	row, err := svc.repo.Create(ctx, db.CreateLicenseParams{
 		OrganizationID: orgID,
 		ProductID:      pgtype.UUID{Bytes: [16]byte(productID), Valid: true},
 		MaxActivations: 1,
@@ -142,6 +151,7 @@ func (svc *Service) NewTrialLicense(ctx context.Context, orgID uuid.UUID, produc
 		ExpiresAt:      expiresAt,
 		IsTrial:        true,
 		TrialHwidHash:  hwidHash,
+		Features:       allFeatures,
 	})
 	if err != nil {
 		if IsUniqueViolation(err) {
@@ -149,6 +159,11 @@ func (svc *Service) NewTrialLicense(ctx context.Context, orgID uuid.UUID, produc
 		}
 		slog.Error("failed to create trial license", "err", err.Error())
 		return nil, errors.New("failed to create trial license")
+	}
+
+	// Sync license_features join table.
+	if syncErr := svc.syncLicenseFeatures(ctx, svc.repo.q, row.ID, orgID, productID, allFeatures, windowMap); syncErr != nil {
+		slog.Error("failed to sync license features", "err", syncErr.Error())
 	}
 
 	return &CreationResponse{

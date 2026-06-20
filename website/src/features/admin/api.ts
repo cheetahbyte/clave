@@ -776,3 +776,99 @@ export function deleteAdminDevice(deviceId: string): Promise<{ ok: boolean }> {
     method: "DELETE",
   });
 }
+
+// ============ Product Features ============
+
+export interface ProductFeature {
+  id: string;
+  productId: string;
+  key: string;
+  name: string | null;
+  description: string | null;
+  archived: boolean;
+  createdAt: string | null;
+}
+
+export function listProductFeatures(productId: string): Promise<ProductFeature[]> {
+  return adminFetch<ProductFeature[]>(`/api/v1/admin/products/${encodeURIComponent(productId)}/features`);
+}
+
+export function createProductFeature(
+  productId: string,
+  data: { key: string; name?: string; description?: string },
+): Promise<ProductFeature> {
+  return adminFetch<ProductFeature>(`/api/v1/admin/products/${encodeURIComponent(productId)}/features`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateProductFeature(
+  productId: string,
+  featureId: string,
+  data: { name?: string; description?: string },
+): Promise<ProductFeature> {
+  return adminFetch<ProductFeature>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/features/${encodeURIComponent(featureId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export function deleteProductFeature(productId: string, featureId: string): Promise<{ ok: boolean }> {
+  return adminFetch<{ ok: boolean }>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/features/${encodeURIComponent(featureId)}`,
+    { method: "DELETE" },
+  );
+}
+
+// ============ Feature Windows ============
+
+export interface FeatureWindow {
+  id: string;
+  productId: string;
+  featureKey: string;
+  featureId: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  appliesTo: string;
+  isActive: boolean;
+  createdAt: string | null;
+}
+
+export function listFeatureWindows(productId: string): Promise<FeatureWindow[]> {
+  return adminFetch<FeatureWindow[]>(`/api/v1/admin/products/${encodeURIComponent(productId)}/feature-windows`);
+}
+
+export function createFeatureWindow(
+  productId: string,
+  data: { featureKey: string; startsAt: string; endsAt: string; appliesTo: string; isActive: boolean },
+): Promise<FeatureWindow> {
+  return adminFetch<FeatureWindow>(`/api/v1/admin/products/${encodeURIComponent(productId)}/feature-windows`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateFeatureWindow(
+  productId: string,
+  windowId: string,
+  data: { featureKey: string; startsAt: string; endsAt: string; appliesTo: string; isActive: boolean },
+): Promise<FeatureWindow> {
+  return adminFetch<FeatureWindow>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/feature-windows/${encodeURIComponent(windowId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export function deleteFeatureWindow(productId: string, windowId: string): Promise<{ ok: boolean }> {
+  return adminFetch<{ ok: boolean }>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/feature-windows/${encodeURIComponent(windowId)}`,
+    { method: "DELETE" },
+  );
+}

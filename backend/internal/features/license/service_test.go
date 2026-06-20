@@ -65,3 +65,31 @@ func TestFormatKeyWithIrregularGroup(t *testing.T) {
 		t.Fatalf("expected '%s', got '%s'", expected, result)
 	}
 }
+
+func TestDedupeFeatures(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{"empty", []string{}, []string{}},
+		{"no dups", []string{"pro", "beta"}, []string{"pro", "beta"}},
+		{"dups removed", []string{"pro", "beta", "pro"}, []string{"pro", "beta"}},
+		{"empty strings removed", []string{"pro", "", "beta", " "}, []string{"pro", "beta"}},
+		{"whitespace trimmed", []string{" pro ", "beta"}, []string{"pro", "beta"}},
+		{"order preserved", []string{"beta", "pro", "beta"}, []string{"beta", "pro"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := dedupeFeatures(tt.input)
+			if len(result) != len(tt.expected) {
+				t.Fatalf("expected %v, got %v", tt.expected, result)
+			}
+			for i, v := range result {
+				if v != tt.expected[i] {
+					t.Fatalf("expected %v, got %v", tt.expected, result)
+				}
+			}
+		})
+	}
+}

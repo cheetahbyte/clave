@@ -110,17 +110,22 @@ func (svc *Service) CreateChannel(ctx context.Context, orgID, productID uuid.UUI
 		d := req.Description
 		desc = &d
 	}
+	normalizedFeatures := normalizeFeatures(req.RequiredFeatures)
 	ch, err := svc.repo.CreateUpdateChannel(ctx, db.CreateUpdateChannelParams{
 		OrganizationID:   orgID,
 		ProductID:        productID,
 		Name:             name,
 		IsDefault:        req.IsDefault,
-		RequiredFeatures: normalizeFeatures(req.RequiredFeatures),
+		RequiredFeatures: normalizedFeatures,
 		Description:      desc,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	// Sync update_channel_required_features join table.
+	svc.syncChannelRequiredFeatures(ctx, ch.ID, orgID, productID, normalizedFeatures)
+
 	dto := channelToDTO(ch)
 	return &dto, nil
 }
@@ -135,19 +140,52 @@ func (svc *Service) UpdateChannel(ctx context.Context, orgID, channelID uuid.UUI
 		d := req.Description
 		desc = &d
 	}
+	normalizedFeatures := normalizeFeatures(req.RequiredFeatures)
 	ch, err := svc.repo.UpdateUpdateChannel(ctx, db.UpdateUpdateChannelParams{
 		ID:               channelID,
 		OrganizationID:   orgID,
 		Name:             name,
 		IsDefault:        req.IsDefault,
-		RequiredFeatures: normalizeFeatures(req.RequiredFeatures),
+		RequiredFeatures: normalizedFeatures,
 		Description:      desc,
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	// Sync update_channel_required_features join table.
+	svc.syncChannelRequiredFeatures(ctx, ch.ID, orgID, ch.ProductID, normalizedFeatures)
+
 	dto := channelToDTO(ch)
 	return &dto, nil
+}
+
+// syncChannelRequiredFeatures keeps the update_channel_required_features join
+// table in sync with the TEXT[] required_features column on update_channels.
+func (svc *Service) syncChannelRequiredFeatures(ctx context.Context, channelID, orgID, productID uuid.UUID, featureKeys []string) {
+	_ = svc.repo.q.SetChannelRequiredFeatures(ctx, channelID)
+	for _, key := range featureKeys {
+		pf, err := svc.repo.q.GetProductFeatureByKey(ctx, db.GetProductFeatureByKeyParams{
+			OrganizationID: orgID,
+			ProductID:      productID,
+			Key:            key,
+		})
+		if err != nil {
+			// Feature not in catalog — create it automatically.
+			pf, err = svc.repo.q.CreateProductFeature(ctx, db.CreateProductFeatureParams{
+				OrganizationID: orgID,
+				ProductID:      productID,
+				Key:            key,
+			})
+			if err != nil {
+				continue
+			}
+		}
+		_ = svc.repo.q.AddChannelRequiredFeature(ctx, db.AddChannelRequiredFeatureParams{
+			ChannelID: channelID,
+			FeatureID: pf.ID,
+		})
+	}
 }
 
 func (svc *Service) DeleteChannel(ctx context.Context, orgID, channelID uuid.UUID) error {

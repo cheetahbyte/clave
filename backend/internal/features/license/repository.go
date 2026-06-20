@@ -86,7 +86,7 @@ func (r *Repository) GetOrganizationById(ctx context.Context, id uuid.UUID) (db.
 	return r.q.GetOrganizationById(ctx, id)
 }
 
-func (r *Repository) CreateLicenseTx(ctx context.Context, params db.CreateLicenseParams, isTrial bool, maxActivations int32) (db.License, error) {
+func (r *Repository) CreateLicenseTx(ctx context.Context, params db.CreateLicenseParams, isTrial bool, maxActivations int32, features []string, windowMap map[uuid.UUID]uuid.UUID) (db.License, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return db.License{}, err
@@ -98,6 +98,42 @@ func (r *Repository) CreateLicenseTx(ctx context.Context, params db.CreateLicens
 	row, err := qtx.CreateLicense(ctx, params)
 	if err != nil {
 		return db.License{}, err
+	}
+
+	// Sync license_features join table inside the transaction.
+	for _, key := range features {
+		pf, ferr := qtx.GetProductFeatureByKey(ctx, db.GetProductFeatureByKeyParams{
+			OrganizationID: params.OrganizationID,
+			ProductID:      uuid.UUID(params.ProductID.Bytes),
+			Key:            key,
+		})
+		if ferr != nil {
+			// Feature not in catalog — create it automatically.
+			pf, ferr = qtx.CreateProductFeature(ctx, db.CreateProductFeatureParams{
+				OrganizationID: params.OrganizationID,
+				ProductID:      uuid.UUID(params.ProductID.Bytes),
+				Key:            key,
+			})
+			if ferr != nil {
+				return db.License{}, ferr
+			}
+		}
+
+		source := "manual"
+		var windowID pgtype.UUID
+		if wid, ok := windowMap[pf.ID]; ok {
+			source = "window"
+			windowID = pgtype.UUID{Bytes: wid, Valid: true}
+		}
+
+		if err := qtx.AddLicenseFeature(ctx, db.AddLicenseFeatureParams{
+			LicenseID:      row.ID,
+			FeatureID:      pf.ID,
+			Source:         source,
+			SourceWindowID: windowID,
+		}); err != nil {
+			return db.License{}, err
+		}
 	}
 
 	if !isTrial {

@@ -90,6 +90,14 @@ type License struct {
 	TrialHwidHash  []byte             `json:"trial_hwid_hash"`
 }
 
+type LicenseFeature struct {
+	LicenseID      uuid.UUID          `json:"license_id"`
+	FeatureID      uuid.UUID          `json:"feature_id"`
+	GrantedAt      pgtype.Timestamptz `json:"granted_at"`
+	Source         string             `json:"source"`
+	SourceWindowID pgtype.UUID        `json:"source_window_id"`
+}
+
 type McpToken struct {
 	OrganizationID uuid.UUID          `json:"organization_id"`
 	TokenID        string             `json:"token_id"`
@@ -134,6 +142,29 @@ type Product struct {
 	ID             uuid.UUID          `json:"id"`
 	OrganizationID uuid.UUID          `json:"organization_id"`
 	LogoUrl        *string            `json:"logo_url"`
+}
+
+type ProductFeature struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	ProductID      uuid.UUID          `json:"product_id"`
+	Key            string             `json:"key"`
+	Name           *string            `json:"name"`
+	Description    *string            `json:"description"`
+	ArchivedAt     pgtype.Timestamptz `json:"archived_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type ProductFeatureWindow struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	ProductID      uuid.UUID          `json:"product_id"`
+	FeatureID      uuid.UUID          `json:"feature_id"`
+	StartsAt       pgtype.Timestamptz `json:"starts_at"`
+	EndsAt         pgtype.Timestamptz `json:"ends_at"`
+	AppliesTo      string             `json:"applies_to"`
+	IsActive       bool               `json:"is_active"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type ProductStorageConfig struct {
@@ -206,6 +237,11 @@ type UpdateChannel struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	RequiredFeatures []string           `json:"required_features"`
 	Description      *string            `json:"description"`
+}
+
+type UpdateChannelRequiredFeature struct {
+	ChannelID uuid.UUID `json:"channel_id"`
+	FeatureID uuid.UUID `json:"feature_id"`
 }
 
 type UpdateCheck struct {

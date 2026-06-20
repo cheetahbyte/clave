@@ -446,3 +446,195 @@ func (h *Handler) AdminDeleteDevice(w http.ResponseWriter, r *http.Request) {
 	h.audit(r, "device.removed", "device", &deviceID)
 	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
+
+// ============ Product Features ============
+
+func (h *Handler) AdminListProductFeatures(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	productID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+	features, err := h.svc.ListProductFeatures(r.Context(), orgID, productID)
+	if err != nil {
+		slog.Error("list product features failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, features)
+}
+
+func (h *Handler) AdminCreateProductFeature(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	productID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+	var body CreateProductFeatureRequest
+	if !helpers.DecodeValidated(w, r, &body) {
+		return
+	}
+	feature, err := h.svc.CreateProductFeature(r.Context(), orgID, productID, body)
+	if err != nil {
+		slog.Error("create product feature failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	h.audit(r, "product_feature.created", "product_feature", nil)
+	helpers.WriteJSON(w, http.StatusCreated, feature)
+}
+
+func (h *Handler) AdminUpdateProductFeature(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	featureID, err := uuid.Parse(chi.URLParam(r, "featureId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid feature id"})
+		return
+	}
+	var body UpdateProductFeatureRequest
+	if !helpers.DecodeValidated(w, r, &body) {
+		return
+	}
+	feature, err := h.svc.UpdateProductFeature(r.Context(), orgID, featureID, body)
+	if err != nil {
+		slog.Error("update product feature failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	h.audit(r, "product_feature.updated", "product_feature", &featureID)
+	helpers.WriteJSON(w, http.StatusOK, feature)
+}
+
+func (h *Handler) AdminDeleteProductFeature(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	featureID, err := uuid.Parse(chi.URLParam(r, "featureId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid feature id"})
+		return
+	}
+	if err := h.svc.DeleteProductFeature(r.Context(), orgID, featureID); err != nil {
+		slog.Error("delete product feature failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	h.audit(r, "product_feature.deleted", "product_feature", &featureID)
+	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// ============ Feature Windows ============
+
+func (h *Handler) AdminListFeatureWindows(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	productID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+	windows, err := h.svc.ListFeatureWindows(r.Context(), orgID, productID)
+	if err != nil {
+		slog.Error("list feature windows failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, windows)
+}
+
+func (h *Handler) AdminCreateFeatureWindow(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	productID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
+		return
+	}
+	var body CreateFeatureWindowRequest
+	if !helpers.DecodeValidated(w, r, &body) {
+		return
+	}
+	window, err := h.svc.CreateFeatureWindow(r.Context(), orgID, productID, body)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "feature not found"})
+			return
+		}
+		slog.Error("create feature window failed", "err", err)
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	h.audit(r, "feature_window.created", "feature_window", nil)
+	helpers.WriteJSON(w, http.StatusCreated, window)
+}
+
+func (h *Handler) AdminUpdateFeatureWindow(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	windowID, err := uuid.Parse(chi.URLParam(r, "windowId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid window id"})
+		return
+	}
+	var body UpdateFeatureWindowRequest
+	if !helpers.DecodeValidated(w, r, &body) {
+		return
+	}
+	window, err := h.svc.UpdateFeatureWindow(r.Context(), orgID, windowID, body)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "feature window not found"})
+			return
+		}
+		slog.Error("update feature window failed", "err", err)
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	h.audit(r, "feature_window.updated", "feature_window", &windowID)
+	helpers.WriteJSON(w, http.StatusOK, window)
+}
+
+func (h *Handler) AdminDeleteFeatureWindow(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	windowID, err := uuid.Parse(chi.URLParam(r, "windowId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid window id"})
+		return
+	}
+	if err := h.svc.DeleteFeatureWindow(r.Context(), orgID, windowID); err != nil {
+		slog.Error("delete feature window failed", "err", err)
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	h.audit(r, "feature_window.deleted", "feature_window", &windowID)
+	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}

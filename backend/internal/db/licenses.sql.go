@@ -55,8 +55,8 @@ func (q *Queries) CountTrialsByHwidProduct(ctx context.Context, arg CountTrialsB
 }
 
 const createLicense = `-- name: CreateLicense :one
-INSERT INTO licenses(organization_id, product_id, max_activations, lookup_digest, key_phc, customer_email, expires_at, is_trial, trial_hwid_hash)
-values($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO licenses(organization_id, product_id, max_activations, lookup_digest, key_phc, customer_email, expires_at, is_trial, trial_hwid_hash, features)
+values($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 returning lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash
 `
 
@@ -70,6 +70,7 @@ type CreateLicenseParams struct {
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	IsTrial        bool               `json:"is_trial"`
 	TrialHwidHash  []byte             `json:"trial_hwid_hash"`
+	Features       []string           `json:"features"`
 }
 
 func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (License, error) {
@@ -83,6 +84,7 @@ func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (L
 		arg.ExpiresAt,
 		arg.IsTrial,
 		arg.TrialHwidHash,
+		arg.Features,
 	)
 	var i License
 	err := row.Scan(

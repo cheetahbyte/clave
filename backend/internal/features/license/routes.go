@@ -18,4 +18,16 @@ func (h *Handler) RegisterAdminRoutes(r chi.Router) {
 	r.Get("/products/{id}", h.AdminGetProduct)
 	r.Patch("/products/{id}", h.AdminUpdateProduct)
 	r.Delete("/products/{id}", h.AdminDeleteProduct)
+
+	// Product feature catalog
+	r.Get("/products/{id}/features", h.AdminListProductFeatures)
+	r.Post("/products/{id}/features", h.AdminCreateProductFeature)
+	r.Patch("/products/{id}/features/{featureId}", h.AdminUpdateProductFeature)
+	r.Delete("/products/{id}/features/{featureId}", h.AdminDeleteProductFeature)
+
+	// Scheduled feature windows
+	r.Get("/products/{id}/feature-windows", h.AdminListFeatureWindows)
+	r.Post("/products/{id}/feature-windows", h.AdminCreateFeatureWindow)
+	r.Patch("/products/{id}/feature-windows/{windowId}", h.AdminUpdateFeatureWindow)
+	r.Delete("/products/{id}/feature-windows/{windowId}", h.AdminDeleteFeatureWindow)
 }

@@ -165,7 +165,7 @@ func (svc *Service) AdminUpdateLicense(ctx context.Context, orgID, id uuid.UUID,
 	if req.ExpiresAt != nil {
 		expires = pgtype.Timestamptz{Time: *req.ExpiresAt, Valid: true}
 	}
-	features := req.Features
+	features := dedupeFeatures(req.Features)
 	if features == nil {
 		features = []string{}
 	}
@@ -184,6 +184,21 @@ func (svc *Service) AdminUpdateLicense(ctx context.Context, orgID, id uuid.UUID,
 			return nil, ErrNotFound
 		}
 		return nil, err
+	}
+
+	// Sync license_features join table: clear old, insert new.
+	lic, _ := svc.repo.GetByID(ctx, id)
+	if lic != nil {
+		_ = svc.repo.q.SetLicenseFeatures(ctx, id)
+		for _, key := range features {
+			_ = svc.repo.q.AddLicenseFeatureByKey(ctx, db.AddLicenseFeatureByKeyParams{
+				LicenseID:      id,
+				OrganizationID: orgID,
+				Source:         "manual",
+				ProductID:      lic.ProductID,
+				Key:            key,
+			})
+		}
 	}
 
 	return svc.AdminLicenseDetail(ctx, orgID, id)
