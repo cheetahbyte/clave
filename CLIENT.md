@@ -265,7 +265,7 @@ The `clientId` field enables deterministic staged rollouts. Send a stable, uniqu
 
 `GET /api/v1/updates/products/<productId>/<platform>/<channel>/feed.json`
 
-A static JSON feed listing every published release for a product/platform/channel, with full artifact and rollout metadata. Use this when you want to drive updates yourself rather than calling `/updates/check` per launch, or on platforms without a Sparkle-style framework. The `/updates/check` endpoint is the simpler choice for most clients; reach for the feed when you need the whole release list at once.
+A static JSON feed listing every published release for a product/platform/channel, with full artifact and rollout metadata. Use this when you want to drive updates yourself rather than calling `/updates/check` per launch. The `/updates/check` endpoint is the simpler choice for most clients; reach for the feed when you need the whole release list at once.
 
 **Channel gating**: Channels with required features need a license token. Pass it via `Authorization: Bearer <jwt>`. The query-string form (`?token=<jwt>`) is not accepted, since the token would leak into the artifact URLs the feed returns (and from there into proxy, cache, and client logs).
 
@@ -273,7 +273,7 @@ A static JSON feed listing every published release for a product/platform/channe
 ```json
 {
   "schema": "clave.native.feed/v1",
-  "product": "MyApp",
+  "product": "6f1c2e8a-9b3d-4f7a-8c21-2a5e0d4b7f90",
   "platform": "macos",
   "channel": "stable",
   "generatedAt": "2026-01-01T00:00:00Z",
@@ -295,8 +295,7 @@ A static JSON feed listing every published release for a product/platform/channe
           "os": "macos",
           "url": "https://releases.example.com/myapp-1.1.0-arm64.dmg",
           "sizeBytes": 52428800,
-          "sha256": "abc123...",
-          "signature": "..."
+          "sha256": "abc123..."
         }
       ]
     }
@@ -304,34 +303,4 @@ A static JSON feed listing every published release for a product/platform/channe
 }
 ```
 
-Releases are ordered newest-first. Honor `mandatory` and `rolloutPercentage` yourself — the feed lists every release, so you decide which one to offer. Pick the artifact whose `arch`/`os` matches the running machine. `signature` is the Ed25519 signature when artifact signing is configured (see [Sparkle Appcast](#sparkle-appcast-macos)).
-
----
-
-### Sparkle Appcast (macOS)
-
-Full-file Sparkle appcast XML is available for macOS apps. Point `SUFeedURL` to:
-
-```
-https://your-instance/api/v1/updates/products/<productId>/macos/<channel>/appcast.xml
-```
-
-**Architecture**: Append `?arch=arm64` or `?arch=x64` to select a specific artifact variant. The feed picks an exact arch match first, then falls back to `universal`. Omitting `arch` defaults to `universal`.
-
-**Channel gating**: Channels with required features need a license token. Pass it via `Authorization: Bearer <jwt>`. The query-string form (`?token=<jwt>`) is no longer accepted, since license JWTs in URLs end up in proxy, cache, and client logs.
-
-**What's included**: Only full-file downloadable artifacts (`dmg`, `zip`, `pkg`). Delta artifacts are not served.
-
-**Example**:
-```
-SUFeedURL = https://your-instance/api/v1/updates/products/<productId>/macos/stable/appcast.xml?arch=arm64
-```
-
-**Ed25519 Signing**: Set `SPARKLE_ED25519_PUBLIC_KEY` and `SPARKLE_ED25519_PRIVATE_KEY` env vars (base64 raw key bytes) on the server. Artifacts uploaded while these are configured will receive a `sparkle:edSignature` in the appcast. Retrieve the public key at `GET /api/v1/updates/sparkle/public-key` and set it as `SUPublicEDKey` in your macOS app's `Info.plist`.
-
-Generate keys via OpenSSL:
-```
-openssl genpkey -algorithm Ed25519 -out sparkle_private.pem
-openssl pkey -in sparkle_private.pem -pubout -out sparkle_public.pem
-# Extract raw base64 keys (no headers)
-```
+Releases are ordered newest-first. Honor `mandatory` and `rolloutPercentage` yourself — the feed lists every release, so you decide which one to offer. Pick the artifact whose `arch`/`os` matches the running machine. `product` is the product's UUID.

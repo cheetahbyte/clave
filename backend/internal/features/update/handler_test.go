@@ -127,54 +127,6 @@ func TestGenerateNativeFeedDoesNotAppendToken(t *testing.T) {
 	}
 }
 
-func TestGenerateSparkleAppcastDoesNotAppendToken(t *testing.T) {
-	product := db.Product{ID: uuid.New(), Name: "TestApp"}
-	release := db.UpdateRelease{
-		ID:             uuid.New(),
-		OrganizationID: uuid.New(),
-		ProductID:      product.ID,
-		ChannelID:      uuid.New(),
-		Platform:       "macos",
-		Version:        "1.2.3",
-		BuildNumber:    strPtr("100"),
-		Status:         "published",
-	}
-	downloadURL := "https://releases.example.com/testapp-1.2.3.dmg"
-	artifact := db.UpdateArtifact{
-		ID:             uuid.New(),
-		ReleaseID:      release.ID,
-		ArtifactType:   "dmg",
-		Os:             "macos",
-		Arch:           "arm64",
-		Url:            downloadURL,
-		ChecksumSha256: strPtr("deadbeef"),
-	}
-	policy := db.UpdateReleasePolicy{
-		ReleaseID:         release.ID,
-		Mandatory:         false,
-		RolloutPercentage: 100,
-	}
-
-	inputs := []SparkleFeedInput{{
-		Release:   release,
-		Artifacts: []db.UpdateArtifact{artifact},
-		Policy:    policy,
-	}}
-
-	body, err := GenerateSparkleAppcast(product, "stable", inputs, "arm64")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	out := string(body)
-	if strings.Contains(out, "token=") {
-		t.Fatalf("appcast must not contain 'token=', got: %s", out)
-	}
-	if !strings.Contains(out, downloadURL) {
-		t.Fatalf("expected appcast to contain the original download URL %q, got: %s", downloadURL, out)
-	}
-}
-
 func TestGenerateNativeFeedPreservesAllArtifactURLs(t *testing.T) {
 	product := db.Product{ID: uuid.New(), Name: "TestApp"}
 	release := db.UpdateRelease{

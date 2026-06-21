@@ -34,8 +34,6 @@ func (h *Handler) RegisterAdminRoutes(r chi.Router) {
 
 func (h *Handler) RegisterPublicRoutes(r chi.Router) {
 	r.Get("/updates/products/{productId}/{platform}/{channel}/feed.json", h.NativeFeed)
-	r.Get("/updates/products/{productId}/macos/{channel}/appcast.xml", h.SparkleFeed)
-	r.Get("/updates/sparkle/public-key", h.SparklePublicKey)
 	r.Get("/updates/releases/{releaseId}/changelog.html", h.Changelog)
 	r.Get("/updates/artifacts/{artifactId}/download", h.DownloadArtifact)
 }

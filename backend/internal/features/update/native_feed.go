@@ -57,7 +57,7 @@ const nativeFeedSchema = "clave.native.feed/v1"
 func GenerateNativeFeed(product db.Product, platform, channel string, releases []NativeFeedReleaseInput) ([]byte, error) {
 	feed := NativeFeed{
 		Schema:      nativeFeedSchema,
-		Product:     product.Name,
+		Product:     product.ID.String(),
 		Platform:    platform,
 		Channel:     channel,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),

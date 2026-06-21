@@ -45,9 +45,6 @@ type Config struct {
 
 	UpdateArtifactStoragePath string
 
-	SparkleEd25519PublicKey  ed25519.PublicKey
-	SparkleEd25519PrivateKey ed25519.PrivateKey
-
 	MigrationsDir          string
 	OTELEnabled            bool
 	OTELServiceName        string
@@ -110,22 +107,6 @@ func Load() (*Config, error) {
 
 	if cfg.SelfServiceTokenPepper == "" {
 		return nil, fmt.Errorf("SELF_SERVICE_TOKEN_PEPPER is required")
-	}
-
-	if pk := os.Getenv("SPARKLE_ED25519_PUBLIC_KEY"); pk != "" {
-		pub, perr := decodeEd25519PublicKey(pk)
-		if perr != nil {
-			return nil, fmt.Errorf("sparkle ed25519 public key: %w", perr)
-		}
-		cfg.SparkleEd25519PublicKey = pub
-	}
-
-	if sk := os.Getenv("SPARKLE_ED25519_PRIVATE_KEY"); sk != "" {
-		priv, serr := decodeEd25519PrivateKey(sk)
-		if serr != nil {
-			return nil, fmt.Errorf("sparkle ed25519 private key: %w", serr)
-		}
-		cfg.SparkleEd25519PrivateKey = priv
 	}
 
 	cfg.AdminTOTPEncryptionKey, err = loadTOTPKey(cfg.Dev)

@@ -17,12 +17,11 @@ type DeliveryProtocol string
 
 const (
 	DeliveryClaveNative DeliveryProtocol = "clave_native"
-	DeliverySparkle     DeliveryProtocol = "sparkle"
 )
 
 func ValidDeliveryProtocol(s string) bool {
 	switch DeliveryProtocol(s) {
-	case DeliveryClaveNative, DeliverySparkle:
+	case DeliveryClaveNative:
 		return true
 	default:
 		return false

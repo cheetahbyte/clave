@@ -120,12 +120,7 @@ export function UpdateConfigDialog({
               <Label>Platform</Label>
               <Select
                 value={platform}
-                onValueChange={(value) => {
-                  setPlatform(value);
-                  if (value !== "macos" && delivery === "sparkle") {
-                    setDelivery("clave_native");
-                  }
-                }}
+                onValueChange={(value) => setPlatform(value)}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -159,7 +154,6 @@ export function UpdateConfigDialog({
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="clave_native">Clave Native (JSON API)</SelectItem>
-                <SelectItem value="sparkle" disabled={platform !== "macos"}>Sparkle Appcast (macOS)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -174,13 +168,9 @@ export function UpdateConfigDialog({
           </div>
           {providerKey === "clave_native" && (
             <div className="rounded-lg bg-muted/50 p-3 space-y-1">
-              <p className="text-xs font-medium">
-                {delivery === "sparkle" ? "Sparkle Appcast" : "Clave Native"}
-              </p>
+              <p className="text-xs font-medium">Clave Native</p>
               <p className="text-xs text-muted-foreground">
-                {delivery === "sparkle"
-                  ? "Sparkle-based macOS clients point SUFeedURL at the generated appcast.xml. Full-file artifacts only."
-                  : "Clients poll the Clave update API directly with their license token, or read the custom JSON feed (feed.json) shown on the Sources page. Staged rollouts, mandatory updates, and artifact selection are handled server-side."}
+                Clients poll the Clave update API directly with their license token, or read the custom JSON feed (feed.json) shown on the Sources page. Staged rollouts, mandatory updates, and artifact selection are handled server-side.
               </p>
             </div>
           )}

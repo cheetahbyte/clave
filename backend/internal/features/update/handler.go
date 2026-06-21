@@ -84,13 +84,6 @@ func (h *Handler) AdminListProviders(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, providers)
 }
 
-func (h *Handler) SparklePublicKey(w http.ResponseWriter, r *http.Request) {
-	pk := h.svc.SparklePublicEDKey()
-	helpers.WriteJSON(w, http.StatusOK, map[string]string{
-		"publicEDKey": pk,
-	})
-}
-
 func (h *Handler) AdminListProductUpdateConfigs(w http.ResponseWriter, r *http.Request) {
 	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
 	if !ok {
@@ -321,33 +314,6 @@ func (h *Handler) Changelog(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write(html)
-}
-
-func (h *Handler) SparkleFeed(w http.ResponseWriter, r *http.Request) {
-	productID, err := uuid.Parse(chi.URLParam(r, "productId"))
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid product id"})
-		return
-	}
-
-	channel := chi.URLParam(r, "channel")
-	arch := strings.TrimSpace(r.URL.Query().Get("arch"))
-
-	if err := h.svc.AuthorizeChannelAccess(r.Context(), productID, channel, feedToken(r)); err != nil {
-		helpers.WriteJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
-		return
-	}
-
-	appcast, err := h.svc.GenerateSparkleAppcast(r.Context(), productID, channel, arch)
-	if err != nil {
-		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
-		return
-	}
-
-	setPrivateCacheHeaders(w)
-	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	w.Write(appcast)
 }
 
 func (h *Handler) AdminListChannels(w http.ResponseWriter, r *http.Request) {

@@ -291,9 +291,7 @@ function ProductCard({
                       <Badge variant="secondary" className="text-xs">{cfg.channel}</Badge>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm">
-                        {cfg.config?.delivery === "sparkle" ? "Sparkle Appcast" : "Clave Native"}
-                      </span>
+                      <span className="text-sm">Clave Native</span>
                     </TableCell>
                     <TableCell>
                       <StatusBadge enabled={cfg.enabled} />

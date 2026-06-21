@@ -3,9 +3,7 @@ package update
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -37,37 +35,6 @@ type Service struct {
 	publicAppURL   string
 	storagePath    string
 	defaultStorage storage.Backend
-	sparkleSigner  sparkleSigner
-}
-
-type sparkleSigner struct {
-	hasKeys    bool
-	publicKey  ed25519.PublicKey
-	privateKey ed25519.PrivateKey
-}
-
-func (s sparkleSigner) sign(data []byte) string {
-	if !s.hasKeys {
-		return ""
-	}
-	sig := ed25519.Sign(s.privateKey, data)
-	return base64.StdEncoding.EncodeToString(sig)
-}
-
-func (s sparkleSigner) publicEDKey() string {
-	if !s.hasKeys {
-		return ""
-	}
-	return base64.StdEncoding.EncodeToString(s.publicKey)
-}
-
-func newSparkleSigner(publicKey ed25519.PublicKey, privateKey ed25519.PrivateKey) sparkleSigner {
-	hasKeys := len(publicKey) == ed25519.PublicKeySize && len(privateKey) == ed25519.PrivateKeySize
-	return sparkleSigner{
-		hasKeys:    hasKeys,
-		publicKey:  publicKey,
-		privateKey: privateKey,
-	}
 }
 
 func NewService(
@@ -77,8 +44,6 @@ func NewService(
 	registry *ProviderRegistry,
 	publicAppURL string,
 	storagePath string,
-	sparklePublicKey ed25519.PublicKey,
-	sparklePrivateKey ed25519.PrivateKey,
 ) *Service {
 	return &Service{
 		licenses:       licenses,
@@ -88,7 +53,6 @@ func NewService(
 		publicAppURL:   publicAppURL,
 		storagePath:    storagePath,
 		defaultStorage: storage.NewLocal(storagePath),
-		sparkleSigner:  newSparkleSigner(sparklePublicKey, sparklePrivateKey),
 	}
 }
 
@@ -96,18 +60,6 @@ func NewService(
 // without an explicit storage config fall back to the server's default local
 // backend. The returned Kind identifies which backend was selected so it can
 // be recorded on uploaded artifacts.
-
-// SparkleSign returns the base64 Ed25519 signature of data using the configured
-// Sparkle keypair. Returns an empty string if no keypair is configured.
-func (svc *Service) SparkleSign(data []byte) string {
-	return svc.sparkleSigner.sign(data)
-}
-
-// SparklePublicEDKey returns the base64 Sparkle Ed25519 public key for
-// SUPublicEDKey, or an empty string if no keypair is configured.
-func (svc *Service) SparklePublicEDKey() string {
-	return svc.sparkleSigner.publicEDKey()
-}
 
 func (svc *Service) storageForProduct(ctx context.Context, productID uuid.UUID) (storage.Backend, storage.Kind, error) {
 	cfg, err := svc.repo.GetProductStorageConfig(ctx, productID)
@@ -360,9 +312,6 @@ func (svc *Service) SaveProductUpdateConfig(ctx context.Context, orgID, productI
 	if !ValidDeliveryProtocol(delivery) {
 		return nil, fmt.Errorf("unsupported delivery protocol: %s", delivery)
 	}
-	if DeliveryProtocol(delivery) == DeliverySparkle && req.Platform != "macos" {
-		return nil, fmt.Errorf("sparkle delivery is only supported for macos")
-	}
 
 	ch, err := svc.repo.UpsertUpdateChannel(ctx, db.UpsertUpdateChannelParams{
 		OrganizationID: orgID,
@@ -411,27 +360,11 @@ func (svc *Service) DeleteProductUpdateConfig(ctx context.Context, orgID, config
 
 // FeedURL returns the public feed URL based on the configured delivery protocol.
 func (svc *Service) FeedURL(providerKey string, productID uuid.UUID, platform, channel string, config map[string]any) string {
-	switch DeliveryProtocol(deliveryFromConfig(config)) {
-	case DeliverySparkle:
-		if platform == "macos" {
-			return svc.sparkleFeedURL(productID, channel)
-		}
-		fallthrough
-	default:
-		return svc.nativeFeedURL(productID, platform, channel)
-	}
+	return svc.nativeFeedURL(productID, platform, channel)
 }
 
 func (svc *Service) nativeFeedURL(productID uuid.UUID, platform, channel string) string {
 	path := fmt.Sprintf("/api/v1/updates/products/%s/%s/%s/feed.json", productID, platform, channel)
-	if svc.publicAppURL == "" {
-		return path
-	}
-	return strings.TrimRight(svc.publicAppURL, "/") + path
-}
-
-func (svc *Service) sparkleFeedURL(productID uuid.UUID, channel string) string {
-	path := fmt.Sprintf("/api/v1/updates/products/%s/macos/%s/appcast.xml", productID, channel)
 	if svc.publicAppURL == "" {
 		return path
 	}
@@ -586,57 +519,6 @@ func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID,
 	}
 
 	return GenerateNativeFeed(product, platform, channel, inputs)
-}
-
-func (svc *Service) GenerateSparkleAppcast(ctx context.Context, productID uuid.UUID, channel, arch string) ([]byte, error) {
-	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
-		ProductID: productID,
-		Name:      channel,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	releases, err := svc.repo.ListPublishedReleasesForFeed(ctx, productID, "macos", ch.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	inputs := make([]SparkleFeedInput, len(releases))
-	releaseIDs := make([]uuid.UUID, len(releases))
-	for i, rel := range releases {
-		releaseIDs[i] = rel.ID
-	}
-
-	allArtifacts, _ := svc.repo.ListArtifactsForReleases(ctx, releaseIDs)
-	artifactMap := make(map[uuid.UUID][]db.UpdateArtifact)
-	for _, a := range allArtifacts {
-		artifactMap[a.ReleaseID] = append(artifactMap[a.ReleaseID], a)
-	}
-
-	changelogRows, _ := svc.repo.GetChangelogsByReleaseIDs(ctx, releaseIDs)
-	changelogBodyByRelease := make(map[uuid.UUID]string)
-	for _, cl := range changelogRows {
-		changelogBodyByRelease[cl.ReleaseID] = cl.ChangelogBody
-	}
-
-	for i, rel := range releases {
-		artifacts := artifactMap[rel.ID]
-		policy, _ := svc.repo.GetReleasePolicy(ctx, rel.ID)
-		changelogBody := changelogBodyByRelease[rel.ID]
-		changelogURL := ""
-		if rel.ChangelogID.Valid {
-			changelogURL = svc.ChangelogURL(rel.ID)
-		}
-		inputs[i] = SparkleFeedInput{Release: rel, Artifacts: artifacts, Policy: policy, ChangelogBody: changelogBody, ChangelogURL: changelogURL}
-	}
-
-	product, err := svc.licenses.GetProductByID(ctx, productID)
-	if err != nil {
-		return nil, err
-	}
-
-	return GenerateSparkleAppcast(product, channel, inputs, arch)
 }
 
 func (svc *Service) ListReleases(ctx context.Context, orgID uuid.UUID, productID *uuid.UUID, limit, offset int32) ([]ReleaseDTO, error) {
@@ -838,12 +720,6 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 	checksum := fmt.Sprintf("%x", hash)
 	sizeBytes := int64(len(data))
 
-	// Sign the artifact for Sparkle if keys are configured.
-	var signature *string
-	if sig := svc.SparkleSign(data); sig != "" {
-		signature = &sig
-	}
-
 	downloadURL := svc.artifactDownloadURL(artifactID)
 	mimeType := mimeTypeForArtifact(artifactType)
 	backendName := string(kind)
@@ -860,7 +736,7 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 		Url:                  downloadURL,
 		SizeBytes:            &sizeBytes,
 		ChecksumSha256:       &checksum,
-		Signature:            signature,
+		Signature:            nil,
 		Metadata:             md,
 		Filename:             &storedFilename,
 		MimeType:             &mimeType,
