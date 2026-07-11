@@ -4,6 +4,11 @@
 .idea/
 .envrc
 .env
+.DS_Store
+backend/clave
+backend/createadmin
+backend/deltaworker
+backend/resetadmin2fa
 backend/tmp
 backend/data/update-artifacts/
 graphify-out/
