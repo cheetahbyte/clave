@@ -18,13 +18,15 @@ can manage their own devices, and an admin dashboard for everything else.
 You need a few secrets before anything boots. Generate them once:
 
 ```bash
-go run ./scripts/generate_jwt_keys.go        # LICENSE_JWT_* keypair (ed25519)
+go run ./scripts/generate_jwt_keys.go ./license-jwt-private.pem
 openssl rand -hex 32                         # use for CSRF_AUTH_KEY
 openssl rand -hex 32                         # use for ADMIN_TOTP_ENCRYPTION_KEY
 ```
 
-Drop those into a `.env` file at the repo root (see the table below for the rest),
-then bring the stack up:
+The generator creates an Ed25519 PKCS#8 PEM file with `0600` permissions. Back it
+up securely and do not commit it. Set `LICENSE_JWT_PRIVATE_KEY_FILE` in the root
+`.env` to its path, then add the other secrets (see the table below for the rest)
+and bring the stack up:
 
 ```bash
 docker compose -f compose.dev.yaml up -d
@@ -74,8 +76,7 @@ won't start; the rest have sane defaults.
 | Variable                    | What it's for                                                                 |
 |-----------------------------|-------------------------------------------------------------------------------|
 | `DATABASE_URL`              | Postgres connection string. Defaults to the local compose DB.                 |
-| `LICENSE_JWT_PRIVATE_KEY`   | ed25519 private key (base64) used to sign license tokens.                     |
-| `LICENSE_JWT_PUBLIC_KEY`    | Matching ed25519 public key (base64).                                         |
+| `LICENSE_JWT_PRIVATE_KEY_FILE` | Path to an Ed25519 PKCS#8 PEM private key. The public key is derived from it. |
 | `LICENSE_HMAC_SECRET`       | Secret used to derive license keys. Pick something long and random.           |
 | `SELF_SERVICE_TOKEN_PEPPER` | Extra secret mixed into self-service magic-link tokens.                       |
 

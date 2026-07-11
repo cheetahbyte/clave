@@ -86,6 +86,9 @@ services:
       PORT: "8000"
       PUBLIC_APP_URL: "http://backend:8000"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+      LICENSE_JWT_PRIVATE_KEY_FILE: "/run/secrets/license-jwt-private.pem"
+    volumes:
+      - "${LICENSE_JWT_PRIVATE_KEY_FILE:?set LICENSE_JWT_PRIVATE_KEY_FILE in .env}:/run/secrets/license-jwt-private.pem:ro"
     ports:
       - "8000:8000"
     depends_on:

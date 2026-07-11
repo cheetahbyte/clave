@@ -3,8 +3,9 @@ package config
 import (
 	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/base64"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,17 +14,17 @@ import (
 )
 
 type Config struct {
-	DatabaseURL   string
-	RunMigrations bool
+	DatabaseURL    string
+	RunMigrations  bool
 	VerboseLogging bool
-	Dev           bool
+	Dev            bool
 
 	LicenseJWTPublicKey  ed25519.PublicKey
 	LicenseJWTPrivateKey ed25519.PrivateKey
 	LicenseHMACSecret    string
 
-	SelfServiceTokenPepper  string
-	SelfServiceReturnToken  bool
+	SelfServiceTokenPepper string
+	SelfServiceReturnToken bool
 
 	AdminTOTPEncryptionKey []byte
 
@@ -45,10 +46,10 @@ type Config struct {
 
 	UpdateArtifactStoragePath string
 
-	MigrationsDir          string
-	OTELEnabled            bool
-	OTELServiceName        string
-	OTELExporterEndpoint   string
+	MigrationsDir        string
+	OTELEnabled          bool
+	OTELServiceName      string
+	OTELExporterEndpoint string
 }
 
 func truthy(v string) bool {
@@ -65,27 +66,27 @@ func getEnv(key, fallback string) string {
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		DatabaseURL:      getEnv("DATABASE_URL", "postgres://clave@localhost:54321/clave?sslmode=disable"),
-		RunMigrations:    truthy(os.Getenv("RUN_MIGRATIONS")),
-		VerboseLogging:   verboseLoggingEnabled(),
-		Dev:              truthy(os.Getenv("DEV")),
-		MigrationsDir:     getEnv("MIGRATIONS_DIR", "./migrations"),
-		LicenseHMACSecret: os.Getenv("LICENSE_HMAC_SECRET"),
-		OTELEnabled:            truthy(os.Getenv("OTEL_ENABLED")),
-		OTELServiceName:        getEnv("OTEL_SERVICE_NAME", "clave-api"),
-		OTELExporterEndpoint:   os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-		SelfServiceTokenPepper: os.Getenv("SELF_SERVICE_TOKEN_PEPPER"),
-		SelfServiceReturnToken: strings.ToLower(os.Getenv("SELF_SERVICE_RETURN_TOKEN")) == "true",
-		SMTPHost:        os.Getenv("SMTP_HOST"),
-		SMTPPort:        getEnv("SMTP_PORT", "587"),
-		SMTPUser:        os.Getenv("SMTP_USER"),
-		SMTPPass:        os.Getenv("SMTP_PASS"),
-		MailFrom:        getEnv("MAIL_FROM", "noreply@clave.app"),
-		RabbitMQURL:     os.Getenv("RABBITMQ_URL"),
-		WorkerToken:     os.Getenv("WORKER_TOKEN"),
-		PublicAppURL:    os.Getenv("PUBLIC_APP_URL"),
-		Port:            getEnv("PORT", "8000"),
-		TrustProxyHeaders: truthy(os.Getenv("TRUST_PROXY_HEADERS")),
+		DatabaseURL:               getEnv("DATABASE_URL", "postgres://clave@localhost:54321/clave?sslmode=disable"),
+		RunMigrations:             truthy(os.Getenv("RUN_MIGRATIONS")),
+		VerboseLogging:            verboseLoggingEnabled(),
+		Dev:                       truthy(os.Getenv("DEV")),
+		MigrationsDir:             getEnv("MIGRATIONS_DIR", "./migrations"),
+		LicenseHMACSecret:         os.Getenv("LICENSE_HMAC_SECRET"),
+		OTELEnabled:               truthy(os.Getenv("OTEL_ENABLED")),
+		OTELServiceName:           getEnv("OTEL_SERVICE_NAME", "clave-api"),
+		OTELExporterEndpoint:      os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		SelfServiceTokenPepper:    os.Getenv("SELF_SERVICE_TOKEN_PEPPER"),
+		SelfServiceReturnToken:    strings.ToLower(os.Getenv("SELF_SERVICE_RETURN_TOKEN")) == "true",
+		SMTPHost:                  os.Getenv("SMTP_HOST"),
+		SMTPPort:                  getEnv("SMTP_PORT", "587"),
+		SMTPUser:                  os.Getenv("SMTP_USER"),
+		SMTPPass:                  os.Getenv("SMTP_PASS"),
+		MailFrom:                  getEnv("MAIL_FROM", "noreply@clave.app"),
+		RabbitMQURL:               os.Getenv("RABBITMQ_URL"),
+		WorkerToken:               os.Getenv("WORKER_TOKEN"),
+		PublicAppURL:              os.Getenv("PUBLIC_APP_URL"),
+		Port:                      getEnv("PORT", "8000"),
+		TrustProxyHeaders:         truthy(os.Getenv("TRUST_PROXY_HEADERS")),
 		UpdateArtifactStoragePath: getEnv("UPDATE_ARTIFACT_STORAGE_PATH", "./data/update-artifacts"),
 	}
 
@@ -95,15 +96,11 @@ func Load() (*Config, error) {
 
 	var err error
 
-	cfg.LicenseJWTPublicKey, err = decodeEd25519PublicKey(os.Getenv("LICENSE_JWT_PUBLIC_KEY"))
+	cfg.LicenseJWTPrivateKey, err = loadEd25519PrivateKeyFile(os.Getenv("LICENSE_JWT_PRIVATE_KEY_FILE"))
 	if err != nil {
 		return nil, err
 	}
-
-	cfg.LicenseJWTPrivateKey, err = decodeEd25519PrivateKey(os.Getenv("LICENSE_JWT_PRIVATE_KEY"))
-	if err != nil {
-		return nil, err
-	}
+	cfg.LicenseJWTPublicKey = cfg.LicenseJWTPrivateKey.Public().(ed25519.PublicKey)
 
 	if cfg.SelfServiceTokenPepper == "" {
 		return nil, fmt.Errorf("SELF_SERVICE_TOKEN_PEPPER is required")
@@ -141,26 +138,36 @@ func (c *Config) IsProduction() bool {
 	return !c.Dev
 }
 
-func decodeEd25519PublicKey(encoded string) (ed25519.PublicKey, error) {
-	decoded, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode jwt public key: %w", err)
+func loadEd25519PrivateKeyFile(path string) (ed25519.PrivateKey, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, errors.New("LICENSE_JWT_PRIVATE_KEY_FILE is required")
 	}
-	if len(decoded) != ed25519.PublicKeySize {
-		return nil, fmt.Errorf("invalid ed25519 public key size: %d, expected %d", len(decoded), ed25519.PublicKeySize)
-	}
-	return ed25519.PublicKey(decoded), nil
-}
 
-func decodeEd25519PrivateKey(encoded string) (ed25519.PrivateKey, error) {
-	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	contents, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode jwt private key: %w", err)
+		return nil, fmt.Errorf("read LICENSE_JWT_PRIVATE_KEY_FILE: %w", err)
 	}
-	if len(decoded) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("invalid ed25519 private key size: %d, expected %d", len(decoded), ed25519.PrivateKeySize)
+
+	block, rest := pem.Decode(contents)
+	if block == nil {
+		return nil, errors.New("LICENSE_JWT_PRIVATE_KEY_FILE must contain a PEM-encoded PKCS#8 private key")
 	}
-	return ed25519.PrivateKey(decoded), nil
+	if block.Type != "PRIVATE KEY" {
+		return nil, fmt.Errorf("LICENSE_JWT_PRIVATE_KEY_FILE contains unsupported PEM block %q; expected %q", block.Type, "PRIVATE KEY")
+	}
+	if len(strings.TrimSpace(string(rest))) != 0 {
+		return nil, errors.New("LICENSE_JWT_PRIVATE_KEY_FILE must contain exactly one PEM block")
+	}
+
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse LICENSE_JWT_PRIVATE_KEY_FILE as PKCS#8: %w", err)
+	}
+	privateKey, ok := parsed.(ed25519.PrivateKey)
+	if !ok {
+		return nil, errors.New("LICENSE_JWT_PRIVATE_KEY_FILE must contain an Ed25519 private key")
+	}
+	return privateKey, nil
 }
 
 func loadTOTPKey(dev bool) ([]byte, error) {
