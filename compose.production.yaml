@@ -1,0 +1,80 @@
+name: clave
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clave
+      POSTGRES_DB: clave
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clave -d clave"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: clave
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASSWORD:?set RABBITMQ_PASSWORD}"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - "${CLAVE_ENV_FILE:-.env.production}"
+    environment:
+      DATABASE_URL: "postgres://clave:${POSTGRES_PASSWORD}@postgres:5432/clave?sslmode=disable"
+      RABBITMQ_URL: "amqp://clave:${RABBITMQ_PASSWORD}@rabbitmq:5672/"
+      LICENSE_JWT_PRIVATE_KEY_FILE: /run/secrets/license-jwt-private.pem
+      MIGRATIONS_DIR: /migrations
+      UPDATE_ARTIFACT_STORAGE_PATH: /var/lib/clave/update-artifacts
+    volumes:
+      - "${LICENSE_JWT_PRIVATE_KEY_FILE:?set LICENSE_JWT_PRIVATE_KEY_FILE}:/run/secrets/license-jwt-private.pem:ro"
+      - update-artifacts:/var/lib/clave/update-artifacts
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  website:
+    build:
+      context: ./website
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - backend
+
+  emailer:
+    build:
+      context: ./emailer
+    restart: unless-stopped
+    env_file:
+      - "${CLAVE_ENV_FILE:-.env.production}"
+    environment:
+      RABBITMQ_URL: "amqp://clave:${RABBITMQ_PASSWORD}@rabbitmq:5672/"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
+  update-artifacts:
