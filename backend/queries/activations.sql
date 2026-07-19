@@ -27,6 +27,17 @@ where a.license_id = sqlc.arg('license_id')
   and d.hwid_hash = sqlc.arg('hwid_hash')
   and a.deactivated_at is null;
 
+-- name: GetLicenseWithActiveActivation :one
+SELECT l.*, a.id AS activation_id
+FROM licenses l
+LEFT JOIN devices d ON d.license_id = l.id AND d.hwid_hash = sqlc.arg('hwid_hash')
+LEFT JOIN activations a ON a.license_id = l.id
+  AND a.device_id = d.id
+  AND a.deactivated_at IS NULL
+  AND (sqlc.narg('activation_id')::uuid IS NULL OR a.id = sqlc.narg('activation_id')::uuid)
+WHERE l.id = sqlc.arg('license_id')::uuid
+LIMIT 1;
+
 -- name: DeactivateActivationByLicenseAndHwid :execrows
 UPDATE activations a
 SET deactivated_at = now(),

@@ -49,7 +49,7 @@ WHERE id = $1 AND organization_id = $2
 RETURNING *;
 
 -- name: GetProductUpdateConfig :one
-SELECT puc.*
+SELECT puc.*, c.required_features AS channel_required_features
 FROM product_update_configs puc
 JOIN update_channels c ON c.id = puc.channel_id
 WHERE puc.product_id = $1
@@ -157,6 +157,14 @@ RETURNING *;
 -- name: GetReleasePolicy :one
 SELECT * FROM update_release_policies
 WHERE release_id = $1;
+
+-- name: GetReleasePoliciesForReleases :many
+SELECT * FROM update_release_policies
+WHERE release_id = ANY($1::uuid[]);
+
+-- name: DeleteExpiredUpdateChecks :execrows
+DELETE FROM update_checks
+WHERE created_at < now() - make_interval(days => sqlc.arg('retention_days')::int);
 
 -- name: InsertUpdateCheck :one
 INSERT INTO update_checks (

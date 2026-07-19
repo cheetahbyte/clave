@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const activateLicense = `-- name: ActivateLicense :one
@@ -183,6 +184,63 @@ func (q *Queries) GetActiveActivationByLicenseAndHwidHash(ctx context.Context, a
 		&i.LicenseID,
 		&i.DeactivatedAt,
 		&i.DeactivationReason,
+	)
+	return i, err
+}
+
+const getLicenseWithActiveActivation = `-- name: GetLicenseWithActiveActivation :one
+SELECT l.lookup_digest, l.key_phc, l.customer_email, l.max_activations, l.is_active, l.expires_at, l.created_at, l.features, l.id, l.product_id, l.organization_id, l.is_trial, l.trial_hwid_hash, a.id AS activation_id
+FROM licenses l
+LEFT JOIN devices d ON d.license_id = l.id AND d.hwid_hash = $1
+LEFT JOIN activations a ON a.license_id = l.id
+  AND a.device_id = d.id
+  AND a.deactivated_at IS NULL
+  AND ($2::uuid IS NULL OR a.id = $2::uuid)
+WHERE l.id = $3::uuid
+LIMIT 1
+`
+
+type GetLicenseWithActiveActivationParams struct {
+	HwidHash     []byte      `json:"hwid_hash"`
+	ActivationID pgtype.UUID `json:"activation_id"`
+	LicenseID    uuid.UUID   `json:"license_id"`
+}
+
+type GetLicenseWithActiveActivationRow struct {
+	LookupDigest   []byte             `json:"lookup_digest"`
+	KeyPhc         string             `json:"key_phc"`
+	CustomerEmail  string             `json:"customer_email"`
+	MaxActivations int32              `json:"max_activations"`
+	IsActive       bool               `json:"is_active"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	Features       []string           `json:"features"`
+	ID             uuid.UUID          `json:"id"`
+	ProductID      pgtype.UUID        `json:"product_id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	IsTrial        bool               `json:"is_trial"`
+	TrialHwidHash  []byte             `json:"trial_hwid_hash"`
+	ActivationID   pgtype.UUID        `json:"activation_id"`
+}
+
+func (q *Queries) GetLicenseWithActiveActivation(ctx context.Context, arg GetLicenseWithActiveActivationParams) (GetLicenseWithActiveActivationRow, error) {
+	row := q.db.QueryRow(ctx, getLicenseWithActiveActivation, arg.HwidHash, arg.ActivationID, arg.LicenseID)
+	var i GetLicenseWithActiveActivationRow
+	err := row.Scan(
+		&i.LookupDigest,
+		&i.KeyPhc,
+		&i.CustomerEmail,
+		&i.MaxActivations,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.Features,
+		&i.ID,
+		&i.ProductID,
+		&i.OrganizationID,
+		&i.IsTrial,
+		&i.TrialHwidHash,
+		&i.ActivationID,
 	)
 	return i, err
 }

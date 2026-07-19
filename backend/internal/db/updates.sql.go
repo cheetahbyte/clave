@@ -73,6 +73,19 @@ func (q *Queries) CreateUpdateChannel(ctx context.Context, arg CreateUpdateChann
 	return i, err
 }
 
+const deleteExpiredUpdateChecks = `-- name: DeleteExpiredUpdateChecks :execrows
+DELETE FROM update_checks
+WHERE created_at < now() - make_interval(days => $1::int)
+`
+
+func (q *Queries) DeleteExpiredUpdateChecks(ctx context.Context, retentionDays int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteExpiredUpdateChecks, retentionDays)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteProductUpdateConfig = `-- name: DeleteProductUpdateConfig :one
 DELETE FROM product_update_configs
 WHERE id = $1 AND organization_id = $2
@@ -277,7 +290,7 @@ func (q *Queries) GetDefaultChannelForProduct(ctx context.Context, productID uui
 }
 
 const getProductUpdateConfig = `-- name: GetProductUpdateConfig :one
-SELECT puc.id, puc.organization_id, puc.product_id, puc.platform, puc.channel_id, puc.provider_key, puc.config, puc.enabled, puc.created_at, puc.updated_at
+SELECT puc.id, puc.organization_id, puc.product_id, puc.platform, puc.channel_id, puc.provider_key, puc.config, puc.enabled, puc.created_at, puc.updated_at, c.required_features AS channel_required_features
 FROM product_update_configs puc
 JOIN update_channels c ON c.id = puc.channel_id
 WHERE puc.product_id = $1
@@ -292,9 +305,23 @@ type GetProductUpdateConfigParams struct {
 	Name      string    `json:"name"`
 }
 
-func (q *Queries) GetProductUpdateConfig(ctx context.Context, arg GetProductUpdateConfigParams) (ProductUpdateConfig, error) {
+type GetProductUpdateConfigRow struct {
+	ID                      uuid.UUID          `json:"id"`
+	OrganizationID          uuid.UUID          `json:"organization_id"`
+	ProductID               uuid.UUID          `json:"product_id"`
+	Platform                string             `json:"platform"`
+	ChannelID               uuid.UUID          `json:"channel_id"`
+	ProviderKey             string             `json:"provider_key"`
+	Config                  []byte             `json:"config"`
+	Enabled                 bool               `json:"enabled"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	ChannelRequiredFeatures []string           `json:"channel_required_features"`
+}
+
+func (q *Queries) GetProductUpdateConfig(ctx context.Context, arg GetProductUpdateConfigParams) (GetProductUpdateConfigRow, error) {
 	row := q.db.QueryRow(ctx, getProductUpdateConfig, arg.ProductID, arg.Platform, arg.Name)
-	var i ProductUpdateConfig
+	var i GetProductUpdateConfigRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -306,6 +333,7 @@ func (q *Queries) GetProductUpdateConfig(ctx context.Context, arg GetProductUpda
 		&i.Enabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ChannelRequiredFeatures,
 	)
 	return i, err
 }
@@ -353,6 +381,41 @@ func (q *Queries) GetProductUpdateConfigs(ctx context.Context, productID uuid.UU
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ChannelName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getReleasePoliciesForReleases = `-- name: GetReleasePoliciesForReleases :many
+SELECT id, release_id, mandatory, min_supported_version, rollout_percentage, starts_at, ends_at, created_at, updated_at FROM update_release_policies
+WHERE release_id = ANY($1::uuid[])
+`
+
+func (q *Queries) GetReleasePoliciesForReleases(ctx context.Context, dollar_1 []uuid.UUID) ([]UpdateReleasePolicy, error) {
+	rows, err := q.db.Query(ctx, getReleasePoliciesForReleases, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []UpdateReleasePolicy{}
+	for rows.Next() {
+		var i UpdateReleasePolicy
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReleaseID,
+			&i.Mandatory,
+			&i.MinSupportedVersion,
+			&i.RolloutPercentage,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -10,14 +10,16 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 )
 
 type Config struct {
-	DatabaseURL    string
-	RunMigrations  bool
-	VerboseLogging bool
-	Dev            bool
+	DatabaseURL      string
+	DatabaseMaxConns int32
+	RunMigrations    bool
+	VerboseLogging   bool
+	Dev              bool
 
 	LicenseJWTPublicKey  ed25519.PublicKey
 	LicenseJWTPrivateKey ed25519.PrivateKey
@@ -45,6 +47,7 @@ type Config struct {
 	TrustProxyHeaders bool
 
 	UpdateArtifactStoragePath string
+	UpdateCheckRetentionDays  int
 
 	MigrationsDir        string
 	OTELEnabled          bool
@@ -64,9 +67,33 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+func getEnvInt(key string, fallback int) (int, error) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 0 {
+		return 0, fmt.Errorf("%s must be a non-negative integer", key)
+	}
+	return value, nil
+}
+
 func Load() (*Config, error) {
+	databaseMaxConns, err := getEnvInt("DATABASE_MAX_CONNS", 20)
+	if err != nil || databaseMaxConns == 0 {
+		if err == nil {
+			err = fmt.Errorf("DATABASE_MAX_CONNS must be greater than zero")
+		}
+		return nil, err
+	}
+	retentionDays, err := getEnvInt("UPDATE_CHECK_RETENTION_DAYS", 90)
+	if err != nil {
+		return nil, err
+	}
 	cfg := &Config{
 		DatabaseURL:               getEnv("DATABASE_URL", "postgres://clave@localhost:54321/clave?sslmode=disable"),
+		DatabaseMaxConns:          int32(databaseMaxConns),
 		RunMigrations:             truthy(os.Getenv("RUN_MIGRATIONS")),
 		VerboseLogging:            verboseLoggingEnabled(),
 		Dev:                       truthy(os.Getenv("DEV")),
@@ -88,13 +115,12 @@ func Load() (*Config, error) {
 		Port:                      getEnv("PORT", "8000"),
 		TrustProxyHeaders:         truthy(os.Getenv("TRUST_PROXY_HEADERS")),
 		UpdateArtifactStoragePath: getEnv("UPDATE_ARTIFACT_STORAGE_PATH", "./data/update-artifacts"),
+		UpdateCheckRetentionDays:  retentionDays,
 	}
 
 	if cfg.LicenseHMACSecret == "" {
 		return nil, fmt.Errorf("LICENSE_HMAC_SECRET is required")
 	}
-
-	var err error
 
 	cfg.LicenseJWTPrivateKey, err = loadEd25519PrivateKeyFile(os.Getenv("LICENSE_JWT_PRIVATE_KEY_FILE"))
 	if err != nil {

@@ -238,14 +238,34 @@ func (q *Queries) GetAdminLicensesByEmail(ctx context.Context, arg GetAdminLicen
 }
 
 const getAdminOverviewStatsByOrganization = `-- name: GetAdminOverviewStatsByOrganization :one
+WITH license_stats AS (
+    SELECT
+        count(*) AS total_licenses,
+        count(*) FILTER (WHERE is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_licenses,
+        count(*) FILTER (WHERE expires_at IS NOT NULL AND expires_at <= now()) AS expired_licenses,
+        count(*) FILTER (WHERE is_trial = true) AS total_trials,
+        count(*) FILTER (WHERE is_trial = true AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_trials
+    FROM licenses
+    WHERE organization_id = $1::uuid
+      AND ($2::uuid IS NULL OR product_id = $2::uuid)
+), activation_stats AS (
+    SELECT count(*) AS total_activations
+    FROM activations a
+    JOIN licenses l ON a.license_id = l.id
+    WHERE l.organization_id = $1::uuid
+      AND a.deactivated_at IS NULL
+      AND ($2::uuid IS NULL OR l.product_id = $2::uuid)
+)
 SELECT
-    (SELECT count(*) FROM licenses WHERE organization_id = $1::uuid AND ($2::uuid IS NULL OR product_id = $2::uuid)) AS total_licenses,
-    (SELECT count(*) FROM licenses WHERE organization_id = $1::uuid AND ($2::uuid IS NULL OR product_id = $2::uuid) AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_licenses,
-    (SELECT count(*) FROM licenses WHERE organization_id = $1::uuid AND ($2::uuid IS NULL OR product_id = $2::uuid) AND expires_at IS NOT NULL AND expires_at <= now()) AS expired_licenses,
+    ls.total_licenses,
+    ls.active_licenses,
+    ls.expired_licenses,
     (SELECT count(*) FROM products WHERE organization_id = $1::uuid) AS total_products,
-    (SELECT count(*) FROM activations a JOIN licenses l ON a.license_id = l.id WHERE l.organization_id = $1::uuid AND a.deactivated_at IS NULL AND ($2::uuid IS NULL OR l.product_id = $2::uuid)) AS total_activations,
-    (SELECT count(*) FROM licenses WHERE organization_id = $1::uuid AND ($2::uuid IS NULL OR product_id = $2::uuid) AND is_trial = true) AS total_trials,
-    (SELECT count(*) FROM licenses WHERE organization_id = $1::uuid AND ($2::uuid IS NULL OR product_id = $2::uuid) AND is_trial = true AND is_active = true AND (expires_at IS NULL OR expires_at > now())) AS active_trials
+    acts.total_activations,
+    ls.total_trials,
+    ls.active_trials
+FROM license_stats ls
+CROSS JOIN activation_stats acts
 `
 
 type GetAdminOverviewStatsByOrganizationParams struct {

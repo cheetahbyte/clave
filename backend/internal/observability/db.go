@@ -69,6 +69,10 @@ func StartDBPoolMetrics(ctx context.Context, pool *pgxpool.Pool, interval time.D
 	ticker := time.NewTicker(interval)
 	go func() {
 		defer ticker.Stop()
+		var previousAcquired int64
+		var previousCanceled int64
+		var previousEmpty int64
+		var previousAcquireDuration time.Duration
 		for {
 			select {
 			case <-ctx.Done():
@@ -77,14 +81,22 @@ func StartDBPoolMetrics(ctx context.Context, pool *pgxpool.Pool, interval time.D
 				stats := pool.Stat()
 				bg := context.Background()
 
-				dbConnAcquired.Add(bg, stats.AcquireCount())
-				dbConnCanceled.Add(bg, stats.CanceledAcquireCount())
-				dbEmptyAcquire.Add(bg, int64(stats.EmptyAcquireCount()))
+				acquired := stats.AcquireCount()
+				canceled := stats.CanceledAcquireCount()
+				empty := int64(stats.EmptyAcquireCount())
+				acquireDuration := stats.AcquireDuration()
+				dbConnAcquired.Add(bg, acquired-previousAcquired)
+				dbConnCanceled.Add(bg, canceled-previousCanceled)
+				dbEmptyAcquire.Add(bg, empty-previousEmpty)
 
 				dbConnIdle.Record(bg, int64(stats.IdleConns()))
 				dbConnTotal.Record(bg, int64(stats.TotalConns()))
 
-				dbConnAcquireDur.Record(bg, stats.AcquireDuration().Seconds())
+				dbConnAcquireDur.Record(bg, (acquireDuration - previousAcquireDuration).Seconds())
+				previousAcquired = acquired
+				previousCanceled = canceled
+				previousEmpty = empty
+				previousAcquireDuration = acquireDuration
 			}
 		}
 	}()

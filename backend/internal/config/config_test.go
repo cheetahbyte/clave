@@ -29,6 +29,23 @@ func TestLoadEd25519PrivateKeyFile(t *testing.T) {
 	}
 }
 
+func TestGetEnvInt(t *testing.T) {
+	t.Setenv("CLAVE_TEST_INT", "")
+	if got, err := getEnvInt("CLAVE_TEST_INT", 20); err != nil || got != 20 {
+		t.Fatalf("default = %d, %v", got, err)
+	}
+	t.Setenv("CLAVE_TEST_INT", "42")
+	if got, err := getEnvInt("CLAVE_TEST_INT", 20); err != nil || got != 42 {
+		t.Fatalf("parsed = %d, %v", got, err)
+	}
+	for _, value := range []string{"-1", "invalid"} {
+		t.Setenv("CLAVE_TEST_INT", value)
+		if _, err := getEnvInt("CLAVE_TEST_INT", 20); err == nil {
+			t.Fatalf("expected %q to fail", value)
+		}
+	}
+}
+
 func TestLoadEd25519PrivateKeyFileErrors(t *testing.T) {
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
