@@ -74,6 +74,7 @@ type ProviderConfig struct {
 	ProductID      uuid.UUID
 	Platform       Platform
 	Channel        string
+	ChannelID      uuid.UUID
 	Raw            json.RawMessage
 }
 
@@ -103,15 +104,15 @@ type ArtifactDTO struct {
 }
 
 type UpdateDecision struct {
-	Kind            DecisionKind  `json:"kind"`
-	CurrentVersion  string        `json:"currentVersion"`
-	LatestVersion   string        `json:"latestVersion"`
-	UpdateAvailable bool          `json:"updateAvailable"`
-	DownloadURL     string        `json:"downloadUrl,omitempty"`
-	ReleaseNotes    string        `json:"releaseNotes,omitempty"`
-	Changelog       string        `json:"changelog,omitempty"`
-	ChangelogURL    string        `json:"changelogUrl,omitempty"`
-	Artifacts       []ArtifactDTO `json:"artifacts,omitempty"`
+	Kind            DecisionKind   `json:"kind"`
+	CurrentVersion  string         `json:"currentVersion"`
+	LatestVersion   string         `json:"latestVersion"`
+	UpdateAvailable bool           `json:"updateAvailable"`
+	DownloadURL     string         `json:"downloadUrl,omitempty"`
+	ReleaseNotes    string         `json:"releaseNotes,omitempty"`
+	Changelog       string         `json:"changelog,omitempty"`
+	ChangelogURL    string         `json:"changelogUrl,omitempty"`
+	Artifacts       []ArtifactDTO  `json:"artifacts,omitempty"`
 	Metadata        map[string]any `json:"metadata,omitempty"`
 }
 

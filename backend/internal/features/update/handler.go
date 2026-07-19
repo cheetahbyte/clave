@@ -274,16 +274,22 @@ func (h *Handler) NativeFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	feed, err := h.svc.GenerateNativeFeed(r.Context(), productID, platform, channel)
+	feed, err := h.svc.NativeFeed(r.Context(), productID, platform, channel)
 	if err != nil {
 		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "feed not found"})
 		return
 	}
 
-	setPrivateCacheHeaders(w)
+	w.Header().Set("Cache-Control", "private, no-cache")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("ETag", feed.etag)
+	if r.Header.Get("If-None-Match") == feed.etag {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write(feed)
+	w.Write(feed.body)
 }
 
 // feedToken extracts a license token from an Authorization: Bearer header,
@@ -641,12 +647,19 @@ func (h *Handler) DownloadArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	defer dl.Body.Close()
+	serveArtifactDownload(w, r, dl)
+}
+
+func serveArtifactDownload(w http.ResponseWriter, r *http.Request, dl *ArtifactDownload) {
 	setPrivateCacheHeaders(w)
 	w.Header().Set("Content-Type", dl.MimeType)
+	if dl.Seeker != nil {
+		http.ServeContent(w, r, dl.Name, dl.ModTime, dl.Seeker)
+		return
+	}
 	if dl.Size > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(dl.Size, 10))
 	}
-	w.WriteHeader(http.StatusOK)
 	io.Copy(w, dl.Body)
 }
 

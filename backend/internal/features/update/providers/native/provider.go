@@ -61,9 +61,13 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 	var c Config
 	_ = json.Unmarshal(cfg.Raw, &c)
 
-	channel, err := p.resolveChannel(ctx, req.ProductID, req.Channel)
-	if err != nil {
-		return noUpdateDecision(req.CurrentVersion), nil
+	channel := cfg.ChannelID
+	if channel == uuid.Nil {
+		var err error
+		channel, err = p.resolveChannel(ctx, req.ProductID, req.Channel)
+		if err != nil {
+			return noUpdateDecision(req.CurrentVersion), nil
+		}
 	}
 
 	release, err := p.repo.LatestPublishedUpdateRelease(ctx, db.LatestPublishedUpdateReleaseParams{

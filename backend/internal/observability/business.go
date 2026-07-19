@@ -8,13 +8,14 @@ import (
 )
 
 var (
-	bizLicensesCreated    metric.Int64Counter
-	bizLicenseValidations metric.Int64Counter
-	bizActivationAttempts metric.Int64Counter
-	bizTrialAttempts      metric.Int64Counter
-	bizUpdateChecks       metric.Int64Counter
-	bizArtifactDownloads  metric.Int64Counter
-	bizAuditEvents        metric.Int64Counter
+	bizLicensesCreated      metric.Int64Counter
+	bizLicenseValidations   metric.Int64Counter
+	bizActivationAttempts   metric.Int64Counter
+	bizTrialAttempts        metric.Int64Counter
+	bizUpdateChecks         metric.Int64Counter
+	bizArtifactDownloads    metric.Int64Counter
+	bizAuditEvents          metric.Int64Counter
+	bizUpdateCheckTelemetry metric.Int64Counter
 )
 
 func initBusinessMetrics(m metric.Meter) {
@@ -61,6 +62,18 @@ func initBusinessMetrics(m metric.Meter) {
 	if err != nil {
 		panic(err)
 	}
+	bizUpdateCheckTelemetry, err = m.Int64Counter("biz.update_check_telemetry_total",
+		metric.WithDescription("Update-check telemetry recorder outcomes"))
+	if err != nil {
+		panic(err)
+	}
+}
+
+func CountUpdateCheckTelemetry(ctx context.Context, outcome string) {
+	if bizUpdateCheckTelemetry == nil {
+		return
+	}
+	bizUpdateCheckTelemetry.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
 }
 
 func CountLicenseCreated(ctx context.Context, outcome string) {

@@ -1,6 +1,9 @@
 package observability
 
 import (
+	"bufio"
+	"io"
+	"net"
 	"net/http"
 	"time"
 
@@ -153,5 +156,29 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	}
 	n, err := rw.ResponseWriter.Write(b)
 	rw.bytesWritten += n
+	return n, err
+}
+
+func (rw *responseWriter) Flush() { _ = http.NewResponseController(rw.ResponseWriter).Flush() }
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return http.NewResponseController(rw.ResponseWriter).Hijack()
+}
+func (rw *responseWriter) Push(target string, opts *http.PushOptions) error {
+	if pusher, ok := rw.ResponseWriter.(http.Pusher); ok {
+		return pusher.Push(target, opts)
+	}
+	return http.ErrNotSupported
+}
+func (rw *responseWriter) ReadFrom(src io.Reader) (int64, error) {
+	if rw.statusCode == 0 {
+		rw.statusCode = http.StatusOK
+	}
+	if readerFrom, ok := rw.ResponseWriter.(io.ReaderFrom); ok {
+		n, err := readerFrom.ReadFrom(src)
+		rw.bytesWritten += int(n)
+		return n, err
+	}
+	type writerOnly struct{ io.Writer }
+	n, err := io.Copy(writerOnly{rw}, src)
 	return n, err
 }

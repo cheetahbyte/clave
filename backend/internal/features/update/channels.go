@@ -32,7 +32,7 @@ func channelToDTO(ch db.UpdateChannel) ChannelDTO {
 }
 
 func (svc *Service) ListChannels(ctx context.Context, productID uuid.UUID) ([]ChannelDTO, error) {
-	rows, err := svc.repo.GetChannelsForProduct(ctx, productID)
+	rows, err := svc.channelsForProduct(ctx, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (svc *Service) ListChannels(ctx context.Context, productID uuid.UUID) ([]Ch
 }
 
 func (svc *Service) AvailableChannels(ctx context.Context, productID uuid.UUID, features []string) ([]clientchannels.Channel, error) {
-	rows, err := svc.repo.GetChannelsForProduct(ctx, productID)
+	rows, err := svc.channelsForProduct(ctx, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -63,6 +63,18 @@ func (svc *Service) AvailableChannels(ctx context.Context, productID uuid.UUID, 
 		out = append(out, dto)
 	}
 	return out, nil
+}
+
+func (svc *Service) channelsForProduct(ctx context.Context, productID uuid.UUID) ([]db.UpdateChannel, error) {
+	if channels, ok := svc.channelCache.get(productID); ok {
+		return channels, nil
+	}
+	channels, err := svc.repo.GetChannelsForProduct(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	svc.channelCache.set(productID, channels)
+	return channels, nil
 }
 
 func (svc *Service) ClientChannels(ctx context.Context, data ChannelsRequest) (ChannelsResponse, error) {
@@ -125,6 +137,8 @@ func (svc *Service) CreateChannel(ctx context.Context, orgID, productID uuid.UUI
 
 	// Sync update_channel_required_features join table.
 	svc.syncChannelRequiredFeatures(ctx, ch.ID, orgID, productID, normalizedFeatures)
+	svc.feedCache.invalidateProduct(productID)
+	svc.channelCache.invalidate(productID)
 
 	dto := channelToDTO(ch)
 	return &dto, nil
@@ -155,6 +169,8 @@ func (svc *Service) UpdateChannel(ctx context.Context, orgID, channelID uuid.UUI
 
 	// Sync update_channel_required_features join table.
 	svc.syncChannelRequiredFeatures(ctx, ch.ID, orgID, ch.ProductID, normalizedFeatures)
+	svc.feedCache.invalidateProduct(ch.ProductID)
+	svc.channelCache.invalidate(ch.ProductID)
 
 	dto := channelToDTO(ch)
 	return &dto, nil
@@ -201,6 +217,10 @@ func (svc *Service) DeleteChannel(ctx context.Context, orgID, channelID uuid.UUI
 		return fmt.Errorf("channel in use: %d release(s) and %d source(s) reference it; remove them first", releases, configs)
 	}
 
-	_, err = svc.repo.DeleteUpdateChannel(ctx, channelID, orgID)
+	ch, err := svc.repo.DeleteUpdateChannel(ctx, channelID, orgID)
+	if err == nil {
+		svc.feedCache.invalidateProduct(ch.ProductID)
+		svc.channelCache.invalidate(ch.ProductID)
+	}
 	return err
 }

@@ -36,4 +36,5 @@ func (h *Handler) RegisterPublicRoutes(r chi.Router) {
 	r.Get("/updates/products/{productId}/{platform}/{channel}/feed.json", h.NativeFeed)
 	r.Get("/updates/releases/{releaseId}/changelog.html", h.Changelog)
 	r.Get("/updates/artifacts/{artifactId}/download", h.DownloadArtifact)
+	r.Head("/updates/artifacts/{artifactId}/download", h.DownloadArtifact)
 }

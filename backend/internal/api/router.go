@@ -48,6 +48,7 @@ type SelfServiceRoutes interface {
 type Config struct {
 	Activation ClientRoutes
 	Validation ClientRoutes
+	Sync       ClientRoutes
 	Update     interface {
 		ClientRoutes
 		AdminRoutes
@@ -124,6 +125,7 @@ func Register(r *chi.Mux, cfg Config) {
 					}
 					cfg.Activation.RegisterClientRoutes(enc)
 					cfg.Validation.RegisterClientRoutes(enc)
+					cfg.Sync.RegisterClientRoutes(enc)
 					cfg.Update.RegisterClientRoutes(enc)
 				})
 			})

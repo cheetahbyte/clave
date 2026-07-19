@@ -54,6 +54,7 @@ func (svc *Service) CreateChangelog(ctx context.Context, orgID, productID uuid.U
 	if err != nil {
 		return nil, err
 	}
+	svc.feedCache.invalidateProduct(c.ProductID)
 	dto := changelogToDTO(c)
 	return &dto, nil
 }
@@ -72,6 +73,7 @@ func (svc *Service) UpdateChangelog(ctx context.Context, orgID, changelogID uuid
 	if err != nil {
 		return nil, err
 	}
+	svc.feedCache.invalidateProduct(c.ProductID)
 	dto := changelogToDTO(c)
 	return &dto, nil
 }
@@ -90,7 +92,10 @@ func (svc *Service) DeleteChangelog(ctx context.Context, orgID, changelogID uuid
 
 // AttachReleaseChangelog sets or clears the changelog attached to a release.
 func (svc *Service) AttachReleaseChangelog(ctx context.Context, releaseID uuid.UUID, changelogID *uuid.UUID) error {
-	_, err := svc.repo.SetReleaseChangelog(ctx, releaseID, changelogID)
+	release, err := svc.repo.SetReleaseChangelog(ctx, releaseID, changelogID)
+	if err == nil {
+		svc.feedCache.invalidateProduct(release.ProductID)
+	}
 	return err
 }
 

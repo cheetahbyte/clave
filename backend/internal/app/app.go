@@ -15,6 +15,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/features/activation"
 	"github.com/cheetahbyte/clave/internal/features/adminauth"
 	"github.com/cheetahbyte/clave/internal/features/audit"
+	"github.com/cheetahbyte/clave/internal/features/clientsync"
 	"github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/features/mcpserver"
 	"github.com/cheetahbyte/clave/internal/features/organization"
@@ -36,13 +37,17 @@ import (
 )
 
 var (
-	pool      *pgxpool.Pool
-	publisher *events.Publisher
+	pool           *pgxpool.Pool
+	publisher      *events.Publisher
+	updateRecorder *update.UpdateCheckRecorder
 )
 
 func Close() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if updateRecorder != nil {
+		updateRecorder.Close(ctx)
+	}
 	observability.Shutdown(ctx)
 	if publisher != nil {
 		publisher.Close()
@@ -69,11 +74,15 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	helpers.TrustProxyHeaders = cfg.TrustProxyHeaders
 
 	var err error
-	pool, err = pgxpool.New(context.Background(), cfg.DatabaseURL)
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		return nil, err
 	}
-	pool.Config().MaxConns = 20
+	poolCfg.MaxConns = cfg.DatabaseMaxConns
+	pool, err = pgxpool.NewWithConfig(context.Background(), poolCfg)
+	if err != nil {
+		return nil, err
+	}
 
 	obsCfg := observability.Config{
 		Enabled:     cfg.OTELEnabled,
@@ -103,8 +112,12 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	)
 
 	updateSvc := update.NewService(licenseSvc, signer, updateRepo, updateRegistry, cfg.PublicAppURL, cfg.UpdateArtifactStoragePath)
+	updateRecorder = update.NewUpdateCheckRecorder(updateRepo, cfg.UpdateCheckRetentionDays, 256)
+	updateSvc.SetCheckRecorder(updateRecorder)
 	activationSvc := activation.NewService(q, pool, signer, licenseSvc, updateSvc)
 	validationSvc := validation.NewService(q, signer, licenseSvc, updateSvc)
+	updateSvc.SetValidator(validationSvc)
+	clientSyncSvc := clientsync.NewService(validationSvc, updateSvc)
 	selfServiceRepo := selfservice.NewRepository(q, pool)
 	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer, licenseSvc)
 
@@ -123,6 +136,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	licenseH := license.NewHandler(licenseSvc, auditSvc, publisher, appURL)
 	activationH := activation.NewHandler(activationSvc)
 	validationH := validation.NewHandler(validationSvc)
+	clientSyncH := clientsync.NewHandler(clientSyncSvc)
 	updateH := update.NewHandler(updateSvc, auditSvc)
 	selfserviceH := selfservice.NewHandler(selfserviceSvc, publisher, appURL, cfg.SelfServiceReturnToken, cfg.Dev)
 
@@ -176,6 +190,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	api.Register(r, api.Config{
 		Activation:   activationH,
 		Validation:   validationH,
+		Sync:         clientSyncH,
 		Update:       updateH,
 		AdminAuth:    adminAuthH,
 		LicenseAdmin: licenseH,

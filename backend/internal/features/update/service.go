@@ -1,7 +1,6 @@
 package update
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -9,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,6 +17,7 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/features/validation"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/cheetahbyte/clave/internal/shared/storage"
 	"github.com/google/uuid"
@@ -35,7 +36,17 @@ type Service struct {
 	publicAppURL   string
 	storagePath    string
 	defaultStorage storage.Backend
+	feedCache      *nativeFeedCache
+	validator      *validation.Service
+	checkRecorder  *UpdateCheckRecorder
+	channelCache   *productChannelCache
 }
+
+func (svc *Service) SetValidator(validator *validation.Service) {
+	svc.validator = validator
+}
+
+func (svc *Service) SetCheckRecorder(recorder *UpdateCheckRecorder) { svc.checkRecorder = recorder }
 
 func NewService(
 	licenses *license.Service,
@@ -53,6 +64,8 @@ func NewService(
 		publicAppURL:   publicAppURL,
 		storagePath:    storagePath,
 		defaultStorage: storage.NewLocal(storagePath),
+		feedCache:      newNativeFeedCache(),
+		channelCache:   newProductChannelCache(),
 	}
 }
 
@@ -157,10 +170,26 @@ func (svc *Service) parseActiveLicenseToken(ctx context.Context, token string, i
 func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse, error) {
 	instance := "/updates/check"
 
+	if svc.validator != nil {
+		auth, err := svc.validator.Authorize(ctx, data.Token, "", instance, false)
+		if err != nil {
+			return CheckResponse{}, err
+		}
+		return svc.CheckAuthorized(ctx, data, auth)
+	}
 	licenseID, lic, claims, err := svc.parseActiveLicenseToken(ctx, data.Token, instance)
 	if err != nil {
 		return CheckResponse{}, err
 	}
+	return svc.checkAuthorized(ctx, data, licenseID, lic, claims)
+}
+
+func (svc *Service) CheckAuthorized(ctx context.Context, data CheckRequest, auth *validation.Authorized) (CheckResponse, error) {
+	return svc.checkAuthorized(ctx, data, auth.LicenseID, auth.License, auth.Claims)
+}
+
+func (svc *Service) checkAuthorized(ctx context.Context, data CheckRequest, licenseID uuid.UUID, lic *license.License, claims *signing.LicenseClaims) (CheckResponse, error) {
+	instance := "/updates/check"
 
 	platform := strings.TrimSpace(data.Platform)
 	if platform == "" {
@@ -169,20 +198,6 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 	channel := strings.TrimSpace(data.Channel)
 	if channel == "" {
 		channel = defaultChannel
-	}
-
-	// Feature-gated channels: a license may only pull updates from a channel
-	// when it holds every feature the channel requires.
-	if ch, chErr := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
-		ProductID: claims.ProductID,
-		Name:      channel,
-	}); chErr == nil {
-		if !hasAllFeatures(lic.Features, ch.RequiredFeatures) {
-			return CheckResponse{}, problem.Of(403).
-				Append(problem.Title("Channel not available")).
-				Append(problem.Detail("This license does not have access to the requested update channel.")).
-				Append(problem.Instance(instance))
-		}
 	}
 
 	updateReq := UpdateRequest{
@@ -204,6 +219,12 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 			Append(problem.Detail("No update configuration found for this product, platform, and channel.")).
 			Append(problem.Instance(instance))
 	}
+	if !hasAllFeatures(lic.Features, dbConfig.ChannelRequiredFeatures) {
+		return CheckResponse{}, problem.Of(403).
+			Append(problem.Title("Channel not available")).
+			Append(problem.Detail("This license does not have access to the requested update channel.")).
+			Append(problem.Instance(instance))
+	}
 
 	provider, ok := svc.registry.Get(ProviderKey(dbConfig.ProviderKey))
 	if !ok {
@@ -219,6 +240,7 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 		ProductID:      dbConfig.ProductID,
 		Platform:       Platform(platform),
 		Channel:        channel,
+		ChannelID:      dbConfig.ChannelID,
 		Raw:            dbConfig.Config,
 	}
 
@@ -247,11 +269,17 @@ func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse
 	// token. The /download endpoint accepts the token via Authorization: Bearer
 	// only, so the URL stays safe to log, cache, and share.
 
-	_ = svc.repo.InsertUpdateCheck(ctx, dbConfig.OrganizationID, claims.ProductID, licenseID,
-		platform, channel, string(provider.Key()),
-		data.Version, data.Build, data.Arch, data.OSVersion,
-		string(decision.Kind), releaseID,
-	)
+	record := UpdateCheckRecord{OrganizationID: dbConfig.OrganizationID, ProductID: claims.ProductID,
+		LicenseID: licenseID, Platform: platform, Channel: channel, ProviderKey: string(provider.Key()),
+		CurrentVersion: data.Version, CurrentBuild: data.Build, Arch: data.Arch, OSVersion: data.OSVersion,
+		Decision: string(decision.Kind), SelectedReleaseID: releaseID}
+	if svc.checkRecorder != nil {
+		svc.checkRecorder.Record(record)
+	} else {
+		_ = svc.repo.InsertUpdateCheck(ctx, record.OrganizationID, record.ProductID, record.LicenseID,
+			record.Platform, record.Channel, record.ProviderKey, record.CurrentVersion, record.CurrentBuild,
+			record.Arch, record.OSVersion, record.Decision, record.SelectedReleaseID)
+	}
 
 	return CheckResponse{
 		CurrentVersion:  decision.CurrentVersion,
@@ -322,6 +350,7 @@ func (svc *Service) SaveProductUpdateConfig(ctx context.Context, orgID, productI
 	if err != nil {
 		return nil, err
 	}
+	svc.channelCache.invalidate(productID)
 
 	normalizedConfig := map[string]any{"delivery": delivery}
 	raw, _ := json.Marshal(normalizedConfig)
@@ -471,6 +500,16 @@ func (svc *Service) RenderReleaseChangelog(ctx context.Context, releaseID uuid.U
 }
 
 func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID, platform, channel string) ([]byte, error) {
+	entry, err := svc.NativeFeed(ctx, productID, platform, channel)
+	return entry.body, err
+}
+
+func (svc *Service) NativeFeed(ctx context.Context, productID uuid.UUID, platform, channel string) (nativeFeedCacheEntry, error) {
+	key := nativeFeedCacheKey{productID: productID, platform: platform, channel: channel}
+	return svc.feedCache.load(key, func() ([]byte, error) { return svc.generateNativeFeed(ctx, productID, platform, channel) })
+}
+
+func (svc *Service) generateNativeFeed(ctx context.Context, productID uuid.UUID, platform, channel string) ([]byte, error) {
 	ch, err := svc.repo.GetChannelByProductAndName(ctx, db.GetChannelByProductAndNameParams{
 		ProductID: productID,
 		Name:      channel,
@@ -496,6 +535,12 @@ func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID,
 		artifactMap[a.ReleaseID] = append(artifactMap[a.ReleaseID], a)
 	}
 
+	policies, _ := svc.repo.GetReleasePoliciesForReleases(ctx, releaseIDs)
+	policyByRelease := make(map[uuid.UUID]db.UpdateReleasePolicy, len(policies))
+	for _, policy := range policies {
+		policyByRelease[policy.ReleaseID] = policy
+	}
+
 	changelogRows, _ := svc.repo.GetChangelogsByReleaseIDs(ctx, releaseIDs)
 	changelogBodyByRelease := make(map[uuid.UUID]string)
 	for _, cl := range changelogRows {
@@ -504,7 +549,7 @@ func (svc *Service) GenerateNativeFeed(ctx context.Context, productID uuid.UUID,
 
 	for i, rel := range releases {
 		artifacts := artifactMap[rel.ID]
-		policy, _ := svc.repo.GetReleasePolicy(ctx, rel.ID)
+		policy := policyByRelease[rel.ID]
 		changelogBody := changelogBodyByRelease[rel.ID]
 		changelogURL := ""
 		if rel.ChangelogID.Valid {
@@ -643,6 +688,7 @@ func (svc *Service) CreateRelease(ctx context.Context, orgID uuid.UUID, req Crea
 	if err != nil {
 		return nil, fmt.Errorf("create channel: %w", err)
 	}
+	svc.channelCache.invalidate(productID)
 
 	var buildNum *string
 	if req.BuildNumber != "" {
@@ -710,15 +756,21 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 	storedFilename := artifactID.String() + ext
 	storageKey := artifactID.String() + "/" + storedFilename
 
-	// Read the entire artifact into memory so we can both hash and sign it.
-	data, err := io.ReadAll(reader)
+	tmp, err := os.CreateTemp("", "clave-artifact-*")
 	if err != nil {
-		return nil, fmt.Errorf("read artifact: %w", err)
+		return nil, fmt.Errorf("create artifact temp file: %w", err)
 	}
-
-	hash := sha256.Sum256(data)
-	checksum := fmt.Sprintf("%x", hash)
-	sizeBytes := int64(len(data))
+	tmpName := tmp.Name()
+	defer func() { tmp.Close(); os.Remove(tmpName) }()
+	hasher := sha256.New()
+	sizeBytes, err := io.Copy(io.MultiWriter(tmp, hasher), reader)
+	if err != nil {
+		return nil, fmt.Errorf("stage artifact: %w", err)
+	}
+	checksum := fmt.Sprintf("%x", hasher.Sum(nil))
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("rewind artifact: %w", err)
+	}
 
 	downloadURL := svc.artifactDownloadURL(artifactID)
 	mimeType := mimeTypeForArtifact(artifactType)
@@ -726,6 +778,10 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 	md := metadata
 	if len(md) == 0 {
 		md = []byte(`{}`)
+	}
+	if _, putErr := backend.Put(ctx, storageKey, tmp); putErr != nil {
+		_ = backend.Delete(ctx, storageKey)
+		return nil, fmt.Errorf("store artifact: %w", putErr)
 	}
 	artifact, err := svc.repo.InsertUpdateArtifact(ctx, db.InsertUpdateArtifactParams{
 		ID:                   artifactID,
@@ -745,14 +801,10 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 		StorageKey:           &storageKey,
 	})
 	if err != nil {
+		_ = backend.Delete(ctx, storageKey)
 		return nil, fmt.Errorf("insert artifact: %w", err)
 	}
-
-	// Upload to storage after DB insert so we only store what was committed.
-	if _, putErr := backend.Put(ctx, storageKey, bytes.NewReader(data)); putErr != nil {
-		_ = backend.Delete(ctx, storageKey)
-		return nil, fmt.Errorf("store artifact: %w", putErr)
-	}
+	svc.feedCache.invalidateProduct(release.ProductID)
 
 	return &ArtifactDTOFull{
 		ID:             artifact.ID.String(),
@@ -780,6 +832,7 @@ func (svc *Service) PublishRelease(ctx context.Context, releaseID uuid.UUID) (*R
 	if err != nil {
 		return nil, err
 	}
+	svc.feedCache.invalidateProduct(release.ProductID)
 
 	var notes string
 	if release.ReleaseNotes != nil {
@@ -806,6 +859,7 @@ func (svc *Service) YankRelease(ctx context.Context, releaseID uuid.UUID) (*Rele
 	if err != nil {
 		return nil, err
 	}
+	svc.feedCache.invalidateProduct(release.ProductID)
 
 	var notes string
 	if release.ReleaseNotes != nil {
@@ -839,6 +893,9 @@ const presignTTL = 15 * time.Minute
 type ArtifactDownload struct {
 	RedirectURL string
 	Body        io.ReadCloser
+	Seeker      io.ReadSeeker
+	Name        string
+	ModTime     time.Time
 	Size        int64
 	MimeType    string
 }
@@ -883,7 +940,17 @@ func (svc *Service) ResolveArtifactDownload(ctx context.Context, artifactID uuid
 	if err != nil {
 		return nil, err
 	}
-	return &ArtifactDownload{Body: rc, Size: size, MimeType: mimeType}, nil
+	dl := &ArtifactDownload{Body: rc, Size: size, MimeType: mimeType, Name: key}
+	if seeker, ok := rc.(io.ReadSeeker); ok {
+		dl.Seeker = seeker
+	}
+	if artifact.Filename != nil {
+		dl.Name = *artifact.Filename
+	}
+	if artifact.CreatedAt.Valid {
+		dl.ModTime = artifact.CreatedAt.Time
+	}
+	return dl, nil
 }
 
 // artifactStorageKey returns the storage key for an artifact, deriving the
@@ -900,7 +967,10 @@ func (svc *Service) artifactStorageKey(artifact db.UpdateArtifact) string {
 }
 
 func (svc *Service) DeleteRelease(ctx context.Context, releaseID uuid.UUID) error {
-	_, err := svc.repo.DeleteUpdateRelease(ctx, releaseID)
+	release, err := svc.repo.DeleteUpdateRelease(ctx, releaseID)
+	if err == nil {
+		svc.feedCache.invalidateProduct(release.ProductID)
+	}
 	return err
 }
 

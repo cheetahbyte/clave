@@ -7,54 +7,91 @@ import (
 	"time"
 
 	problem "github.com/cheetahbyte/problems"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/shared/clientchannels"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 )
 
 type Service struct {
 	q        *db.Queries
-	licenses *license.Service
 	signer   *signing.Service
 	channels clientchannels.Lister
 }
 
-func NewService(q *db.Queries, signer *signing.Service, licenses *license.Service, channels clientchannels.Lister) *Service {
-	return &Service{
-		q:        q,
-		signer:   signer,
-		licenses: licenses,
-		channels: channels,
-	}
+type Authorized struct {
+	LicenseID    uuid.UUID
+	License      *license.License
+	Claims       *signing.LicenseClaims
+	ActivationID uuid.UUID
 }
 
-func (svc *Service) activeActivationID(ctx context.Context, licenseID uuid.UUID, claims *signing.LicenseClaims) (uuid.UUID, error) {
-	hwidHash := svc.signer.HMACSign(claims.HWID, signing.DontNormalizeKey)
-	if claims.ActivationID != uuid.Nil {
-		act, err := svc.q.GetActiveActivationByID(ctx, db.GetActiveActivationByIDParams{
-			ActivationID: claims.ActivationID,
-			LicenseID:    licenseID,
-			HwidHash:     hwidHash,
-		})
-		if err != nil {
-			return uuid.Nil, err
-		}
-		return act.ID, nil
+func NewService(q *db.Queries, signer *signing.Service, _ *license.Service, channels clientchannels.Lister) *Service {
+	return &Service{q: q, signer: signer, channels: channels}
+}
+
+func (svc *Service) Authorize(ctx context.Context, token, deviceID, instance string, allowRefreshGrace bool) (*Authorized, error) {
+	var claims *signing.LicenseClaims
+	var err error
+	if allowRefreshGrace {
+		claims, err = svc.signer.ParseJWTForRefresh(token, 7*24*time.Hour)
+	} else {
+		claims, err = svc.signer.ParseJWT(token)
+	}
+	if err != nil {
+		return nil, problem.Of(401).Append(problem.Title("Invalid token")).Append(problem.Instance(instance))
 	}
 
-	act, err := svc.q.GetActiveActivationByLicenseAndHwidHash(ctx, db.GetActiveActivationByLicenseAndHwidHashParams{
-		LicenseID: licenseID,
-		HwidHash:  hwidHash,
+	licenseID, err := license.LicenseIDFromSubject(claims.Subject)
+	if err != nil {
+		return nil, problem.Of(401).Append(problem.Title("Invalid token")).Append(problem.Instance(instance))
+	}
+	if deviceID != "" && claims.HWID != "" && deviceID != claims.HWID {
+		return nil, problem.Of(403).Append(problem.Title("HWID mismatch")).Append(problem.Instance(instance))
+	}
+
+	activationID := pgtype.UUID{}
+	if claims.ActivationID != uuid.Nil {
+		activationID = pgtype.UUID{Bytes: claims.ActivationID, Valid: true}
+	}
+	row, err := svc.q.GetLicenseWithActiveActivation(ctx, db.GetLicenseWithActiveActivationParams{
+		LicenseID:    licenseID,
+		HwidHash:     svc.signer.HMACSign(claims.HWID, signing.DontNormalizeKey),
+		ActivationID: activationID,
 	})
 	if err != nil {
-		return uuid.Nil, err
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, problem.Of(404).Append(problem.Title("License not found")).Append(problem.Instance(instance))
+		}
+		return nil, problem.Of(500).Append(problem.Title("Activation check failed")).Append(problem.Instance(instance))
 	}
-	return act.ID, nil
+	if !row.ActivationID.Valid {
+		return nil, problem.Of(403).
+			Append(problem.Title("Activation deactivated")).
+			Append(problem.Detail("This device has been deactivated for the license")).
+			Append(problem.Instance(instance))
+	}
+
+	lic := &license.License{
+		ID: row.ID, ProductID: uuid.UUID(row.ProductID.Bytes), LookupDigest: row.LookupDigest,
+		KeyPhc: row.KeyPhc, CustomerEmail: row.CustomerEmail, MaxActivations: row.MaxActivations,
+		Active: row.IsActive, Features: row.Features, CreatedAt: row.CreatedAt.Time,
+	}
+	if row.ExpiresAt.Valid {
+		lic.ExpiresAt = row.ExpiresAt.Time
+	}
+	if !lic.Active {
+		return nil, problem.Of(403).Append(problem.Title("License revoked")).Append(problem.Instance(instance))
+	}
+	if !lic.ExpiresAt.IsZero() && time.Now().UTC().After(lic.ExpiresAt.UTC()) {
+		return nil, problem.Of(403).Append(problem.Title("License expired")).Append(problem.Instance(instance))
+	}
+	return &Authorized{LicenseID: licenseID, License: lic, Claims: claims, ActivationID: uuid.UUID(row.ActivationID.Bytes)}, nil
 }
 
 func (svc *Service) availableUpdateChannels(ctx context.Context, productID uuid.UUID, features []string) []clientchannels.Channel {
@@ -72,91 +109,33 @@ func (svc *Service) availableUpdateChannels(ctx context.Context, productID uuid.
 	return channels
 }
 
-func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (ValidateResponse, error) {
-	instance := "/licenses/validate"
-
-	claims, err := svc.signer.ParseJWTForRefresh(data.Token, 7*24*time.Hour)
-	if err != nil {
-		observability.CountLicenseValidation(ctx, "failure")
-		return ValidateResponse{}, problem.Of(401).
-			Append(problem.Title("Invalid token")).
-			Append(problem.Instance(instance))
-	}
-
-	licenseID, err := license.LicenseIDFromSubject(claims.Subject)
-	if err != nil {
-		observability.CountLicenseValidation(ctx, "failure")
-		return ValidateResponse{}, problem.Of(401).
-			Append(problem.Title("Invalid token")).
-			Append(problem.Instance(instance))
-	}
-
-	lic, err := svc.licenses.GetByID(ctx, licenseID)
-	if err != nil || lic == nil {
-		return ValidateResponse{}, problem.Of(404).
-			Append(problem.Title("License not found")).
-			Append(problem.Instance(instance))
-	}
-
-	if !lic.Active {
-		return ValidateResponse{}, problem.Of(403).
-			Append(problem.Title("License revoked")).
-			Append(problem.Detail("This license has been revoked")).
-			Append(problem.Instance(instance))
-	}
-
-	if !lic.ExpiresAt.IsZero() && time.Now().UTC().After(lic.ExpiresAt.UTC()) {
-		return ValidateResponse{}, problem.Of(403).
-			Append(problem.Title("License expired")).
-			Append(problem.Instance(instance))
-	}
-
-	if claims.HWID != "" && data.DeviceID != claims.HWID {
-		return ValidateResponse{}, problem.Of(403).
-			Append(problem.Title("HWID mismatch")).
-			Append(problem.Instance(instance))
-	}
-
-	activationID, err := svc.activeActivationID(ctx, licenseID, claims)
-	if err != nil {
-		observability.CountLicenseValidation(ctx, "failure")
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ValidateResponse{}, problem.Of(403).
-				Append(problem.Title("Activation deactivated")).
-				Append(problem.Detail("This device has been deactivated for the license")).
-				Append(problem.Instance(instance))
-		}
-		return ValidateResponse{}, problem.Of(500).
-			Append(problem.Title("Activation check failed")).
-			Append(problem.Instance(instance))
-	}
-
+func (svc *Service) Refresh(ctx context.Context, auth *Authorized) (ValidateResponse, error) {
 	tokenTTL := 7 * 24 * time.Hour
-	if !lic.ExpiresAt.IsZero() {
-		remaining := time.Until(lic.ExpiresAt)
-		if remaining < tokenTTL {
+	if !auth.License.ExpiresAt.IsZero() {
+		if remaining := time.Until(auth.License.ExpiresAt); remaining < tokenTTL {
 			tokenTTL = remaining
 		}
 	}
+	newToken, newClaims, err := svc.signer.IssueAndSignLicenseToken(auth.License,
+		auth.License.ProductID.String(), auth.License.Features, auth.Claims.HWID, auth.ActivationID, tokenTTL)
+	if err != nil {
+		return ValidateResponse{}, problem.Of(500).Append(problem.Title("Token signing failed"))
+	}
+	return ValidateResponse{Token: newToken, ValidUntil: newClaims.ExpiresAt.Unix(),
+		UpdateChannels: svc.availableUpdateChannels(ctx, auth.License.ProductID, auth.License.Features)}, nil
+}
 
-	newToken, newClaims, err := svc.signer.IssueAndSignLicenseToken(lic,
-		lic.ProductID.String(),
-		lic.Features,
-		claims.HWID,
-		activationID,
-		tokenTTL,
-	)
+func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (ValidateResponse, error) {
+	auth, err := svc.Authorize(ctx, data.Token, data.DeviceID, "/licenses/validate", true)
 	if err != nil {
 		observability.CountLicenseValidation(ctx, "failure")
-		return ValidateResponse{}, problem.Of(500).
-			Append(problem.Title("Token signing failed")).
-			Append(problem.Instance(instance))
+		return ValidateResponse{}, err
 	}
-
+	response, err := svc.Refresh(ctx, auth)
+	if err != nil {
+		observability.CountLicenseValidation(ctx, "failure")
+		return ValidateResponse{}, err
+	}
 	observability.CountLicenseValidation(ctx, "success")
-	return ValidateResponse{
-		Token:          newToken,
-		ValidUntil:     newClaims.ExpiresAt.Unix(),
-		UpdateChannels: svc.availableUpdateChannels(ctx, lic.ProductID, lic.Features),
-	}, nil
+	return response, nil
 }

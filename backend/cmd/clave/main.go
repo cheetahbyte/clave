@@ -34,7 +34,7 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      0,
 		IdleTimeout:       120 * time.Second,
 	}
 

@@ -108,5 +108,5 @@ func GenerateNativeFeed(product db.Product, platform, channel string, releases [
 		feed.Releases = append(feed.Releases, fr)
 	}
 
-	return json.MarshalIndent(feed, "", "  ")
+	return json.Marshal(feed)
 }

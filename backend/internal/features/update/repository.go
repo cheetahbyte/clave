@@ -27,7 +27,7 @@ func (r *Repository) GetProductByIDAndOrganization(ctx context.Context, orgID, i
 	})
 }
 
-func (r *Repository) GetProductUpdateConfig(ctx context.Context, productID uuid.UUID, platform string, channel string) (db.ProductUpdateConfig, error) {
+func (r *Repository) GetProductUpdateConfig(ctx context.Context, productID uuid.UUID, platform string, channel string) (db.GetProductUpdateConfigRow, error) {
 	return r.q.GetProductUpdateConfig(ctx, db.GetProductUpdateConfigParams{
 		ProductID: productID,
 		Platform:  platform,
@@ -226,6 +226,13 @@ func (r *Repository) GetReleasePolicy(ctx context.Context, releaseID uuid.UUID) 
 	return r.q.GetReleasePolicy(ctx, releaseID)
 }
 
+func (r *Repository) GetReleasePoliciesForReleases(ctx context.Context, releaseIDs []uuid.UUID) ([]db.UpdateReleasePolicy, error) {
+	if len(releaseIDs) == 0 {
+		return nil, nil
+	}
+	return r.q.GetReleasePoliciesForReleases(ctx, releaseIDs)
+}
+
 func (r *Repository) InsertUpdateCheck(ctx context.Context, orgID, productID, licenseID uuid.UUID, platform, channel, providerKey, currentVersion, currentBuild, arch, osVersion, decision string, selectedReleaseID *uuid.UUID) error {
 	org := pgtype.UUID{Bytes: orgID, Valid: true}
 	prod := pgtype.UUID{Bytes: productID, Valid: true}
@@ -269,6 +276,10 @@ func (r *Repository) InsertUpdateCheck(ctx context.Context, orgID, productID, li
 		SelectedReleaseID: relID,
 	})
 	return err
+}
+
+func (r *Repository) DeleteExpiredUpdateChecks(ctx context.Context, retentionDays int) (int64, error) {
+	return r.q.DeleteExpiredUpdateChecks(ctx, int32(retentionDays))
 }
 
 func MustParseProviderConfig(raw []byte) map[string]any {
