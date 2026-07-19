@@ -2,6 +2,16 @@ package selfservice
 
 import "time"
 
+type LicenseItem struct {
+	IsActive       bool       `json:"is_active"`
+	ID             string     `json:"id"`
+	MaxActivations int32      `json:"max_activations"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	Name           string     `json:"name"`
+	LogoURL        *string    `json:"logo_url,omitempty"`
+	DownloadURL    string     `json:"download_url"`
+}
+
 type DeviceItem struct {
 	ID           string     `json:"id"`
 	Name         string     `json:"name"`

@@ -1,10 +1,22 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Package, ShieldCheck, Calendar, ChevronRight, LogOut } from "lucide-react";
+import {
+  Package,
+  ShieldCheck,
+  Calendar,
+  ChevronRight,
+  Download,
+  LogOut,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { logoutSelfService } from "@/features/selfservice/api";
 import type { License } from "@/features/selfservice/api";
+import {
+  browserDownloadPlatform,
+  isLicenseDownloadable,
+  latestDownloadURL,
+} from "@/features/selfservice/download";
 
 interface LicenseSelectProps {
   licenses: License[];
@@ -31,11 +43,17 @@ export function LicenseSelect({ licenses, orgSlug }: LicenseSelectProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["selfserviceSession"] });
       queryClient.removeQueries({ queryKey: ["selfserviceLicenses"] });
-      navigate({ to: "/selfservice/$orgSlug", params: { orgSlug }, search: { licenseId: undefined }, replace: true });
+      navigate({
+        to: "/selfservice/$orgSlug",
+        params: { orgSlug },
+        search: { licenseId: undefined },
+        replace: true,
+      });
     },
   });
 
   const [logoErrors, setLogoErrors] = useState<Set<string>>(new Set());
+  const platform = browserDownloadPlatform();
 
   return (
     <main className="min-h-dvh bg-white px-6 py-12 dark:bg-slate-950">
@@ -78,11 +96,15 @@ export function LicenseSelect({ licenses, orgSlug }: LicenseSelectProps) {
           <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border dark:divide-slate-800 dark:border-slate-800">
             {licenses.map((license) => {
               const expiry = formatExpiry(license.expires_at);
+              const downloadable = isLicenseDownloadable(license);
               return (
-                <li key={license.id}>
+                <li
+                  key={license.id}
+                  className="flex items-center bg-white transition-colors hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/50"
+                >
                   <button
                     type="button"
-                    className="group flex w-full items-center gap-3.5 bg-white px-4 py-4 text-left transition-colors hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/50"
+                    className="group flex min-w-0 flex-1 items-center gap-3.5 px-4 py-4 text-left"
                     onClick={() =>
                       navigate({
                         to: "/selfservice/$orgSlug",
@@ -97,7 +119,11 @@ export function LicenseSelect({ licenses, orgSlug }: LicenseSelectProps) {
                           src={license.logo_url}
                           alt=""
                           className="h-full w-full object-contain"
-                          onError={() => setLogoErrors((prev) => new Set(prev).add(license.id))}
+                          onError={() =>
+                            setLogoErrors((prev) =>
+                              new Set(prev).add(license.id),
+                            )
+                          }
                         />
                       ) : (
                         <ShieldCheck className="size-5" />
@@ -131,6 +157,33 @@ export function LicenseSelect({ licenses, orgSlug }: LicenseSelectProps) {
 
                     <ChevronRight className="size-4 shrink-0 text-slate-300 transition-colors group-hover:text-slate-500 dark:text-slate-600 dark:group-hover:text-slate-400" />
                   </button>
+                  {downloadable && (
+                    <div className="shrink-0 pr-4">
+                      {platform ? (
+                        <Button asChild variant="outline" size="sm">
+                          <a
+                            href={latestDownloadURL(
+                              license.download_url,
+                              platform,
+                            )}
+                          >
+                            <Download className="size-4" />
+                            Download latest
+                          </a>
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          title="A compatible macOS, Windows, or Linux download could not be selected."
+                        >
+                          <Download className="size-4" />
+                          Download unavailable
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}

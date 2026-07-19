@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Laptop, Monitor, HardDrive, ShieldCheck, Loader2 } from "lucide-react";
+import {
+  Download,
+  Laptop,
+  Monitor,
+  HardDrive,
+  ShieldCheck,
+  Loader2,
+} from "lucide-react";
 import { toast } from "sonner";
 import type { Device, License } from "@/features/selfservice/api";
 import {
@@ -9,6 +16,11 @@ import {
   removeSelfServiceDevice,
   revokeSelfServiceLicense,
 } from "@/features/selfservice/api";
+import {
+  browserDownloadPlatform,
+  isLicenseDownloadable,
+  latestDownloadURL,
+} from "@/features/selfservice/download";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
@@ -33,18 +45,14 @@ function formatDate(input?: string | null) {
 }
 
 function licenseStatus(license: License): "active" | "expired" {
-  if (!license.is_active) return "expired";
-  if (license.expires_at) {
-    const expiry = new Date(license.expires_at);
-    if (!Number.isNaN(expiry.getTime()) && expiry < new Date()) return "expired";
-  }
-  return "active";
+  return isLicenseDownloadable(license) ? "active" : "expired";
 }
 
 function deviceIcon(name: string) {
   const n = name.toLowerCase();
   if (n.includes("mac") || n.includes("book")) return Laptop;
-  if (n.includes("linux") || n.includes("ubuntu") || n.includes("server")) return HardDrive;
+  if (n.includes("linux") || n.includes("ubuntu") || n.includes("server"))
+    return HardDrive;
   return Monitor;
 }
 
@@ -65,9 +73,12 @@ export function LicenseDetails({ license, orgSlug }: LicenseDetailsProps) {
   });
 
   const removeDevice = useMutation({
-    mutationFn: (deviceId: string) => removeSelfServiceDevice(license.id, deviceId),
+    mutationFn: (deviceId: string) =>
+      removeSelfServiceDevice(license.id, deviceId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["selfserviceDevices", license.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["selfserviceDevices", license.id],
+      });
       setDeviceToRemove(null);
     },
   });
@@ -76,7 +87,9 @@ export function LicenseDetails({ license, orgSlug }: LicenseDetailsProps) {
     mutationFn: () => revokeSelfServiceLicense(license.id),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["selfserviceLicenses"] });
-      queryClient.invalidateQueries({ queryKey: ["selfserviceDevices", license.id] });
+      queryClient.invalidateQueries({
+        queryKey: ["selfserviceDevices", license.id],
+      });
       setRevokeOpen(false);
       toast.success("License revoked. A new key has been emailed to you.");
       if (data.newLicenseId) {
@@ -88,10 +101,12 @@ export function LicenseDetails({ license, orgSlug }: LicenseDetailsProps) {
         });
       }
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to revoke license"),
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : "Failed to revoke license"),
   });
 
   const status = licenseStatus(license);
+  const platform = browserDownloadPlatform();
   const maxActivations = clamp(license.max_activations || 1, 1, 999);
   const used = devices.length;
   const overLimit = used > maxActivations;
@@ -125,19 +140,37 @@ export function LicenseDetails({ license, orgSlug }: LicenseDetailsProps) {
             </p>
           </div>
         </div>
-        <span
-          className={[
-            "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-            status === "active"
-              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
-              : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
-          ].join(" ")}
-        >
-          {/*<span
-            className={`size-1.5 rounded-full ${status === "active" ? "bg-emerald-500" : "bg-amber-500"}`}
-          />*/}
-          {status === "active" ? "Active" : "Expired"}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          {status === "active" &&
+            (platform ? (
+              <Button asChild variant="outline" size="sm">
+                <a href={latestDownloadURL(license.download_url, platform)}>
+                  <Download className="size-4" />
+                  Download latest
+                </a>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                title="A compatible macOS, Windows, or Linux download could not be selected."
+              >
+                <Download className="size-4" />
+                Download unavailable
+              </Button>
+            ))}
+          <span
+            className={[
+              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+              status === "active"
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400"
+                : "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+            ].join(" ")}
+          >
+            {status === "active" ? "Active" : "Expired"}
+          </span>
+        </div>
       </header>
 
       {/* devices */}
@@ -160,7 +193,10 @@ export function LicenseDetails({ license, orgSlug }: LicenseDetailsProps) {
 
         {overLimit && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-            {used - maxActivations} device{used - maxActivations !== 1 ? "s" : ""} above the limit of {maxActivations}. Existing devices continue to work, but no new devices can be added.
+            {used - maxActivations} device
+            {used - maxActivations !== 1 ? "s" : ""} above the limit of{" "}
+            {maxActivations}. Existing devices continue to work, but no new
+            devices can be added.
           </div>
         )}
 
@@ -220,7 +256,8 @@ export function LicenseDetails({ license, orgSlug }: LicenseDetailsProps) {
               Revoke license
             </h3>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Permanently disables this license on all devices. A new key will be issued.
+              Permanently disables this license on all devices. A new key will
+              be issued.
             </p>
           </div>
           <Button
@@ -244,12 +281,15 @@ export function LicenseDetails({ license, orgSlug }: LicenseDetailsProps) {
             <span className="font-medium text-slate-900 dark:text-slate-50">
               {deviceToRemove?.name || "this device"}
             </span>
-            . This frees up its seat. It will need to reactivate to use the license again.
+            . This frees up its seat. It will need to reactivate to use the
+            license again.
           </>
         }
         confirmLabel="Deactivate device"
         pending={removeDevice.isPending}
-        onConfirm={() => deviceToRemove && removeDevice.mutate(deviceToRemove.id)}
+        onConfirm={() =>
+          deviceToRemove && removeDevice.mutate(deviceToRemove.id)
+        }
       />
 
       <ConfirmDialog

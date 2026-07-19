@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -25,7 +26,7 @@ func TestServeArtifactDownloadSupportsRanges(t *testing.T) {
 	req.Header.Set("Range", "bytes=2-5")
 	res := httptest.NewRecorder()
 
-	serveArtifactDownload(res, req, dl)
+	ServeResolvedArtifactDownload(res, req, dl)
 
 	if res.Code != http.StatusPartialContent {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusPartialContent)
@@ -52,7 +53,7 @@ func TestServeArtifactDownloadSupportsHead(t *testing.T) {
 	}
 	res := httptest.NewRecorder()
 
-	serveArtifactDownload(res, httptest.NewRequest(http.MethodHead, "/artifact", nil), dl)
+	ServeResolvedArtifactDownload(res, httptest.NewRequest(http.MethodHead, "/artifact", nil), dl)
 
 	if res.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
@@ -62,6 +63,25 @@ func TestServeArtifactDownloadSupportsHead(t *testing.T) {
 	}
 	if got := res.Header().Get("Content-Length"); got != "10" {
 		t.Fatalf("Content-Length = %q, want %q", got, "10")
+	}
+}
+
+func TestServeResolvedArtifactDownloadRedirectsPrivately(t *testing.T) {
+	t.Parallel()
+
+	req := httptest.NewRequest(http.MethodGet, "/download", nil)
+	res := httptest.NewRecorder()
+
+	ServeResolvedArtifactDownload(res, req, &ArtifactDownload{RedirectURL: "https://storage.example/file"})
+
+	if res.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusFound)
+	}
+	if got := res.Header().Get("Location"); got != "https://storage.example/file" {
+		t.Fatalf("Location = %q", got)
+	}
+	if got := res.Header().Get("Cache-Control"); !strings.Contains(got, "private") {
+		t.Fatalf("Cache-Control = %q, want private", got)
 	}
 }
 

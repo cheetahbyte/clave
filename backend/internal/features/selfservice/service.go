@@ -15,9 +15,11 @@ import (
 	"github.com/alexedwards/argon2id"
 	"github.com/cheetahbyte/clave/internal/db"
 	lic "github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/features/update"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -34,8 +36,32 @@ func (svc *Service) ResolveOrg(ctx context.Context, slug string) (uuid.UUID, err
 	return org.ID, nil
 }
 
-func (svc *Service) ListLicensesForOrg(ctx context.Context, email string, orgID uuid.UUID) ([]db.ListByCustomerEmailAndOrganizationRow, error) {
-	return svc.repo.ListLicensesByCustomer(ctx, email, orgID)
+func (svc *Service) ListLicensesForOrg(ctx context.Context, email string, orgID uuid.UUID) ([]LicenseItem, error) {
+	rows, err := svc.repo.ListLicensesByCustomer(ctx, email, orgID)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]LicenseItem, len(rows))
+	for i, row := range rows {
+		items[i] = mapLicenseItem(row)
+	}
+	return items, nil
+}
+
+func mapLicenseItem(row db.ListByCustomerEmailAndOrganizationRow) LicenseItem {
+	item := LicenseItem{
+		IsActive:       row.IsActive,
+		ID:             row.ID.String(),
+		MaxActivations: row.MaxActivations,
+		Name:           row.Name,
+		LogoURL:        row.LogoUrl,
+		DownloadURL:    "/api/v1/self-service/licenses/" + row.ID.String() + "/download",
+	}
+	if row.ExpiresAt.Valid {
+		expiresAt := row.ExpiresAt.Time
+		item.ExpiresAt = &expiresAt
+	}
+	return item
 }
 
 func (svc *Service) ListDevicesForLicense(ctx context.Context, email string, orgID, licenseID uuid.UUID) ([]DeviceItem, error) {
@@ -107,19 +133,42 @@ func (svc *Service) RevokeLicense(ctx context.Context, email string, orgID, lice
 }
 
 type Service struct {
-	repo       *Repository
-	pepper     []byte
-	signer     *signing.Service
-	licenseSvc *lic.Service
+	repo             *Repository
+	downloadLicenses DownloadLicenseRepository
+	downloads        ProductDownloadResolver
+	pepper           []byte
+	signer           *signing.Service
+	licenseSvc       *lic.Service
 }
 
-func NewService(repo *Repository, pepper []byte, signer *signing.Service, licenseSvc *lic.Service) *Service {
+type DownloadLicenseRepository interface {
+	GetDownloadLicense(context.Context, uuid.UUID, string, uuid.UUID) (db.License, error)
+}
+
+type ProductDownloadResolver interface {
+	ResolveLatestProductDownload(context.Context, uuid.UUID, string, []string) (*update.ArtifactDownload, error)
+}
+
+func NewService(repo *Repository, pepper []byte, signer *signing.Service, licenseSvc *lic.Service, downloads ProductDownloadResolver) *Service {
 	return &Service{
-		repo:       repo,
-		pepper:     pepper,
-		signer:     signer,
-		licenseSvc: licenseSvc,
+		repo:             repo,
+		downloadLicenses: repo,
+		downloads:        downloads,
+		pepper:           pepper,
+		signer:           signer,
+		licenseSvc:       licenseSvc,
 	}
+}
+
+func (svc *Service) LatestDownload(ctx context.Context, email string, orgID, licenseID uuid.UUID, platform string) (*update.ArtifactDownload, error) {
+	license, err := svc.downloadLicenses.GetDownloadLicense(ctx, licenseID, email, orgID)
+	if err != nil {
+		return nil, err
+	}
+	if !license.ProductID.Valid {
+		return nil, pgx.ErrNoRows
+	}
+	return svc.downloads.ResolveLatestProductDownload(ctx, license.ProductID.Bytes, platform, license.Features)
 }
 
 func (svc *Service) RequestToken(ctx context.Context, data db.CreateSelfServiceLinkParams) (string, error) {

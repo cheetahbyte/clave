@@ -811,15 +811,21 @@ func (h *Handler) DownloadArtifact(w http.ResponseWriter, r *http.Request) {
 
 	observability.CountArtifactDownload(r.Context(), "success")
 
-	// S3-backed artifacts redirect to a short-lived presigned URL so the
-	// transfer goes client->storage directly instead of through the app.
+	ServeResolvedArtifactDownload(w, r, dl)
+}
+
+// ServeResolvedArtifactDownload writes an already-authorized artifact using
+// the same private redirect and streaming behavior for every download surface.
+func ServeResolvedArtifactDownload(w http.ResponseWriter, r *http.Request, dl *ArtifactDownload) {
 	if dl.RedirectURL != "" {
 		setPrivateCacheHeaders(w)
 		http.Redirect(w, r, dl.RedirectURL, http.StatusFound)
 		return
 	}
 
-	defer dl.Body.Close()
+	if dl.Body != nil {
+		defer dl.Body.Close()
+	}
 	serveArtifactDownload(w, r, dl)
 }
 

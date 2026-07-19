@@ -299,6 +299,43 @@ func (q *Queries) GetLicenseByIdForUpdate(ctx context.Context, id uuid.UUID) (Li
 	return i, err
 }
 
+const getSelfServiceDownloadLicense = `-- name: GetSelfServiceDownloadLicense :one
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash, customer_name from licenses
+where id = $1
+  and customer_email = $2
+  and organization_id = $3
+  and is_active = true
+  and (expires_at is null or expires_at > now())
+`
+
+type GetSelfServiceDownloadLicenseParams struct {
+	LicenseID      uuid.UUID `json:"license_id"`
+	CustomerEmail  string    `json:"customer_email"`
+	OrganizationID uuid.UUID `json:"organization_id"`
+}
+
+func (q *Queries) GetSelfServiceDownloadLicense(ctx context.Context, arg GetSelfServiceDownloadLicenseParams) (License, error) {
+	row := q.db.QueryRow(ctx, getSelfServiceDownloadLicense, arg.LicenseID, arg.CustomerEmail, arg.OrganizationID)
+	var i License
+	err := row.Scan(
+		&i.LookupDigest,
+		&i.KeyPhc,
+		&i.CustomerEmail,
+		&i.MaxActivations,
+		&i.IsActive,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.Features,
+		&i.ID,
+		&i.ProductID,
+		&i.OrganizationID,
+		&i.IsTrial,
+		&i.TrialHwidHash,
+		&i.CustomerName,
+	)
+	return i, err
+}
+
 const getSelfServiceLicense = `-- name: GetSelfServiceLicense :one
 select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash, customer_name from licenses
 where id = $1

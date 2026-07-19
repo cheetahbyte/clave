@@ -66,6 +66,14 @@ func (r *Repository) GetLicense(ctx context.Context, licenseID uuid.UUID, email 
 	})
 }
 
+func (r *Repository) GetDownloadLicense(ctx context.Context, licenseID uuid.UUID, email string, orgID uuid.UUID) (db.License, error) {
+	return r.q.GetSelfServiceDownloadLicense(ctx, db.GetSelfServiceDownloadLicenseParams{
+		LicenseID:      licenseID,
+		CustomerEmail:  email,
+		OrganizationID: orgID,
+	})
+}
+
 func (r *Repository) RevokeLicense(ctx context.Context, licenseID uuid.UUID, email string, orgID uuid.UUID) error {
 	_, err := r.q.RevokeSelfServiceLicense(ctx, db.RevokeSelfServiceLicenseParams{
 		LicenseID:      licenseID,

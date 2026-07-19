@@ -127,7 +127,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	checkinRecorder = diagnostics.NewRecorder(diagnosticsRepo, 90, 256)
 	clientSyncSvc := clientsync.NewService(validationSvc, updateSvc, checkinRecorder)
 	selfServiceRepo := selfservice.NewRepository(q, pool)
-	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer, licenseSvc)
+	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer, licenseSvc, updateSvc)
 
 	adminAuthRepo := adminauth.NewRepository(q)
 	adminAuthSvc := adminauth.NewService(adminAuthRepo, cfg.AdminTOTPEncryptionKey)

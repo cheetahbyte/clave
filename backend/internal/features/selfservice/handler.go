@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/features/update"
 	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
@@ -176,6 +177,34 @@ func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, res)
 }
 
+func (h *Handler) DownloadLatest(w http.ResponseWriter, r *http.Request) {
+	email, orgID, ok := selfServiceScope(w, r)
+	if !ok {
+		return
+	}
+
+	licenseID, err := uuid.Parse(chi.URLParam(r, "licenseId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid license id"})
+		return
+	}
+
+	download, err := h.svc.LatestDownload(r.Context(), email, orgID, licenseID, r.URL.Query().Get("platform"))
+	if err != nil {
+		switch {
+		case errors.Is(err, update.ErrUnsupportedDownloadPlatform):
+			helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported platform"})
+		case errors.Is(err, pgx.ErrNoRows), errors.Is(err, update.ErrDownloadUnavailable):
+			helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "download not found"})
+		default:
+			helpers.WriteError(w, r, err)
+		}
+		return
+	}
+
+	update.ServeResolvedArtifactDownload(w, r, download)
+}
+
 func (h *Handler) RemoveDevice(w http.ResponseWriter, r *http.Request) {
 	email, orgID, ok := selfServiceScope(w, r)
 	if !ok {
@@ -242,7 +271,7 @@ func (h *Handler) RevokeLicense(w http.ResponseWriter, r *http.Request) {
 	}
 
 	helpers.WriteJSON(w, http.StatusOK, map[string]any{
-		"ok":          true,
+		"ok":           true,
 		"newLicenseId": result.NewLicenseID.String(),
 	})
 }

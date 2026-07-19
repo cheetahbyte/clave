@@ -1,6 +1,7 @@
 package update
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -27,6 +29,11 @@ import (
 
 const defaultChannel = "stable"
 const defaultPlatform = "macos"
+
+var (
+	ErrUnsupportedDownloadPlatform = errors.New("unsupported download platform")
+	ErrDownloadUnavailable         = errors.New("download unavailable")
+)
 
 type Service struct {
 	licenses       *license.Service
@@ -399,6 +406,83 @@ func (svc *Service) nativeFeedURL(productID uuid.UUID, platform, channel string)
 		return path
 	}
 	return strings.TrimRight(svc.publicAppURL, "/") + path
+}
+
+// ResolveLatestProductDownload selects the latest full artifact available to
+// a licensed self-service customer on the product's default channel.
+func (svc *Service) ResolveLatestProductDownload(ctx context.Context, productID uuid.UUID, platform string, features []string) (*ArtifactDownload, error) {
+	platform, ok := normalizeDownloadPlatform(platform)
+	if !ok {
+		return nil, ErrUnsupportedDownloadPlatform
+	}
+
+	channel, err := svc.repo.GetDefaultChannelForProduct(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	if !hasAllFeatures(features, channel.RequiredFeatures) {
+		return nil, ErrDownloadUnavailable
+	}
+
+	release, err := svc.repo.LatestPublishedUpdateRelease(ctx, db.LatestPublishedUpdateReleaseParams{
+		ProductID: productID,
+		Platform:  platform,
+		ChannelID: channel.ID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	artifacts, err := svc.repo.ListArtifactsForRelease(ctx, release.ID)
+	if err != nil {
+		return nil, err
+	}
+	artifact, ok := selectFullDownloadArtifact(artifacts, platform)
+	if !ok {
+		return nil, pgx.ErrNoRows
+	}
+	return svc.ResolveArtifactDownload(ctx, artifact.ID)
+}
+
+func normalizeDownloadPlatform(platform string) (string, bool) {
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	switch platform {
+	case "macos", "windows", "linux":
+		return platform, true
+	default:
+		return "", false
+	}
+}
+
+func selectFullDownloadArtifact(artifacts []db.UpdateArtifact, platform string) (db.UpdateArtifact, bool) {
+	candidates := make([]db.UpdateArtifact, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		if artifact.ArtifactType == "delta" || !strings.EqualFold(artifact.Os, platform) {
+			continue
+		}
+		candidates = append(candidates, artifact)
+	}
+
+	priority := func(arch string) int {
+		if arch == "" || strings.EqualFold(arch, "universal") {
+			return 0
+		}
+		return 1
+	}
+	slices.SortFunc(candidates, func(a, b db.UpdateArtifact) int {
+		if order := cmp.Compare(priority(a.Arch), priority(b.Arch)); order != 0 {
+			return order
+		}
+		if order := strings.Compare(strings.ToLower(a.Arch), strings.ToLower(b.Arch)); order != 0 {
+			return order
+		}
+		return strings.Compare(a.ID.String(), b.ID.String())
+	})
+
+	if len(candidates) == 0 {
+		return db.UpdateArtifact{}, false
+	}
+	return candidates[0], true
 }
 
 func deliveryFromConfig(config map[string]any) string {
