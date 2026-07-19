@@ -46,6 +46,31 @@ func (q *Queries) CountActivations(ctx context.Context, licenseID uuid.UUID) (in
 	return count, err
 }
 
+const deactivateActivationByLicenseAndHwid = `-- name: DeactivateActivationByLicenseAndHwid :execrows
+UPDATE activations a
+SET deactivated_at = now(),
+    deactivation_reason = 'client_unregistration'
+FROM devices d
+WHERE a.device_id = d.id
+  AND a.license_id = $1
+  AND d.license_id = $1
+  AND d.hwid_hash = $2
+  AND a.deactivated_at IS NULL
+`
+
+type DeactivateActivationByLicenseAndHwidParams struct {
+	LicenseID uuid.UUID `json:"license_id"`
+	HwidHash  []byte    `json:"hwid_hash"`
+}
+
+func (q *Queries) DeactivateActivationByLicenseAndHwid(ctx context.Context, arg DeactivateActivationByLicenseAndHwidParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deactivateActivationByLicenseAndHwid, arg.LicenseID, arg.HwidHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const getActivationByLicenseAndDevice = `-- name: GetActivationByLicenseAndDevice :one
 select device_id, checked_in_at, created_at, id, license_id, deactivated_at, deactivation_reason from activations where license_id = $1 and device_id = $2 and deactivated_at is null
 `

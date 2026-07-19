@@ -27,6 +27,18 @@ func (h *Handler) Activate(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusOK, result)
 }
 
+func (h *Handler) Deactivate(w http.ResponseWriter, r *http.Request) {
+	var data DeactivateRequest
+	if !helpers.DecodeValidated(w, r, &data) {
+		return
+	}
+	if err := h.svc.Deactivate(r.Context(), data); err != nil {
+		helpers.WriteError(w, r, err)
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 func (h *Handler) StartTrial(w http.ResponseWriter, r *http.Request) {
 	var data StartTrialRequest
 	if !helpers.DecodeValidated(w, r, &data) {

@@ -51,52 +51,9 @@ func (svc *Service) availableUpdateChannels(ctx context.Context, productID uuid.
 
 func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (ActivateResponse, error) {
 	instance := "/licenses/activate"
-	lookupDigest := svc.signer.HMACSign(data.LicenseKey, signing.NormalizeKey)
-
-	lic, err := svc.licenses.GetByDigest(ctx, lookupDigest)
-	if err != nil || lic == nil {
-		slog.Warn("license not found", "err", err)
-		observability.CountActivationAttempt(ctx, "failure", "not_found")
-
-		p := problem.Of(404).
-			Append(problem.Type("https://api.yourapp.dev/problems/license-not-found")).
-			Append(problem.Title("License not found")).
-			Append(problem.Detail("No license exists for the provided key")).
-			Append(problem.Instance(instance))
-		return ActivateResponse{}, p
-	}
-
-	match, verr := argon2id.ComparePasswordAndHash(data.LicenseKey, lic.KeyPhc)
-	if verr != nil || !match {
-		slog.Warn("license verification failed", "licenseId", lic.ID, "err", verr)
-		observability.CountActivationAttempt(ctx, "failure", "invalid")
-		p := problem.Of(401).
-			Append(problem.Type("https://api.yourapp.dev/problems/invalid-license")).
-			Append(problem.Title("Invalid license")).
-			Append(problem.Detail("The provided license could not be verified")).
-			Append(problem.Instance(instance))
-		return ActivateResponse{}, p
-	}
-	if !lic.Active {
-		slog.Warn("license revoked", "licenseId", lic.ID)
-		observability.CountActivationAttempt(ctx, "failure", "revoked")
-		p := problem.Of(403).
-			Append(problem.Type("https://api.yourapp.dev/problems/license-revoked")).
-			Append(problem.Title("License revoked")).
-			Append(problem.Detail("This license has been revoked")).
-			Append(problem.Instance(instance))
-		return ActivateResponse{}, p
-	}
-
-	if !lic.ExpiresAt.IsZero() && time.Now().UTC().After(lic.ExpiresAt.UTC()) {
-		slog.Warn("license expired", "licenseId", lic.ID)
-		observability.CountActivationAttempt(ctx, "failure", "expired")
-		p := problem.Of(403).
-			Append(problem.Type("https://api.yourapp.dev/problems/license-expired")).
-			Append(problem.Title("License expired")).
-			Append(problem.Detail("This license has expired")).
-			Append(problem.Instance(instance))
-		return ActivateResponse{}, p
+	lic, err := svc.validateLicense(ctx, data.LicenseKey, instance)
+	if err != nil {
+		return ActivateResponse{}, err
 	}
 
 	hwidHash := svc.signer.HMACSign(data.Device.HWID, signing.DontNormalizeKey)
@@ -148,6 +105,72 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 		MaskedEmail:    maskEmail(lic.CustomerEmail),
 		UpdateChannels: svc.availableUpdateChannels(ctx, lic.ProductID, lic.Features),
 	}, nil
+}
+
+func (svc *Service) Deactivate(ctx context.Context, data DeactivateRequest) error {
+	instance := "/licenses/deactivate"
+	lic, err := svc.validateLicense(ctx, data.LicenseKey, instance)
+	if err != nil {
+		return err
+	}
+
+	hwidHash := svc.signer.HMACSign(data.DeviceID, signing.DontNormalizeKey)
+	if err := svc.repo.DeactivateByLicenseAndHwid(ctx, lic.ID, hwidHash); err != nil {
+		slog.Error("failed to deactivate license", "licenseId", lic.ID, "err", err)
+		return problem.Of(500).
+			Append(problem.Type("https://api.yourapp.dev/problems/internal")).
+			Append(problem.Title("Internal error")).
+			Append(problem.Detail("Failed to process deactivation request")).
+			Append(problem.Instance(instance))
+	}
+	return nil
+}
+
+func (svc *Service) validateLicense(ctx context.Context, licenseKey, instance string) (*license.License, error) {
+	lookupDigest := svc.signer.HMACSign(licenseKey, signing.NormalizeKey)
+
+	lic, err := svc.licenses.GetByDigest(ctx, lookupDigest)
+	if err != nil || lic == nil {
+		slog.Warn("license not found", "err", err)
+		observability.CountActivationAttempt(ctx, "failure", "not_found")
+		return nil, problem.Of(404).
+			Append(problem.Type("https://api.yourapp.dev/problems/license-not-found")).
+			Append(problem.Title("License not found")).
+			Append(problem.Detail("No license exists for the provided key")).
+			Append(problem.Instance(instance))
+	}
+
+	match, verr := argon2id.ComparePasswordAndHash(licenseKey, lic.KeyPhc)
+	if verr != nil || !match {
+		slog.Warn("license verification failed", "licenseId", lic.ID, "err", verr)
+		observability.CountActivationAttempt(ctx, "failure", "invalid")
+		return nil, problem.Of(401).
+			Append(problem.Type("https://api.yourapp.dev/problems/invalid-license")).
+			Append(problem.Title("Invalid license")).
+			Append(problem.Detail("The provided license could not be verified")).
+			Append(problem.Instance(instance))
+	}
+	if !lic.Active {
+		slog.Warn("license revoked", "licenseId", lic.ID)
+		observability.CountActivationAttempt(ctx, "failure", "revoked")
+		return nil, problem.Of(403).
+			Append(problem.Type("https://api.yourapp.dev/problems/license-revoked")).
+			Append(problem.Title("License revoked")).
+			Append(problem.Detail("This license has been revoked")).
+			Append(problem.Instance(instance))
+	}
+
+	if !lic.ExpiresAt.IsZero() && time.Now().UTC().After(lic.ExpiresAt.UTC()) {
+		slog.Warn("license expired", "licenseId", lic.ID)
+		observability.CountActivationAttempt(ctx, "failure", "expired")
+		return nil, problem.Of(403).
+			Append(problem.Type("https://api.yourapp.dev/problems/license-expired")).
+			Append(problem.Title("License expired")).
+			Append(problem.Detail("This license has expired")).
+			Append(problem.Instance(instance))
+	}
+
+	return lic, nil
 }
 
 func (svc *Service) StartTrial(ctx context.Context, data StartTrialRequest) (ActivateResponse, error) {

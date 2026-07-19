@@ -29,6 +29,14 @@ func (r *Repository) CountTrialsByHwidProduct(ctx context.Context, orgID uuid.UU
 	})
 }
 
+func (r *Repository) DeactivateByLicenseAndHwid(ctx context.Context, licenseID uuid.UUID, hwidHash []byte) error {
+	_, err := r.q.DeactivateActivationByLicenseAndHwid(ctx, db.DeactivateActivationByLicenseAndHwidParams{
+		LicenseID: licenseID,
+		HwidHash:  hwidHash,
+	})
+	return err
+}
+
 func (r *Repository) ActivateAtomic(
 	ctx context.Context,
 	licenseID uuid.UUID,

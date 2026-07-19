@@ -16,6 +16,11 @@ type ActivateRequest struct {
 	Device     Device `json:"deviceId"`
 }
 
+type DeactivateRequest struct {
+	LicenseKey string `json:"licenseKey" validate:"required"`
+	DeviceID   string `json:"deviceId" validate:"required"`
+}
+
 type ActivateResponse struct {
 	ActivationID   uuid.UUID                `json:"activationId"`
 	Token          string                   `json:"token"`
