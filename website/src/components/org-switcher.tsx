@@ -1,15 +1,15 @@
-import * as React from "react"
-import { Building2, Check, ChevronsUpDown, Loader2, Plus } from "lucide-react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useRouter } from "@tanstack/react-router"
-import { toast } from "sonner"
+import * as React from "react";
+import { Building2, Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
+import { toast } from "sonner";
 
 import {
   getCurrentAdmin,
   listOrganizations,
   createOrganization,
   switchOrganization,
-} from "@/features/admin/api"
+} from "@/features/admin/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,13 +17,13 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
+} from "@/components/ui/sidebar";
 import {
   Dialog,
   DialogContent,
@@ -31,56 +31,68 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function OrgSwitcher() {
-  const { isMobile } = useSidebar()
-  const queryClient = useQueryClient()
-  const router = useRouter()
-  const [createOpen, setCreateOpen] = React.useState(false)
-  const [name, setName] = React.useState("")
+  const { isMobile } = useSidebar();
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [name, setName] = React.useState("");
 
-  const { data: admin } = useQuery({ queryKey: ["currentAdmin"], queryFn: getCurrentAdmin })
-  const { data: orgs } = useQuery({ queryKey: ["organizations"], queryFn: listOrganizations })
+  const { data: admin } = useQuery({
+    queryKey: ["currentAdmin"],
+    queryFn: getCurrentAdmin,
+  });
+  const { data: orgs } = useQuery({
+    queryKey: ["organizations"],
+    queryFn: listOrganizations,
+  });
 
-  const activeId = admin?.organizationId
+  const activeId = admin?.organizationId;
   const activeName =
-    orgs?.find((o) => o.id === activeId)?.name ?? admin?.organizationName ?? "Organization"
-  const activeRole = orgs?.find((o) => o.id === activeId)?.role
+    orgs?.find((o) => o.id === activeId)?.name ??
+    admin?.organizationName ??
+    "Organization";
+  const activeRole = orgs?.find((o) => o.id === activeId)?.role;
 
   async function refreshAll() {
+    queryClient.removeQueries({
+      predicate: (query) =>
+        !["currentAdmin", "organizations"].includes(String(query.queryKey[0])),
+    });
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["currentAdmin"] }),
       queryClient.invalidateQueries({ queryKey: ["organizations"] }),
-      queryClient.invalidateQueries({ queryKey: ["adminOverview"] }),
-      queryClient.invalidateQueries({ queryKey: ["adminLicenses"] }),
-      queryClient.invalidateQueries({ queryKey: ["adminProducts"] }),
-      queryClient.invalidateQueries({ queryKey: ["adminTrials"] }),
-      queryClient.invalidateQueries({ queryKey: ["adminTimeseries"] }),
-      queryClient.invalidateQueries({ queryKey: ["adminAudit"] }),
-    ])
-    await router.invalidate()
+    ]);
+    await router.invalidate();
   }
 
   const switchMut = useMutation({
     mutationFn: switchOrganization,
     onSuccess: refreshAll,
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to switch organization"),
-  })
+    onError: (e) =>
+      toast.error(
+        e instanceof Error ? e.message : "Failed to switch organization",
+      ),
+  });
 
   const createMut = useMutation({
     mutationFn: () => createOrganization(name.trim()),
     onSuccess: async () => {
-      setCreateOpen(false)
-      setName("")
-      toast.success("Organization created")
-      await refreshAll()
+      setCreateOpen(false);
+      setName("");
+      toast.success("Organization created");
+      await refreshAll();
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to create organization"),
-  })
+    onError: (e) =>
+      toast.error(
+        e instanceof Error ? e.message : "Failed to create organization",
+      ),
+  });
 
   return (
     <>
@@ -123,7 +135,7 @@ export function OrgSwitcher() {
                   className="gap-2 p-2"
                   disabled={switchMut.isPending}
                   onClick={() => {
-                    if (org.id !== activeId) switchMut.mutate(org.id)
+                    if (org.id !== activeId) switchMut.mutate(org.id);
                   }}
                 >
                   <div className="flex size-6 items-center justify-center rounded-md border">
@@ -134,11 +146,16 @@ export function OrgSwitcher() {
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="gap-2 p-2" onClick={() => setCreateOpen(true)}>
+              <DropdownMenuItem
+                className="gap-2 p-2"
+                onClick={() => setCreateOpen(true)}
+              >
                 <div className="flex size-6 items-center justify-center rounded-md border bg-transparent">
                   <Plus className="size-4" />
                 </div>
-                <div className="text-muted-foreground font-medium">Create organization</div>
+                <div className="text-muted-foreground font-medium">
+                  Create organization
+                </div>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -155,8 +172,8 @@ export function OrgSwitcher() {
           </DialogHeader>
           <form
             onSubmit={(e) => {
-              e.preventDefault()
-              if (name.trim().length >= 2) createMut.mutate()
+              e.preventDefault();
+              if (name.trim().length >= 2) createMut.mutate();
             }}
           >
             <div className="space-y-2">
@@ -181,5 +198,5 @@ export function OrgSwitcher() {
         </DialogContent>
       </Dialog>
     </>
-  )
+  );
 }

@@ -1,21 +1,24 @@
-import { createRootRoute, Outlet } from '@tanstack/react-router'
-import { lazy } from 'react'
-import { Toaster } from 'sonner'
+import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
+import type { QueryClient } from "@tanstack/react-query";
+import { lazy } from "react";
+import { Toaster } from "sonner";
 
 const TanStackRouterDevtools = import.meta.env.DEV
   ? lazy(() =>
-      import('@tanstack/react-router-devtools').then((m) => ({
+      import("@tanstack/react-router-devtools").then((m) => ({
         default: m.TanStackRouterDevtools,
       })),
     )
-  : () => null
+  : () => null;
 
-export const Route = createRootRoute({
-  component: () => (
-    <>
-      <Outlet />
-      <Toaster richColors position="bottom-right" />
-      <TanStackRouterDevtools />
-    </>
-  ),
-})
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
+  {
+    component: () => (
+      <>
+        <Outlet />
+        <Toaster richColors position="bottom-right" />
+        <TanStackRouterDevtools />
+      </>
+    ),
+  },
+);

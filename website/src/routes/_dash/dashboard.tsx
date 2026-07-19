@@ -1,33 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 import { getCurrentAdmin } from "@/features/admin/api";
-import { getAdminOverview, getAdminTimeseries } from "@/features/admin/api";
+import { getAdminOverview } from "@/features/admin/api";
 import { useCurrentProduct } from "@/features/admin/product-context";
 import { AdminShell } from "@/components/admin/AdminShell";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Key,
@@ -42,114 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-const chartConfig = {
-  activations: { label: "Activations", color: "var(--chart-2)" },
-  trials: { label: "Trials started", color: "var(--chart-4)" },
-} satisfies ChartConfig;
-
-type Range = "90d" | "30d" | "7d";
-
-const rangeDays: Record<Range, number> = { "90d": 90, "30d": 30, "7d": 7 };
-const rangeLabel: Record<Range, string> = {
-  "90d": "the last 3 months",
-  "30d": "the last 30 days",
-  "7d": "the last 7 days",
-};
-
-function UsageChart() {
-  const [range, setRange] = React.useState<Range>("90d");
-  const days = rangeDays[range];
-  const { product } = useCurrentProduct();
-
-  const { data: series, isLoading } = useQuery({
-    queryKey: ["adminTimeseries", days, product?.id],
-    queryFn: () => getAdminTimeseries(days, product?.id),
-  });
-
-  const data = series ?? [];
-
-  return (
-    <Card className="pt-0">
-      <CardHeader className="flex flex-col items-stretch border-b !p-0 sm:flex-row">
-        <div className="flex flex-1 flex-col justify-center gap-1 px-6 py-5">
-          <CardTitle>License activity</CardTitle>
-          <CardDescription>Activations and trials over {rangeLabel[range]}</CardDescription>
-        </div>
-        <div className="flex items-center px-6 pb-4 sm:pb-0 sm:pr-6">
-          <Select value={range} onValueChange={(v) => setRange(v as Range)}>
-            <SelectTrigger className="w-40" aria-label="Select range">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="90d">Last 3 months</SelectItem>
-              <SelectItem value="30d">Last 30 days</SelectItem>
-              <SelectItem value="7d">Last 7 days</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </CardHeader>
-      <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
-        {isLoading ? (
-          <Skeleton className="h-[250px] w-full" />
-        ) : (
-          <ChartContainer config={chartConfig} className="aspect-auto h-[250px] w-full">
-            <AreaChart data={data} margin={{ left: 12, right: 12, top: 12 }}>
-              <defs>
-                <linearGradient id="fill-activations" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--color-activations)" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="var(--color-activations)" stopOpacity={0.1} />
-                </linearGradient>
-                <linearGradient id="fill-trials" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--color-trials)" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="var(--color-trials)" stopOpacity={0.1} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="date"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                minTickGap={32}
-                tickFormatter={(value) =>
-                  new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                }
-              />
-              <ChartTooltip
-                cursor={false}
-                content={
-                  <ChartTooltipContent
-                    indicator="dot"
-                    labelFormatter={(value) =>
-                      new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                    }
-                  />
-                }
-              />
-              <Area
-                dataKey="activations"
-                type="monotone"
-                fill="url(#fill-activations)"
-                stroke="var(--color-activations)"
-                strokeWidth={2}
-                stackId="a"
-              />
-              <Area
-                dataKey="trials"
-                type="monotone"
-                fill="url(#fill-trials)"
-                stroke="var(--color-trials)"
-                strokeWidth={2}
-                stackId="a"
-              />
-              <ChartLegend content={<ChartLegendContent />} />
-            </AreaChart>
-          </ChartContainer>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+const UsageChart = React.lazy(() => import("@/features/admin/UsageChart"));
 
 type Tone = "success" | "info" | "danger" | "muted";
 
@@ -209,7 +80,9 @@ function RecentActivity() {
   return (
     <div className="space-y-3">
       <div className="space-y-0.5">
-        <h2 className="text-lg font-semibold tracking-tight">Recent Activity</h2>
+        <h2 className="text-lg font-semibold tracking-tight">
+          Recent Activity
+        </h2>
         <p className="text-muted-foreground text-sm">
           Latest events across licenses, updates, and downloads.
         </p>
@@ -259,7 +132,11 @@ function DashboardPage() {
   const stats = [
     { label: "Total Licenses", value: overview?.totalLicenses, icon: Key },
     { label: "Active", value: overview?.activeLicenses, icon: Package },
-    { label: "Active Trials", value: overview?.activeTrials, icon: FlaskConical },
+    {
+      label: "Active Trials",
+      value: overview?.activeTrials,
+      icon: FlaskConical,
+    },
     { label: "Expired", value: overview?.expiredLicenses, icon: AlertCircle },
     { label: "Products", value: overview?.totalProducts, icon: Users },
   ];
@@ -270,7 +147,10 @@ function DashboardPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
         <p className="text-muted-foreground text-sm">
           {admin ? (
-            <>Signed in as <span className="text-foreground font-medium">{admin.email}</span></>
+            <>
+              Signed in as{" "}
+              <span className="text-foreground font-medium">{admin.email}</span>
+            </>
           ) : (
             "Your license activity at a glance."
           )}
@@ -290,14 +170,20 @@ function DashboardPage() {
               {isLoading ? (
                 <Skeleton className="h-8 w-16" />
               ) : (
-                <div className="text-2xl font-bold tabular-nums">{stat.value ?? 0}</div>
+                <div className="text-2xl font-bold tabular-nums">
+                  {stat.value ?? 0}
+                </div>
               )}
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <UsageChart />
+      <React.Suspense
+        fallback={<Skeleton className="h-[330px] w-full rounded-xl" />}
+      >
+        <UsageChart />
+      </React.Suspense>
 
       <RecentActivity />
     </AdminShell>
