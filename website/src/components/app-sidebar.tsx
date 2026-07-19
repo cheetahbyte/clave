@@ -1,5 +1,5 @@
 import * as React from "react"
-import { FlaskConical, GitBranch, Key, LayoutDashboard, Monitor, Radio, Rocket, ScrollText, Settings, Users } from "lucide-react"
+import { ChartNoAxesColumnIncreasing, FlaskConical, GitBranch, Key, LayoutDashboard, Monitor, Radio, Rocket, ScrollText, Settings, Users } from "lucide-react"
 import { Link, useLocation, useNavigate } from "@tanstack/react-router"
 import { toast } from "sonner"
 import { useQuery } from "@tanstack/react-query"
@@ -113,6 +113,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive("/updates/changelogs")} tooltip="Changelogs">
                   <Link to="/updates/changelogs"><ScrollText /><span>Changelogs</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/updates/adoption")} tooltip="Version Adoption">
+                  <Link to="/updates/adoption"><ChartNoAxesColumnIncreasing /><span>Version Adoption</span></Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

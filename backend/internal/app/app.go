@@ -16,6 +16,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/features/adminauth"
 	"github.com/cheetahbyte/clave/internal/features/audit"
 	"github.com/cheetahbyte/clave/internal/features/clientsync"
+	"github.com/cheetahbyte/clave/internal/features/diagnostics"
 	"github.com/cheetahbyte/clave/internal/features/license"
 	"github.com/cheetahbyte/clave/internal/features/mcpserver"
 	"github.com/cheetahbyte/clave/internal/features/organization"
@@ -37,9 +38,10 @@ import (
 )
 
 var (
-	pool           *pgxpool.Pool
-	publisher      *events.Publisher
-	updateRecorder *update.UpdateCheckRecorder
+	pool            *pgxpool.Pool
+	publisher       *events.Publisher
+	updateRecorder  *update.UpdateCheckRecorder
+	checkinRecorder *diagnostics.Recorder
 )
 
 func Close() {
@@ -47,6 +49,9 @@ func Close() {
 	defer cancel()
 	if updateRecorder != nil {
 		updateRecorder.Close(ctx)
+	}
+	if checkinRecorder != nil {
+		checkinRecorder.Close(ctx)
 	}
 	observability.Shutdown(ctx)
 	if publisher != nil {
@@ -117,7 +122,10 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	activationSvc := activation.NewService(q, pool, signer, licenseSvc, updateSvc)
 	validationSvc := validation.NewService(q, signer, licenseSvc, updateSvc)
 	updateSvc.SetValidator(validationSvc)
-	clientSyncSvc := clientsync.NewService(validationSvc, updateSvc)
+	diagnosticsRepo := diagnostics.NewRepository(q)
+	diagnosticsSvc := diagnostics.NewService(diagnosticsRepo)
+	checkinRecorder = diagnostics.NewRecorder(diagnosticsRepo, 90, 256)
+	clientSyncSvc := clientsync.NewService(validationSvc, updateSvc, checkinRecorder)
 	selfServiceRepo := selfservice.NewRepository(q, pool)
 	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer, licenseSvc)
 
@@ -138,6 +146,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	validationH := validation.NewHandler(validationSvc)
 	clientSyncH := clientsync.NewHandler(clientSyncSvc)
 	updateH := update.NewHandler(updateSvc, auditSvc)
+	diagnosticsH := diagnostics.NewHandler(diagnosticsSvc)
 	selfserviceH := selfservice.NewHandler(selfserviceSvc, publisher, appURL, cfg.SelfServiceReturnToken, cfg.Dev)
 
 	sessionManager := scs.New()
@@ -191,6 +200,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 		Activation:   activationH,
 		Validation:   validationH,
 		Sync:         clientSyncH,
+		Diagnostics:  diagnosticsH,
 		Update:       updateH,
 		AdminAuth:    adminAuthH,
 		LicenseAdmin: licenseH,

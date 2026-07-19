@@ -1,0 +1,27 @@
+ Security findings
+
+ 1. High — Organization roles aren’t enforced
+    Any MFA-verified member can access privileged routes, including owner management.
+    Affected: backend/internal/api/router.go:131-145, backend/internal/shared/middleware/auth.go:166-215
+
+ 2. High — Arbitrary filesystem write location
+    Administrators can configure artifact storage to any writable server path.
+    Affected: backend/internal/features/update/handler.go:229-259, backend/internal/shared/storage/local.go:19-70
+
+ 3. Medium — Authenticated SSRF through S3 endpoints
+    Custom S3 endpoints can target internal or private network services.
+    Affected: backend/internal/features/update/handler.go:197-226, backend/internal/shared/storage/s3.go:20-140
+
+ 4. Medium — Magic links aren’t organization-bound
+    A token issued for one organization can establish a session for another organization.
+    Affected: backend/internal/features/selfservice/handler.go:38-72, backend/internal/features/selfservice/service.go:125-174
+
+ 5. Medium — Artifact uploads can exhaust memory
+    Uploads lack a total request limit and buffer files fully in memory.
+    Affected: backend/internal/features/update/handler.go:489-519, backend/internal/features/update/service.go:697-721
+
+ 6. Low — GitHub Actions use mutable tags
+    Third-party actions should be pinned to full commit SHAs.
+    Affected: .github/workflows/security.yaml, .github/workflows/images.yaml, .github/workflows/e2e.yaml
+
+ No committed production secrets, SQL injection, or stored XSS were confirmed. Dependency vulnerability coverage remains incomplete because govulncheck was unavailable.

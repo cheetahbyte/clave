@@ -46,10 +46,11 @@ type SelfServiceRoutes interface {
 }
 
 type Config struct {
-	Activation ClientRoutes
-	Validation ClientRoutes
-	Sync       ClientRoutes
-	Update     interface {
+	Activation  ClientRoutes
+	Validation  ClientRoutes
+	Sync        ClientRoutes
+	Diagnostics AdminRoutes
+	Update      interface {
 		ClientRoutes
 		AdminRoutes
 		PublicRoutes
@@ -140,6 +141,7 @@ func Register(r *chi.Mux, cfg Config) {
 					protected.Use(mw.CSRFAuth)
 
 					cfg.LicenseAdmin.RegisterAdminRoutes(protected)
+					cfg.Diagnostics.RegisterAdminRoutes(protected)
 					cfg.Update.RegisterAdminRoutes(protected)
 					cfg.Audit.RegisterAdminRoutes(protected)
 					cfg.Organization.RegisterAdminRoutes(protected)

@@ -118,6 +118,13 @@ The response always contains `token`, `validUntil`, `updateChannels`, and
 `updateStatus`. `updateStatus` is `not_requested`, `ok`, or `unavailable`; an
 `ok` response also includes the normal update-check payload in `update`.
 
+When `version` is present and the license is authorized, Clave also records a
+best-effort client check-in for the Version Adoption dashboard. This happens
+independently of update resolution, so the check-in still counts when no update
+source is configured or the update provider is temporarily unavailable. Build,
+platform, architecture, and OS version are optional diagnostics. Check-in
+recording never changes the synchronization response or failure behavior.
+
 ---
 
 ## Starting a Trial

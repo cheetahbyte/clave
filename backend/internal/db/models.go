@@ -66,6 +66,20 @@ type Changelog struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ClientCheckin struct {
+	ID             uuid.UUID          `json:"id"`
+	OrganizationID uuid.UUID          `json:"organization_id"`
+	ProductID      uuid.UUID          `json:"product_id"`
+	LicenseID      uuid.UUID          `json:"license_id"`
+	ActivationID   uuid.UUID          `json:"activation_id"`
+	Version        string             `json:"version"`
+	Build          *string            `json:"build"`
+	Platform       *string            `json:"platform"`
+	Arch           *string            `json:"arch"`
+	OsVersion      *string            `json:"os_version"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type Device struct {
 	ID        uuid.UUID          `json:"id"`
 	HwidHash  []byte             `json:"hwid_hash"`

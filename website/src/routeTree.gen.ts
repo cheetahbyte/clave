@@ -32,6 +32,7 @@ import { Route as DashUpdatesSourcesRouteImport } from './routes/_dash/updates/s
 import { Route as DashUpdatesReleasesRouteImport } from './routes/_dash/updates/releases'
 import { Route as DashUpdatesChannelsRouteImport } from './routes/_dash/updates/channels'
 import { Route as DashUpdatesChangelogsRouteImport } from './routes/_dash/updates/changelogs'
+import { Route as DashUpdatesAdoptionRouteImport } from './routes/_dash/updates/adoption'
 import { Route as DashProductsProductIdRouteImport } from './routes/_dash/products/$productId'
 import { Route as DashLicensesLicenseIdRouteImport } from './routes/_dash/licenses/$licenseId'
 
@@ -149,6 +150,11 @@ const DashUpdatesChangelogsRoute = DashUpdatesChangelogsRouteImport.update({
   path: '/updates/changelogs',
   getParentRoute: () => DashRoute,
 } as any)
+const DashUpdatesAdoptionRoute = DashUpdatesAdoptionRouteImport.update({
+  id: '/updates/adoption',
+  path: '/updates/adoption',
+  getParentRoute: () => DashRoute,
+} as any)
 const DashProductsProductIdRoute = DashProductsProductIdRouteImport.update({
   id: '/products/$productId',
   path: '/products/$productId',
@@ -171,6 +177,7 @@ export interface FileRoutesByFullPath {
   '/2fa/': typeof R2faIndexRoute
   '/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
   '/products/$productId': typeof DashProductsProductIdRoute
+  '/updates/adoption': typeof DashUpdatesAdoptionRoute
   '/updates/changelogs': typeof DashUpdatesChangelogsRoute
   '/updates/channels': typeof DashUpdatesChannelsRoute
   '/updates/releases': typeof DashUpdatesReleasesRoute
@@ -197,6 +204,7 @@ export interface FileRoutesByTo {
   '/2fa': typeof R2faIndexRoute
   '/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
   '/products/$productId': typeof DashProductsProductIdRoute
+  '/updates/adoption': typeof DashUpdatesAdoptionRoute
   '/updates/changelogs': typeof DashUpdatesChangelogsRoute
   '/updates/channels': typeof DashUpdatesChannelsRoute
   '/updates/releases': typeof DashUpdatesReleasesRoute
@@ -225,6 +233,7 @@ export interface FileRoutesById {
   '/2fa/': typeof R2faIndexRoute
   '/_dash/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
   '/_dash/products/$productId': typeof DashProductsProductIdRoute
+  '/_dash/updates/adoption': typeof DashUpdatesAdoptionRoute
   '/_dash/updates/changelogs': typeof DashUpdatesChangelogsRoute
   '/_dash/updates/channels': typeof DashUpdatesChannelsRoute
   '/_dash/updates/releases': typeof DashUpdatesReleasesRoute
@@ -253,6 +262,7 @@ export interface FileRouteTypes {
     | '/2fa/'
     | '/licenses/$licenseId'
     | '/products/$productId'
+    | '/updates/adoption'
     | '/updates/changelogs'
     | '/updates/channels'
     | '/updates/releases'
@@ -279,6 +289,7 @@ export interface FileRouteTypes {
     | '/2fa'
     | '/licenses/$licenseId'
     | '/products/$productId'
+    | '/updates/adoption'
     | '/updates/changelogs'
     | '/updates/channels'
     | '/updates/releases'
@@ -306,6 +317,7 @@ export interface FileRouteTypes {
     | '/2fa/'
     | '/_dash/licenses/$licenseId'
     | '/_dash/products/$productId'
+    | '/_dash/updates/adoption'
     | '/_dash/updates/changelogs'
     | '/_dash/updates/channels'
     | '/_dash/updates/releases'
@@ -495,6 +507,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashUpdatesChangelogsRouteImport
       parentRoute: typeof DashRoute
     }
+    '/_dash/updates/adoption': {
+      id: '/_dash/updates/adoption'
+      path: '/updates/adoption'
+      fullPath: '/updates/adoption'
+      preLoaderRoute: typeof DashUpdatesAdoptionRouteImport
+      parentRoute: typeof DashRoute
+    }
     '/_dash/products/$productId': {
       id: '/_dash/products/$productId'
       path: '/products/$productId'
@@ -517,6 +536,7 @@ interface DashRouteChildren {
   DashDashboardRoute: typeof DashDashboardRoute
   DashLicensesLicenseIdRoute: typeof DashLicensesLicenseIdRoute
   DashProductsProductIdRoute: typeof DashProductsProductIdRoute
+  DashUpdatesAdoptionRoute: typeof DashUpdatesAdoptionRoute
   DashUpdatesChangelogsRoute: typeof DashUpdatesChangelogsRoute
   DashUpdatesChannelsRoute: typeof DashUpdatesChannelsRoute
   DashUpdatesReleasesRoute: typeof DashUpdatesReleasesRoute
@@ -536,6 +556,7 @@ const DashRouteChildren: DashRouteChildren = {
   DashDashboardRoute: DashDashboardRoute,
   DashLicensesLicenseIdRoute: DashLicensesLicenseIdRoute,
   DashProductsProductIdRoute: DashProductsProductIdRoute,
+  DashUpdatesAdoptionRoute: DashUpdatesAdoptionRoute,
   DashUpdatesChangelogsRoute: DashUpdatesChangelogsRoute,
   DashUpdatesChannelsRoute: DashUpdatesChannelsRoute,
   DashUpdatesReleasesRoute: DashUpdatesReleasesRoute,

@@ -386,6 +386,47 @@ export function getAdminTimeseries(days = 30, productId?: string): Promise<Times
   return adminFetch<TimeseriesPoint[]>(`/api/v1/admin/stats/timeseries?${params.toString()}`);
 }
 
+export interface VersionDistribution {
+  version: string;
+  deviceCount: number;
+  percentage: number;
+}
+
+export interface VersionTrendValue {
+  version: string;
+  deviceCount: number;
+}
+
+export interface VersionTrendPoint {
+  date: string;
+  versions: VersionTrendValue[];
+}
+
+export interface VersionDevice {
+  activationId: string;
+  hostname: string | null;
+  version: string;
+  build: string | null;
+  platform: string | null;
+  arch: string | null;
+  osVersion: string | null;
+  lastCheckin: string;
+}
+
+export interface VersionAdoptionResponse {
+  activeDevices: number;
+  versionCount: number;
+  distribution: VersionDistribution[];
+  trend: VersionTrendPoint[];
+  devices: VersionDevice[];
+}
+
+export function getVersionAdoption(productId?: string, days = 30): Promise<VersionAdoptionResponse> {
+  const params = new URLSearchParams({ days: String(days) });
+  if (productId) params.set("productId", productId);
+  return adminFetch<VersionAdoptionResponse>(`/api/v1/admin/version-adoption?${params.toString()}`);
+}
+
 export interface ListTrialsParams {
   q?: string;
   status?: string;

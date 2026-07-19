@@ -9,6 +9,8 @@ includes an admin dashboard and customer self-service portal.
 - **Emailer** — RabbitMQ consumer and SMTP sender in `emailer/`.
 - **Client integration** — activation, validation, updates, grace periods, and
   certificate pinning are documented in [`CLIENT.md`](./CLIENT.md).
+- **Version adoption** — authorized client synchronization records the running
+  version and optional platform diagnostics for the admin dashboard.
 
 ## Local development
 
@@ -221,6 +223,9 @@ Unless noted otherwise, variables are read at process startup.
 | `SMTP_USER` | Empty | Legacy backend SMTP username; currently unused. |
 | `SMTP_PASS` | Empty | Legacy backend SMTP password; currently unused. |
 | `MAIL_FROM` | `noreply@clave.app` | Legacy backend sender; currently unused. The emailer uses `EMAIL_FROM`. |
+
+Version-adoption check-ins are retained for 90 days. The dashboard counts each
+activation once using its latest report from the last 30 days.
 
 ### Emailer
 

@@ -25,10 +25,11 @@ type Service struct {
 }
 
 type Authorized struct {
-	LicenseID    uuid.UUID
-	License      *license.License
-	Claims       *signing.LicenseClaims
-	ActivationID uuid.UUID
+	OrganizationID uuid.UUID
+	LicenseID      uuid.UUID
+	License        *license.License
+	Claims         *signing.LicenseClaims
+	ActivationID   uuid.UUID
 }
 
 func NewService(q *db.Queries, signer *signing.Service, _ *license.Service, channels clientchannels.Lister) *Service {
@@ -91,7 +92,7 @@ func (svc *Service) Authorize(ctx context.Context, token, deviceID, instance str
 	if !lic.ExpiresAt.IsZero() && time.Now().UTC().After(lic.ExpiresAt.UTC()) {
 		return nil, problem.Of(403).Append(problem.Title("License expired")).Append(problem.Instance(instance))
 	}
-	return &Authorized{LicenseID: licenseID, License: lic, Claims: claims, ActivationID: uuid.UUID(row.ActivationID.Bytes)}, nil
+	return &Authorized{OrganizationID: row.OrganizationID, LicenseID: licenseID, License: lic, Claims: claims, ActivationID: uuid.UUID(row.ActivationID.Bytes)}, nil
 }
 
 func (svc *Service) availableUpdateChannels(ctx context.Context, productID uuid.UUID, features []string) []clientchannels.Channel {
