@@ -37,6 +37,10 @@ type PublicRoutes interface {
 	RegisterPublicRoutes(chi.Router)
 }
 
+type WorkerRoutes interface {
+	RegisterWorkerRoutes(chi.Router)
+}
+
 type PublicRoutesWithMiddleware interface {
 	RegisterPublicRoutes(chi.Router, routing.MiddlewareConfig)
 }
@@ -54,6 +58,7 @@ type Config struct {
 		ClientRoutes
 		AdminRoutes
 		PublicRoutes
+		WorkerRoutes
 	}
 	AdminAuth    AdminAuthRoutes
 	LicenseAdmin AdminRoutes
@@ -153,6 +158,10 @@ func Register(r *chi.Mux, cfg Config) {
 
 			cfg.SelfService.RegisterSelfServiceRoutes(v1, mw)
 			cfg.Update.RegisterPublicRoutes(v1)
+			v1.Route("/worker", func(worker chi.Router) {
+				worker.Use(mw.WorkerAuth)
+				cfg.Update.RegisterWorkerRoutes(worker)
+			})
 
 		})
 	})

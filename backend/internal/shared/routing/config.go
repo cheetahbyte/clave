@@ -10,6 +10,7 @@ type MiddlewareConfig struct {
 	CSRFAuth      func(http.Handler) http.Handler
 	CSRFPlain     func(http.Handler) http.Handler
 	ForceHTTPS    func(http.Handler) http.Handler
+	WorkerAuth    func(http.Handler) http.Handler
 	SensitiveRate func(http.Handler) http.Handler
 	Verbose       bool
 }

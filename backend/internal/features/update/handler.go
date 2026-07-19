@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -558,6 +559,178 @@ func (h *Handler) AdminPublishRelease(w http.ResponseWriter, r *http.Request) {
 
 	h.audit(r, "release.published", "release", &releaseID)
 	helpers.WriteJSON(w, http.StatusOK, release)
+}
+
+func (h *Handler) AdminListDeltaJobs(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	releaseID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid release id"})
+		return
+	}
+	if err := h.verifyReleaseOwnership(r.Context(), orgID, releaseID); err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "release not found"})
+		return
+	}
+	jobs, err := h.svc.ListDeltaJobs(r.Context(), releaseID)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list delta jobs"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, jobs)
+}
+
+func (h *Handler) AdminRetryDeltaJobs(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	releaseID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid release id"})
+		return
+	}
+	if err := h.verifyReleaseOwnership(r.Context(), orgID, releaseID); err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "release not found"})
+		return
+	}
+	jobs, err := h.svc.RetryDeltaJobs(r.Context(), releaseID)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to retry delta jobs"})
+		return
+	}
+	h.audit(r, "release.delta_retried", "release", &releaseID)
+	helpers.WriteJSON(w, http.StatusOK, map[string]any{"requeued": len(jobs)})
+}
+
+func (h *Handler) WorkerClaimDeltaJob(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := workerJobID(w, r)
+	if !ok {
+		return
+	}
+	job, err := h.svc.ClaimDeltaJob(r.Context(), jobID)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": "job is not claimable"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, job)
+}
+
+func (h *Handler) WorkerDownloadSourceArtifact(w http.ResponseWriter, r *http.Request) {
+	h.workerDownloadDeltaArtifact(w, r, true)
+}
+
+func (h *Handler) WorkerDownloadTargetArtifact(w http.ResponseWriter, r *http.Request) {
+	h.workerDownloadDeltaArtifact(w, r, false)
+}
+
+func (h *Handler) workerDownloadDeltaArtifact(w http.ResponseWriter, r *http.Request, source bool) {
+	jobID, ok := workerJobID(w, r)
+	if !ok {
+		return
+	}
+	download, err := h.svc.ResolveDeltaJobArtifact(r.Context(), jobID, source)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": "artifact unavailable"})
+		return
+	}
+	if download.RedirectURL != "" {
+		http.Redirect(w, r, download.RedirectURL, http.StatusTemporaryRedirect)
+		return
+	}
+	defer download.Body.Close()
+	serveArtifactDownload(w, r, download)
+}
+
+func (h *Handler) WorkerCompleteDeltaJob(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := workerJobID(w, r)
+	if !ok {
+		return
+	}
+	declaredSize, err := strconv.ParseInt(r.Header.Get("X-Patch-Size"), 10, 64)
+	if err != nil || declaredSize < 0 {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid patch size"})
+		return
+	}
+	declaredSHA := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Patch-SHA256")))
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
+	job, err := h.svc.CompleteDeltaJob(r.Context(), jobID, r.Body, declaredSHA, declaredSize)
+	if errors.Is(err, ErrDeltaNotWorthwhile) {
+		helpers.WriteJSON(w, http.StatusOK, map[string]string{"status": "skipped"})
+		return
+	}
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": "failed to complete delta job"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, job)
+}
+
+type workerTerminalRequest struct {
+	Reason      string `json:"reason"`
+	PatchSHA256 string `json:"patchSha256"`
+	PatchSize   int64  `json:"patchSize"`
+}
+
+func (h *Handler) WorkerSkipDeltaJob(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := workerJobID(w, r)
+	if !ok {
+		return
+	}
+	var body workerTerminalRequest
+	if !helpers.DecodeValidated(w, r, &body) {
+		return
+	}
+	job, err := h.svc.SkipDeltaJob(r.Context(), jobID, body.PatchSHA256, body.PatchSize, body.Reason)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": "failed to skip delta job"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, job)
+}
+
+func (h *Handler) WorkerFailDeltaJob(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := workerJobID(w, r)
+	if !ok {
+		return
+	}
+	var body workerTerminalRequest
+	if !helpers.DecodeValidated(w, r, &body) {
+		return
+	}
+	job, err := h.svc.FailDeltaJob(r.Context(), jobID, body.Reason)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": "failed to fail delta job"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, job)
+}
+
+func (h *Handler) WorkerRequeueDeltaJob(w http.ResponseWriter, r *http.Request) {
+	jobID, ok := workerJobID(w, r)
+	if !ok {
+		return
+	}
+	job, err := h.svc.RequeueDeltaJob(r.Context(), jobID)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusConflict, map[string]string{"error": "failed to requeue delta job"})
+		return
+	}
+	helpers.WriteJSON(w, http.StatusOK, job)
+}
+
+func workerJobID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	jobID, err := uuid.Parse(chi.URLParam(r, "jobId"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid job id"})
+		return uuid.Nil, false
+	}
+	return jobID, true
 }
 
 func (h *Handler) AdminYankRelease(w http.ResponseWriter, r *http.Request) {

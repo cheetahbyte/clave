@@ -17,6 +17,8 @@ var (
 	bizAuditEvents            metric.Int64Counter
 	bizUpdateCheckTelemetry   metric.Int64Counter
 	bizClientCheckinTelemetry metric.Int64Counter
+	bizDeltaJobs              metric.Int64Counter
+	bizDeltaPatchRatio        metric.Float64Histogram
 )
 
 func initBusinessMetrics(m metric.Meter) {
@@ -72,6 +74,26 @@ func initBusinessMetrics(m metric.Meter) {
 		metric.WithDescription("Client check-in telemetry recorder outcomes"))
 	if err != nil {
 		panic(err)
+	}
+	bizDeltaJobs, err = m.Int64Counter("biz.delta_jobs_total", metric.WithDescription("Delta job state transitions"))
+	if err != nil {
+		panic(err)
+	}
+	bizDeltaPatchRatio, err = m.Float64Histogram("biz.delta_patch_ratio", metric.WithDescription("Delta patch bytes divided by target artifact bytes"))
+	if err != nil {
+		panic(err)
+	}
+}
+
+func CountDeltaJob(ctx context.Context, status string) {
+	if bizDeltaJobs != nil {
+		bizDeltaJobs.Add(ctx, 1, metric.WithAttributes(attribute.String("status", status)))
+	}
+}
+
+func RecordDeltaPatchRatio(ctx context.Context, patchSize, targetSize int64) {
+	if bizDeltaPatchRatio != nil && targetSize > 0 {
+		bizDeltaPatchRatio.Record(ctx, float64(patchSize)/float64(targetSize))
 	}
 }
 

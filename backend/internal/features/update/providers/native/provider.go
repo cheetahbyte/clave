@@ -7,6 +7,7 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/update"
+	"github.com/cheetahbyte/clave/pkg/delta"
 	"github.com/google/uuid"
 )
 
@@ -105,6 +106,7 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 	artifacts, _ := p.repo.ListArtifactsForRelease(ctx, release.ID)
 
 	var fullArtifact *update.ArtifactDTO
+	var deltaArtifact *update.ArtifactDTO
 
 	for _, a := range artifacts {
 		// Skip artifacts that don't match the requested arch/os.
@@ -131,6 +133,21 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 		if a.Signature != nil {
 			dto.Signature = *a.Signature
 		}
+		if a.Filename != nil {
+			dto.Filename = *a.Filename
+		}
+		if a.MimeType != nil {
+			dto.MimeType = *a.MimeType
+		}
+
+		if a.ArtifactType == "delta" {
+			contract, ok := parseDeltaContract(a.Metadata)
+			if ok && a.Signature != nil && *a.Signature != "" && contract.FromVersion == req.CurrentVersion && contract.ToVersion == release.Version {
+				copy1 := dto
+				deltaArtifact = &copy1
+			}
+			continue
+		}
 
 		if fullArtifact == nil {
 			copy1 := dto
@@ -144,6 +161,9 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 	if fullArtifact != nil {
 		artifactDTOs = append(artifactDTOs, *fullArtifact)
 		downloadURL = fullArtifact.URL
+	}
+	if deltaArtifact != nil {
+		artifactDTOs = append(artifactDTOs, *deltaArtifact)
 	}
 
 	var releaseNotes string
@@ -170,6 +190,14 @@ func (p *Provider) CheckForUpdate(ctx context.Context, req update.UpdateRequest,
 	}
 
 	return decision, nil
+}
+
+func parseDeltaContract(raw []byte) (delta.Contract, bool) {
+	var contract delta.Contract
+	if err := json.Unmarshal(raw, &contract); err != nil || contract.Validate() != nil {
+		return delta.Contract{}, false
+	}
+	return contract, true
 }
 
 func (p *Provider) resolveChannel(ctx context.Context, productID uuid.UUID, channelName string) (uuid.UUID, error) {

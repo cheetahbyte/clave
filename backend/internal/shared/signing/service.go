@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -27,6 +28,8 @@ type Provider interface {
 	ParseJWT(tokenString string) (*LicenseClaims, error)
 	IssueAndSignLicenseToken(license LicenseInfo, audience string, features []string, hwid string, activationID uuid.UUID, tokenTTL time.Duration) (string, *LicenseClaims, error)
 	IssueAndSignSelfServiceToken(claims jwt.MapClaims) (string, error)
+	SignDomainPayload(domain string, payload []byte) (string, error)
+	VerifyDomainPayload(domain string, payload []byte, signature string) error
 }
 
 type LicenseInfo interface {
@@ -176,6 +179,29 @@ func (svc *Service) IssueAndSignLicenseToken(license LicenseInfo, audience strin
 func (svc *Service) IssueAndSignSelfServiceToken(claims jwt.MapClaims) (string, error) {
 	j := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims)
 	return j.SignedString(svc.privateKey)
+}
+
+func (svc *Service) SignDomainPayload(domain string, payload []byte) (string, error) {
+	if domain == "" {
+		return "", errors.New("signing domain is required")
+	}
+	message := append(append([]byte(domain), 0), payload...)
+	return base64.StdEncoding.EncodeToString(ed25519.Sign(svc.privateKey, message)), nil
+}
+
+func (svc *Service) VerifyDomainPayload(domain string, payload []byte, encodedSignature string) error {
+	if domain == "" {
+		return errors.New("signing domain is required")
+	}
+	signature, err := base64.StdEncoding.DecodeString(encodedSignature)
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return errors.New("invalid signature encoding")
+	}
+	message := append(append([]byte(domain), 0), payload...)
+	if !ed25519.Verify(svc.publicKey, message, signature) {
+		return errors.New("invalid signature")
+	}
+	return nil
 }
 
 type LicenseClaims struct {

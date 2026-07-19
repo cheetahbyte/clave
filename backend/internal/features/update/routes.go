@@ -23,6 +23,8 @@ func (h *Handler) RegisterAdminRoutes(r chi.Router) {
 	r.Post("/update-releases", h.AdminCreateRelease)
 	r.Post("/update-releases/{id}/artifacts", h.AdminUploadArtifact)
 	r.Post("/update-releases/{id}/publish", h.AdminPublishRelease)
+	r.Get("/update-releases/{id}/delta-jobs", h.AdminListDeltaJobs)
+	r.Post("/update-releases/{id}/delta-jobs/retry", h.AdminRetryDeltaJobs)
 	r.Post("/update-releases/{id}/yank", h.AdminYankRelease)
 	r.Delete("/update-releases/{id}", h.AdminDeleteRelease)
 	r.Get("/products/{id}/changelogs", h.AdminListChangelogs)
@@ -30,6 +32,16 @@ func (h *Handler) RegisterAdminRoutes(r chi.Router) {
 	r.Patch("/changelogs/{changelogId}", h.AdminUpdateChangelog)
 	r.Delete("/changelogs/{changelogId}", h.AdminDeleteChangelog)
 	r.Patch("/update-releases/{id}/changelog", h.AdminAttachReleaseChangelog)
+}
+
+func (h *Handler) RegisterWorkerRoutes(r chi.Router) {
+	r.Post("/delta-jobs/{jobId}/claim", h.WorkerClaimDeltaJob)
+	r.Get("/delta-jobs/{jobId}/artifacts/source", h.WorkerDownloadSourceArtifact)
+	r.Get("/delta-jobs/{jobId}/artifacts/target", h.WorkerDownloadTargetArtifact)
+	r.Post("/delta-jobs/{jobId}/complete", h.WorkerCompleteDeltaJob)
+	r.Post("/delta-jobs/{jobId}/skip", h.WorkerSkipDeltaJob)
+	r.Post("/delta-jobs/{jobId}/fail", h.WorkerFailDeltaJob)
+	r.Post("/delta-jobs/{jobId}/requeue", h.WorkerRequeueDeltaJob)
 }
 
 func (h *Handler) RegisterPublicRoutes(r chi.Router) {

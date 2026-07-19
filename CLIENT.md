@@ -303,6 +303,49 @@ Only `version` and `token` are required. Defaults when omitted:
 
 The `clientId` field enables deterministic staged rollouts. Send a stable, unique value (e.g. a hash of the machine ID) so the server can consistently bucket your client for percentage-based releases.
 
+### Delta Updates
+
+Clave may return a `delta` artifact after the matching full artifact. The full
+artifact is always present and is the required fallback. A delta is offered only
+when its `fromVersion` exactly matches the `version` sent in the update check.
+
+```json
+{
+  "type": "delta",
+  "url": "https://your-instance/api/v1/updates/artifacts/<artifactId>/download",
+  "sizeBytes": 821034,
+  "sha256": "<patch SHA-256>",
+  "signature": "<base64 Ed25519 signature>",
+  "arch": "arm64",
+  "os": "macos",
+  "metadata": {
+    "schema": "clave.delta/v1",
+    "algorithm": "bsdiff",
+    "fromVersion": "1.4.0",
+    "toVersion": "1.5.0",
+    "baseSha256": "<installed artifact SHA-256>",
+    "targetSha256": "<full target artifact SHA-256>",
+    "patchSha256": "<patch SHA-256>",
+    "targetSize": 14682120
+  }
+}
+```
+
+Before applying a delta:
+
+1. Reject unknown schemas or algorithms and require `fromVersion` to equal the installed version.
+2. Canonicalize the fixed `clave.delta/v1` metadata object as UTF-8 JSON with no insignificant whitespace and keys in this lexical order: `algorithm`, `baseSha256`, `fromVersion`, `patchSha256`, `schema`, `targetSha256`, `targetSize`, `toVersion`. Verify `signature` as Ed25519 over `clave.delta/v1`, one zero byte, and those canonical bytes. Use the same Clave public key used for JWT verification.
+3. Verify the installed artifact against `baseSha256`.
+4. Download the patch with the license token in the `Authorization` header and verify both `sha256` and `patchSha256`.
+5. Apply BSDIFF into a new temporary file, then verify `targetSize` and `targetSha256`.
+6. Atomically replace the installed artifact only after every verification succeeds.
+7. Download and install the full artifact after any delta validation, transfer, application, or verification failure.
+
+Clave patches the exact uploaded bytes, including ZIP container metadata. Produce
+ZIP releases deterministically—stable timestamps, entry ordering, permissions,
+extra fields, and compression settings—or expect most ZIP patches to exceed the
+70-percent threshold and be skipped.
+
 ---
 
 ### Native Feed (all platforms)

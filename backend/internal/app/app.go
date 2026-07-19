@@ -134,6 +134,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 
 	if cfg.RabbitMQURL != "" {
 		publisher = events.NewPublisher(cfg.RabbitMQURL)
+		updateSvc.SetDeltaPublisher(publisher)
 	}
 
 	appURL := cfg.PublicAppURL
@@ -216,6 +217,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 			CSRFAuth:     csrfMW,
 			CSRFPlain:    csrfPlaintext,
 			ForceHTTPS:   middleware.SecureTransport(cfg.IsProduction(), cfg.TrustProxyHeaders),
+			WorkerAuth:   middleware.RequireWorkerToken(cfg.WorkerToken),
 			Verbose:      cfg.VerboseLogging,
 		},
 	})

@@ -275,6 +275,29 @@ type UpdateCheck struct {
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
+type UpdateDeltaJob struct {
+	ID               uuid.UUID          `json:"id"`
+	OrganizationID   uuid.UUID          `json:"organization_id"`
+	ReleaseID        uuid.UUID          `json:"release_id"`
+	SourceReleaseID  uuid.UUID          `json:"source_release_id"`
+	SourceArtifactID uuid.UUID          `json:"source_artifact_id"`
+	TargetArtifactID uuid.UUID          `json:"target_artifact_id"`
+	DeltaArtifactID  pgtype.UUID        `json:"delta_artifact_id"`
+	Status           string             `json:"status"`
+	SchemaVersion    string             `json:"schema_version"`
+	Algorithm        string             `json:"algorithm"`
+	SourceSha256     string             `json:"source_sha256"`
+	TargetSha256     string             `json:"target_sha256"`
+	PatchSha256      *string            `json:"patch_sha256"`
+	SourceSize       int64              `json:"source_size"`
+	TargetSize       int64              `json:"target_size"`
+	PatchSize        *int64             `json:"patch_size"`
+	ErrorMessage     *string            `json:"error_message"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+}
+
 type UpdateRelease struct {
 	ID             uuid.UUID          `json:"id"`
 	OrganizationID uuid.UUID          `json:"organization_id"`

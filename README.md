@@ -210,7 +210,7 @@ Unless noted otherwise, variables are read at process startup.
 | `TRUST_PROXY_HEADERS` | False | Trust proxy IP/scheme headers and enable proxy-aware HTTPS enforcement. Use only behind a trusted overwriting proxy. |
 | `SELF_SERVICE_RETURN_TOKEN` | False | Only the exact value `true` returns magic-link tokens in API responses. Development convenience; do not enable in production. |
 | `RABBITMQ_URL` | Empty | AMQP URL. When set, the backend publishes transactional-email events to `clave.events`; set the same broker on the emailer. |
-| `WORKER_TOKEN` | Empty | Reserved worker API token. The current router does not register worker routes, so this does not presently enable the experimental delta worker. |
+| `WORKER_TOKEN` | **Required for delta worker** | Shared bearer token protecting `/api/v1/worker/*`; configure the same high-entropy value on the backend and delta worker. |
 | `UPDATE_ARTIFACT_STORAGE_PATH` | `./data/update-artifacts` | Persistent local storage for uploaded release artifacts. |
 | `UPDATE_CHECK_RETENTION_DAYS` | `90` | Deletes update-check telemetry older than this many days every 24 hours. Set `0` to disable cleanup. |
 | `LOG_LEVEL` | `info` | `debug`, `verbose`, or `trace` enables debug logging; other values use info logging. |
@@ -241,20 +241,44 @@ activation once using its latest report from the last 30 days.
 | --- | --- | --- |
 | `VITE_API_BASE_URL` | Empty | API origin baked into the static bundle at build time. Leave empty for the recommended same-origin `/api` proxy. |
 
-### Experimental delta worker
+### Delta worker
 
-The repository contains partial delta-worker source but no complete runnable
-package/queue implementation or registered backend worker routes. These variables
-are read by the current source and are documented for completeness, not as a
-supported production service.
+The Go delta worker consumes durable `delta.generate` events and produces
+byte-exact BSDIFF patches between adjacent compatible release artifacts. Release
+publication and full downloads continue to work when the worker is unavailable.
+The production Compose service runs one job at a time with a 1536 MiB container
+limit.
 
 | Variable | Required/default | Purpose |
 | --- | --- | --- |
 | `API_URL` | `http://localhost:8000` | Backend base URL. |
-| `WORKER_TOKEN` | Empty | Token sent as `X-Worker-Token` by the current worker source. |
-| `PREVIOUS_ARTIFACT_URL` | Empty | Old full artifact download URL; all three artifact variables are needed to generate a delta. |
-| `NEW_ARTIFACT_URL` | Empty | New full artifact download URL. |
-| `PREVIOUS_VERSION` | Empty | Version represented by the old artifact. |
+| `WORKER_TOKEN` | **Required** | Bearer token shared with the backend. |
+| `RABBITMQ_URL` | `amqp://guest:guest@localhost:5672/` | Broker containing the durable `clave.delta.generate` queue. |
+| `DELTA_MAX_ARTIFACT_BYTES` | `67108864` | Hard ceiling for both source and target artifacts. Oversized jobs are skipped before BSDIFF starts. |
+| `DELTA_MEMORY_BUDGET_BYTES` | `1342177280` | Go soft memory limit and input-limit basis. Effective maximum is `min(max artifact bytes, memory budget / 17)`. |
+| `DELTA_HTTP_TIMEOUT_SECONDS` | `600` | Timeout for each backend request and artifact transfer. |
+
+Classic BSDIFF generation can use roughly 17 times the source size for suffix
+sorting. File-based downloads avoid duplicate transport buffers but do not remove
+that algorithmic memory cost. Keep AMQP prefetch and worker concurrency at one;
+on a 4 GiB Grid-1 node, start with the documented 64 MiB artifact ceiling and
+1536 MiB container limit. Larger artifacts fall back to their full download.
+
+ZIP deltas are useful only when archives are reproducible. Normalize timestamps,
+permissions and extra fields, sort entries consistently, and keep the same
+DEFLATE settings between releases. For example, build from an already normalized
+tree using a stable file list and metadata-stripping mode:
+
+```bash
+find app -print | LC_ALL=C sort | zip -X -@ release.zip
+strip-nondeterminism release.zip  # when available
+```
+
+`zip -X` removes platform-specific extra attributes; it does not normalize file
+timestamps by itself. Set stable timestamps in the build tree (commonly via
+`SOURCE_DATE_EPOCH`) before creating the archive. Otherwise even a small content
+change can move the BSDIFF ratio above 70 percent and Clave records the job as
+`skipped`.
 
 ### Development, tests, and Compose
 

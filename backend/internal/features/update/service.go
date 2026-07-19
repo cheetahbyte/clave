@@ -40,6 +40,7 @@ type Service struct {
 	validator      *validation.Service
 	checkRecorder  *UpdateCheckRecorder
 	channelCache   *productChannelCache
+	deltaPublisher DeltaPublisher
 }
 
 func (svc *Service) SetValidator(validator *validation.Service) {
@@ -833,6 +834,7 @@ func (svc *Service) PublishRelease(ctx context.Context, releaseID uuid.UUID) (*R
 		return nil, err
 	}
 	svc.feedCache.invalidateProduct(release.ProductID)
+	svc.enqueueDeltaJobs(ctx, release.ID)
 
 	var notes string
 	if release.ReleaseNotes != nil {

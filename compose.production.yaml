@@ -53,6 +53,25 @@ services:
       rabbitmq:
         condition: service_healthy
 
+  deltaworker:
+    build:
+      context: ./backend
+    command: ["/deltaworker"]
+    restart: unless-stopped
+    env_file:
+      - "${CLAVE_ENV_FILE:-.env.production}"
+    environment:
+      API_URL: "http://backend:8000"
+      RABBITMQ_URL: "amqp://clave:${RABBITMQ_PASSWORD}@rabbitmq:5672/"
+      DELTA_MAX_ARTIFACT_BYTES: "67108864"
+      DELTA_MEMORY_BUDGET_BYTES: "1342177280"
+    mem_limit: 1536m
+    depends_on:
+      backend:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
   website:
     build:
       context: ./website

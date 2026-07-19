@@ -24,6 +24,11 @@ type EmailEvent struct {
 	Data  map[string]any `json:"data"`
 }
 
+type DeltaGenerateEvent struct {
+	Type  string `json:"type"`
+	JobID string `json:"jobId"`
+}
+
 // Publisher holds a lazily-established RabbitMQ connection and republishes on
 // failure. It is safe for concurrent use.
 type Publisher struct {
@@ -73,12 +78,20 @@ func (p *Publisher) channel() (*amqp.Channel, error) {
 
 // PublishEmail publishes an email event using its Type as the routing key.
 func (p *Publisher) PublishEmail(ctx context.Context, ev EmailEvent) error {
+	return p.publish(ctx, ev.Type, ev)
+}
+
+func (p *Publisher) PublishDeltaGenerate(ctx context.Context, jobID string) error {
+	return p.publish(ctx, "delta.generate", DeltaGenerateEvent{Type: "delta.generate", JobID: jobID})
+}
+
+func (p *Publisher) publish(ctx context.Context, routingKey string, event any) error {
 	ch, err := p.channel()
 	if err != nil {
 		return err
 	}
 
-	body, err := json.Marshal(ev)
+	body, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal event: %w", err)
 	}
@@ -86,7 +99,7 @@ func (p *Publisher) PublishEmail(ctx context.Context, ev EmailEvent) error {
 	pubCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	return ch.PublishWithContext(pubCtx, exchange, ev.Type, false, false, amqp.Publishing{
+	return ch.PublishWithContext(pubCtx, exchange, routingKey, false, false, amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		Timestamp:    time.Now(),

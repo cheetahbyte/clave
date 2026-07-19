@@ -146,6 +146,9 @@ WHERE release_id = $1;
 -- name: GetUpdateArtifact :one
 SELECT * FROM update_artifacts WHERE id = $1;
 
+-- name: DeleteUpdateArtifact :one
+DELETE FROM update_artifacts WHERE id = $1 RETURNING *;
+
 -- name: InsertUpdateArtifact :one
 INSERT INTO update_artifacts (
     id, release_id, artifact_type, os, arch, url, size_bytes, checksum_sha256, signature, metadata,
@@ -194,3 +197,81 @@ SELECT r.id AS release_id, c.body AS changelog_body
 FROM update_releases r
 JOIN changelogs c ON c.id = r.changelog_id
 WHERE r.id = ANY($1::uuid[]);
+
+-- name: FindPreviousPublishedRelease :one
+SELECT *
+FROM update_releases
+WHERE product_id = $1
+  AND platform = $2
+  AND channel_id = $3
+  AND status = 'published'
+  AND id <> $4
+ORDER BY published_at DESC, created_at DESC
+LIMIT 1;
+
+-- name: UpsertDeltaJob :one
+INSERT INTO update_delta_jobs (
+    organization_id, release_id, source_release_id,
+    source_artifact_id, target_artifact_id,
+    source_sha256, target_sha256, source_size, target_size
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (source_artifact_id, target_artifact_id)
+DO UPDATE SET source_artifact_id = EXCLUDED.source_artifact_id
+RETURNING *;
+
+-- name: GetDeltaJob :one
+SELECT * FROM update_delta_jobs WHERE id = $1;
+
+-- name: ClaimDeltaJob :one
+UPDATE update_delta_jobs
+SET status = 'running', started_at = now(), completed_at = NULL, error_message = NULL
+WHERE id = $1 AND status = 'queued'
+RETURNING *;
+
+-- name: CompleteDeltaJob :one
+UPDATE update_delta_jobs
+SET status = 'completed', delta_artifact_id = $2, patch_sha256 = $3,
+    patch_size = $4, completed_at = now(), error_message = NULL
+WHERE id = $1 AND status = 'running'
+RETURNING *;
+
+-- name: SkipDeltaJob :one
+UPDATE update_delta_jobs
+SET status = 'skipped', patch_sha256 = $2, patch_size = $3,
+    error_message = $4, completed_at = now()
+WHERE id = $1 AND status = 'running'
+RETURNING *;
+
+-- name: FailDeltaJob :one
+UPDATE update_delta_jobs
+SET status = 'failed', error_message = $2, completed_at = now()
+WHERE id = $1 AND status = 'running'
+RETURNING *;
+
+-- name: RequeueDeltaJob :one
+UPDATE update_delta_jobs
+SET status = 'queued', started_at = NULL, completed_at = NULL, error_message = NULL
+WHERE id = $1 AND status = 'running'
+RETURNING *;
+
+-- name: RetryDeltaJobsForRelease :many
+UPDATE update_delta_jobs
+SET status = 'queued', started_at = NULL, completed_at = NULL, error_message = NULL
+WHERE release_id = $1
+  AND (
+    status IN ('queued', 'failed', 'skipped')
+    OR (status = 'running' AND started_at < now() - make_interval(secs => sqlc.arg('stale_seconds')::int))
+  )
+RETURNING *;
+
+-- name: ListDeltaJobsForRelease :many
+SELECT * FROM update_delta_jobs
+WHERE release_id = $1
+ORDER BY created_at DESC;
+
+-- name: ListCompletedDeltaArtifactsForRelease :many
+SELECT a.*
+FROM update_delta_jobs j
+JOIN update_artifacts a ON a.id = j.delta_artifact_id
+WHERE j.release_id = $1 AND j.status = 'completed';

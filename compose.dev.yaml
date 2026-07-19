@@ -98,6 +98,25 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_healthy
+
+  deltaworker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["/deltaworker"]
+    env_file:
+      - .env
+    environment:
+      API_URL: "http://backend:8000"
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      DELTA_MAX_ARTIFACT_BYTES: "67108864"
+      DELTA_MEMORY_BUDGET_BYTES: "1342177280"
+    mem_limit: 1536m
+    depends_on:
+      backend:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
   minio:
     image: minio/minio
     command: server /data --console-address ":9001"

@@ -20,6 +20,21 @@ func newTestService(t *testing.T) *Service {
 	return New(pub, priv, "test-hmac-secret")
 }
 
+func TestDomainPayloadSignature(t *testing.T) {
+	svc := newTestService(t)
+	payload := []byte(`{"schema":"clave.delta/v1"}`)
+	signature, err := svc.SignDomainPayload("clave.delta/v1", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.VerifyDomainPayload("clave.delta/v1", payload, signature); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.VerifyDomainPayload("clave.delta/v1", append(payload, '!'), signature); err == nil {
+		t.Fatal("expected tampered payload to fail")
+	}
+}
+
 // signClaims signs arbitrary claims with the service's private key so tests
 // can craft expired, future-nbf, or exp-less tokens that IssueAndSignLicense
 // Token (which guards against non-positive TTL) cannot produce.

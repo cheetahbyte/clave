@@ -196,12 +196,74 @@ func (r *Repository) DeleteUpdateRelease(ctx context.Context, id uuid.UUID) (db.
 	return r.q.DeleteUpdateRelease(ctx, id)
 }
 
+func (r *Repository) FindPreviousPublishedRelease(ctx context.Context, release db.UpdateRelease) (db.UpdateRelease, error) {
+	return r.q.FindPreviousPublishedRelease(ctx, db.FindPreviousPublishedReleaseParams{
+		ProductID: release.ProductID, Platform: release.Platform, ChannelID: release.ChannelID, ID: release.ID,
+	})
+}
+
 func (r *Repository) InsertUpdateArtifact(ctx context.Context, params db.InsertUpdateArtifactParams) (db.UpdateArtifact, error) {
 	return r.q.InsertUpdateArtifact(ctx, params)
 }
 
 func (r *Repository) GetArtifact(ctx context.Context, id uuid.UUID) (db.UpdateArtifact, error) {
 	return r.q.GetUpdateArtifact(ctx, id)
+}
+
+func (r *Repository) UpsertDeltaJob(ctx context.Context, params db.UpsertDeltaJobParams) (db.UpdateDeltaJob, error) {
+	return r.q.UpsertDeltaJob(ctx, params)
+}
+
+func (r *Repository) GetDeltaJob(ctx context.Context, id uuid.UUID) (db.UpdateDeltaJob, error) {
+	return r.q.GetDeltaJob(ctx, id)
+}
+
+func (r *Repository) ClaimDeltaJob(ctx context.Context, id uuid.UUID) (db.UpdateDeltaJob, error) {
+	return r.q.ClaimDeltaJob(ctx, id)
+}
+
+func (r *Repository) SkipDeltaJob(ctx context.Context, params db.SkipDeltaJobParams) (db.UpdateDeltaJob, error) {
+	return r.q.SkipDeltaJob(ctx, params)
+}
+
+func (r *Repository) FailDeltaJob(ctx context.Context, params db.FailDeltaJobParams) (db.UpdateDeltaJob, error) {
+	return r.q.FailDeltaJob(ctx, params)
+}
+
+func (r *Repository) RequeueDeltaJob(ctx context.Context, id uuid.UUID) (db.UpdateDeltaJob, error) {
+	return r.q.RequeueDeltaJob(ctx, id)
+}
+
+func (r *Repository) RetryDeltaJobsForRelease(ctx context.Context, releaseID uuid.UUID, staleSeconds int32) ([]db.UpdateDeltaJob, error) {
+	return r.q.RetryDeltaJobsForRelease(ctx, db.RetryDeltaJobsForReleaseParams{ReleaseID: releaseID, StaleSeconds: staleSeconds})
+}
+
+func (r *Repository) ListDeltaJobsForRelease(ctx context.Context, releaseID uuid.UUID) ([]db.UpdateDeltaJob, error) {
+	return r.q.ListDeltaJobsForRelease(ctx, releaseID)
+}
+
+func (r *Repository) ListCompletedDeltaArtifactsForRelease(ctx context.Context, releaseID uuid.UUID) ([]db.UpdateArtifact, error) {
+	return r.q.ListCompletedDeltaArtifactsForRelease(ctx, releaseID)
+}
+
+func (r *Repository) CompleteDeltaJobWithArtifact(ctx context.Context, artifact db.InsertUpdateArtifactParams, complete db.CompleteDeltaJobParams) (db.UpdateDeltaJob, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return db.UpdateDeltaJob{}, err
+	}
+	defer tx.Rollback(ctx)
+	qtx := r.q.WithTx(tx)
+	if _, err := qtx.InsertUpdateArtifact(ctx, artifact); err != nil {
+		return db.UpdateDeltaJob{}, err
+	}
+	job, err := qtx.CompleteDeltaJob(ctx, complete)
+	if err != nil {
+		return db.UpdateDeltaJob{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return db.UpdateDeltaJob{}, err
+	}
+	return job, nil
 }
 
 func (r *Repository) ListArtifactsForRelease(ctx context.Context, releaseID uuid.UUID) ([]db.UpdateArtifact, error) {
