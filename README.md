@@ -194,6 +194,7 @@ Unless noted otherwise, variables are read at process startup.
 | Variable | Required/default | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | Default `postgres://clave@localhost:54321/clave?sslmode=disable` | PostgreSQL DSN. Always set an authenticated production value. |
+| `DATABASE_MAX_CONNS` | `20` | Maximum PostgreSQL connections used by the API pool. Must be greater than zero. |
 | `LICENSE_JWT_PRIVATE_KEY_FILE` | **Required** | Path to exactly one PEM-encoded Ed25519 PKCS#8 private key. |
 | `LICENSE_HMAC_SECRET` | **Required** | Secret used when deriving license keys. |
 | `SELF_SERVICE_TOKEN_PEPPER` | **Required** | Secret mixed into self-service and organization tokens. |
@@ -209,6 +210,7 @@ Unless noted otherwise, variables are read at process startup.
 | `RABBITMQ_URL` | Empty | AMQP URL. When set, the backend publishes transactional-email events to `clave.events`; set the same broker on the emailer. |
 | `WORKER_TOKEN` | Empty | Reserved worker API token. The current router does not register worker routes, so this does not presently enable the experimental delta worker. |
 | `UPDATE_ARTIFACT_STORAGE_PATH` | `./data/update-artifacts` | Persistent local storage for uploaded release artifacts. |
+| `UPDATE_CHECK_RETENTION_DAYS` | `90` | Deletes update-check telemetry older than this many days every 24 hours. Set `0` to disable cleanup. |
 | `LOG_LEVEL` | `info` | `debug`, `verbose`, or `trace` enables debug logging; other values use info logging. |
 | `VERBOSE_LOGGING` | False | Truthy also enables debug logging. |
 | `OTEL_ENABLED` | False | Truthy enables OpenTelemetry initialization and export. |

@@ -60,7 +60,13 @@ Stash `token` and `validUntil` in an encrypted local cache; you'll lean on both 
 
 `POST /api/v1/client/licenses/validate`
 
-Run this on every launch, and again every few hours while the app is open. Refresh **before** `validUntil` rather than at it — a margin of at least an hour (or ~10% of the token's TTL) avoids races where the token expires mid-request.
+Verify the cached JWT signature and claims locally on launch so licensing never
+blocks the first frame on network latency. Start a single background refresh
+when the previous server check is stale or the token is approaching
+`validUntil`; a margin of at least an hour (or about 10% of the token TTL)
+avoids expiry races. Deduplicate refreshes inside the process so concurrent
+features share one request. After transient failures, retry with exponential
+backoff and random jitter rather than on every foreground event.
 
 ```json
 {
@@ -87,6 +93,30 @@ Run this on every launch, and again every few hours while the app is open. Refre
 Whatever token comes back, swap it in for your cached one. Also refresh your local list of available update channels from `updateChannels`.
 
 If the cached token has only recently expired (within the same seven-day window as the offline grace period), `/validate` can still accept it and return a fresh token after rechecking the license, device, and activation state. So a missed refresh is recoverable — but don't rely on it. Refresh early, treat the grace window as a safety net, not the schedule.
+
+## Combined synchronization
+
+`POST /api/v1/client/sync` combines token refresh, channel refresh, and an
+optional update check. Prefer it for scheduled background work because the
+server authorizes the license and activation only once.
+
+```json
+{
+  "token": "<cached jwt>",
+  "deviceId": "<same hwid>",
+  "version": "1.4.0",
+  "build": "140",
+  "platform": "macos",
+  "arch": "arm64",
+  "channel": "stable",
+  "clientId": "<stable rollout id>"
+}
+```
+
+Omit `version` and the other update fields for validation-only synchronization.
+The response always contains `token`, `validUntil`, `updateChannels`, and
+`updateStatus`. `updateStatus` is `not_requested`, `ok`, or `unavailable`; an
+`ok` response also includes the normal update-check payload in `update`.
 
 ---
 
@@ -178,6 +208,13 @@ A `401` means the token itself is no good, so the client can't recover by retryi
 `POST /api/v1/client/updates/channels`
 
 Use this when your client needs to refresh the channel list without activating or validating first. The server returns only channels this license can access; feature-gated channels are hidden unless the license has every required feature.
+
+Native feeds return an `ETag`. Retain it and send `If-None-Match` on the next
+feed request; a `304` means the cached feed is still current. Artifact downloads
+support HTTP byte ranges when Clave uses local storage. Download into a
+temporary file, resume with `Range`, verify the published SHA-256, then rename
+the completed file atomically. S3-backed artifacts redirect to short-lived
+presigned URLs and should use the same resume and checksum workflow.
 
 ```json
 {
