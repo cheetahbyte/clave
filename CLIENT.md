@@ -42,6 +42,7 @@ A couple of things that trip people up:
   "token": "<jwt>",
   "validUntil": 1234567890,
   "maskedEmail": "u***@e***.com",
+  "name": "Ada Lovelace",
   "updateChannels": [
     {
       "name": "stable",
@@ -52,7 +53,7 @@ A couple of things that trip people up:
 }
 ```
 
-Stash `token` and `validUntil` in an encrypted local cache; you'll lean on both during offline grace periods. `maskedEmail` is fine to show the user (something like "licensed to u***@e***.com") - it never contains the full address. `updateChannels` lists the update channels this license can use.
+Stash `token` and `validUntil` in an encrypted local cache; you'll lean on both during offline grace periods. `maskedEmail` is fine to show the user (something like "licensed to u***@e***.com") - it never contains the full address. When the license has a customer name, `name` is returned here; otherwise the field is omitted. Cache it during activation if the client needs it because validation and synchronization responses do not return it. `updateChannels` lists the update channels this license can use.
 
 ---
 
@@ -164,7 +165,7 @@ Worth noting:
 }
 ```
 
-`maskedEmail` comes back empty for trials since there's no customer email attached. Cache `token` and `validUntil` just like you would after activation, then validate on the same schedule and use the same grace-period rules.
+`maskedEmail` comes back empty for trials since there's no customer email attached, and `name` is omitted by default. Cache `token` and `validUntil` just like you would after activation, then validate on the same schedule and use the same grace-period rules.
 
 **One trial per device, per product.** If this device already started a trial for this product, you'll get a `409`. Take that to mean "trial already used" and nudge the user to buy a license and activate with a real key. Don't bother retrying.
 

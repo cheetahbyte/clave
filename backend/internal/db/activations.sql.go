@@ -189,7 +189,7 @@ func (q *Queries) GetActiveActivationByLicenseAndHwidHash(ctx context.Context, a
 }
 
 const getLicenseWithActiveActivation = `-- name: GetLicenseWithActiveActivation :one
-SELECT l.lookup_digest, l.key_phc, l.customer_email, l.max_activations, l.is_active, l.expires_at, l.created_at, l.features, l.id, l.product_id, l.organization_id, l.is_trial, l.trial_hwid_hash, a.id AS activation_id
+SELECT l.lookup_digest, l.key_phc, l.customer_email, l.max_activations, l.is_active, l.expires_at, l.created_at, l.features, l.id, l.product_id, l.organization_id, l.is_trial, l.trial_hwid_hash, l.customer_name, a.id AS activation_id
 FROM licenses l
 LEFT JOIN devices d ON d.license_id = l.id AND d.hwid_hash = $1
 LEFT JOIN activations a ON a.license_id = l.id
@@ -220,6 +220,7 @@ type GetLicenseWithActiveActivationRow struct {
 	OrganizationID uuid.UUID          `json:"organization_id"`
 	IsTrial        bool               `json:"is_trial"`
 	TrialHwidHash  []byte             `json:"trial_hwid_hash"`
+	CustomerName   *string            `json:"customer_name"`
 	ActivationID   pgtype.UUID        `json:"activation_id"`
 }
 
@@ -240,6 +241,7 @@ func (q *Queries) GetLicenseWithActiveActivation(ctx context.Context, arg GetLic
 		&i.OrganizationID,
 		&i.IsTrial,
 		&i.TrialHwidHash,
+		&i.CustomerName,
 		&i.ActivationID,
 	)
 	return i, err

@@ -12,6 +12,7 @@ type License struct {
 	LookupDigest   []byte
 	KeyPhc         string
 	CustomerEmail  string
+	CustomerName   *string
 	MaxActivations int32
 	Active         bool
 	Features       []string

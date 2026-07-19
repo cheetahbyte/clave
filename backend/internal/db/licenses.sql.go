@@ -55,9 +55,9 @@ func (q *Queries) CountTrialsByHwidProduct(ctx context.Context, arg CountTrialsB
 }
 
 const createLicense = `-- name: CreateLicense :one
-INSERT INTO licenses(organization_id, product_id, max_activations, lookup_digest, key_phc, customer_email, expires_at, is_trial, trial_hwid_hash, features)
-values($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-returning lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash
+INSERT INTO licenses(organization_id, product_id, max_activations, lookup_digest, key_phc, customer_email, customer_name, expires_at, is_trial, trial_hwid_hash, features)
+values($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+returning lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash, customer_name
 `
 
 type CreateLicenseParams struct {
@@ -67,6 +67,7 @@ type CreateLicenseParams struct {
 	LookupDigest   []byte             `json:"lookup_digest"`
 	KeyPhc         string             `json:"key_phc"`
 	CustomerEmail  string             `json:"customer_email"`
+	CustomerName   *string            `json:"customer_name"`
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	IsTrial        bool               `json:"is_trial"`
 	TrialHwidHash  []byte             `json:"trial_hwid_hash"`
@@ -81,6 +82,7 @@ func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (L
 		arg.LookupDigest,
 		arg.KeyPhc,
 		arg.CustomerEmail,
+		arg.CustomerName,
 		arg.ExpiresAt,
 		arg.IsTrial,
 		arg.TrialHwidHash,
@@ -101,6 +103,7 @@ func (q *Queries) CreateLicense(ctx context.Context, arg CreateLicenseParams) (L
 		&i.OrganizationID,
 		&i.IsTrial,
 		&i.TrialHwidHash,
+		&i.CustomerName,
 	)
 	return i, err
 }
@@ -188,7 +191,7 @@ func (q *Queries) DeleteAdminLicense(ctx context.Context, arg DeleteAdminLicense
 }
 
 const getAdminLicenseById = `-- name: GetAdminLicenseById :one
-select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash from licenses where id = $1 and organization_id = $2::uuid
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash, customer_name from licenses where id = $1 and organization_id = $2::uuid
 `
 
 type GetAdminLicenseByIdParams struct {
@@ -213,12 +216,13 @@ func (q *Queries) GetAdminLicenseById(ctx context.Context, arg GetAdminLicenseBy
 		&i.OrganizationID,
 		&i.IsTrial,
 		&i.TrialHwidHash,
+		&i.CustomerName,
 	)
 	return i, err
 }
 
 const getLicenseByDigest = `-- name: GetLicenseByDigest :one
-select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash from licenses where lookup_digest = $1
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash, customer_name from licenses where lookup_digest = $1
 `
 
 func (q *Queries) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (License, error) {
@@ -238,12 +242,13 @@ func (q *Queries) GetLicenseByDigest(ctx context.Context, lookupDigest []byte) (
 		&i.OrganizationID,
 		&i.IsTrial,
 		&i.TrialHwidHash,
+		&i.CustomerName,
 	)
 	return i, err
 }
 
 const getLicenseById = `-- name: GetLicenseById :one
-select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash from licenses where id = $1
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash, customer_name from licenses where id = $1
 `
 
 func (q *Queries) GetLicenseById(ctx context.Context, id uuid.UUID) (License, error) {
@@ -263,12 +268,13 @@ func (q *Queries) GetLicenseById(ctx context.Context, id uuid.UUID) (License, er
 		&i.OrganizationID,
 		&i.IsTrial,
 		&i.TrialHwidHash,
+		&i.CustomerName,
 	)
 	return i, err
 }
 
 const getLicenseByIdForUpdate = `-- name: GetLicenseByIdForUpdate :one
-select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash from licenses where id = $1 for update
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash, customer_name from licenses where id = $1 for update
 `
 
 func (q *Queries) GetLicenseByIdForUpdate(ctx context.Context, id uuid.UUID) (License, error) {
@@ -288,12 +294,13 @@ func (q *Queries) GetLicenseByIdForUpdate(ctx context.Context, id uuid.UUID) (Li
 		&i.OrganizationID,
 		&i.IsTrial,
 		&i.TrialHwidHash,
+		&i.CustomerName,
 	)
 	return i, err
 }
 
 const getSelfServiceLicense = `-- name: GetSelfServiceLicense :one
-select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash from licenses
+select lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash, customer_name from licenses
 where id = $1
   and customer_email = $2
   and organization_id = $3
@@ -323,6 +330,7 @@ func (q *Queries) GetSelfServiceLicense(ctx context.Context, arg GetSelfServiceL
 		&i.OrganizationID,
 		&i.IsTrial,
 		&i.TrialHwidHash,
+		&i.CustomerName,
 	)
 	return i, err
 }
@@ -545,17 +553,19 @@ func (q *Queries) TransferActiveTrialActivationsByEmailProduct(ctx context.Conte
 const updateAdminLicense = `-- name: UpdateAdminLicense :one
 UPDATE licenses SET
     customer_email = $2,
-    max_activations = $3,
-    is_active = $4,
-    expires_at = $5,
-    features = $6
-WHERE id = $1 AND organization_id = $7::uuid
-RETURNING lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash
+    customer_name = $3,
+    max_activations = $4,
+    is_active = $5,
+    expires_at = $6,
+    features = $7
+WHERE id = $1 AND organization_id = $8::uuid
+RETURNING lookup_digest, key_phc, customer_email, max_activations, is_active, expires_at, created_at, features, id, product_id, organization_id, is_trial, trial_hwid_hash, customer_name
 `
 
 type UpdateAdminLicenseParams struct {
 	ID             uuid.UUID          `json:"id"`
 	CustomerEmail  string             `json:"customer_email"`
+	CustomerName   *string            `json:"customer_name"`
 	MaxActivations int32              `json:"max_activations"`
 	IsActive       bool               `json:"is_active"`
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
@@ -567,6 +577,7 @@ func (q *Queries) UpdateAdminLicense(ctx context.Context, arg UpdateAdminLicense
 	row := q.db.QueryRow(ctx, updateAdminLicense,
 		arg.ID,
 		arg.CustomerEmail,
+		arg.CustomerName,
 		arg.MaxActivations,
 		arg.IsActive,
 		arg.ExpiresAt,
@@ -588,6 +599,7 @@ func (q *Queries) UpdateAdminLicense(ctx context.Context, arg UpdateAdminLicense
 		&i.OrganizationID,
 		&i.IsTrial,
 		&i.TrialHwidHash,
+		&i.CustomerName,
 	)
 	return i, err
 }

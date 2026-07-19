@@ -14,6 +14,7 @@ SELECT
     a.checked_in_at,
     l.id AS license_id,
     l.customer_email,
+    l.customer_name,
     l.is_active AS license_active,
     p.id AS product_id,
     p.name AS product_name
@@ -26,6 +27,7 @@ WHERE l.organization_id = sqlc.arg('organization_id')::uuid
   AND (sqlc.narg('q')::text IS NULL
        OR d.hostname ILIKE '%' || sqlc.narg('q')::text || '%'
        OR l.customer_email ILIKE '%' || sqlc.narg('q')::text || '%'
+       OR l.customer_name ILIKE '%' || sqlc.narg('q')::text || '%'
        OR p.name ILIKE '%' || sqlc.narg('q')::text || '%'
        OR d.id::text ILIKE '%' || sqlc.narg('q')::text || '%'
        OR l.id::text ILIKE '%' || sqlc.narg('q')::text || '%')
@@ -50,6 +52,7 @@ WHERE l.organization_id = sqlc.arg('organization_id')::uuid
   AND (sqlc.narg('q')::text IS NULL
        OR d.hostname ILIKE '%' || sqlc.narg('q')::text || '%'
        OR l.customer_email ILIKE '%' || sqlc.narg('q')::text || '%'
+       OR l.customer_name ILIKE '%' || sqlc.narg('q')::text || '%'
        OR p.name ILIKE '%' || sqlc.narg('q')::text || '%'
        OR d.id::text ILIKE '%' || sqlc.narg('q')::text || '%'
        OR l.id::text ILIKE '%' || sqlc.narg('q')::text || '%')

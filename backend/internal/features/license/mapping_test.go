@@ -32,14 +32,18 @@ func TestToAdminLicenseItem(t *testing.T) {
 	id := uuid.New()
 	created := pgtype.Timestamptz{Time: time.Now().Add(-24 * time.Hour), Valid: true}
 	expires := pgtype.Timestamptz{Time: time.Now().Add(30 * 24 * time.Hour), Valid: true}
+	customerName := "Ada Lovelace"
 
-	item := toAdminLicenseItem(id, "test@example.com", "TestProduct", true, false, 5, 3, created, expires)
+	item := toAdminLicenseItem(id, "test@example.com", &customerName, "TestProduct", true, false, 5, 3, created, expires)
 
 	if item.ID != id.String() {
 		t.Fatalf("expected ID %s, got %s", id.String(), item.ID)
 	}
 	if item.CustomerEmail != "test@example.com" {
 		t.Fatalf("expected CustomerEmail 'test@example.com', got '%s'", item.CustomerEmail)
+	}
+	if item.CustomerName == nil || *item.CustomerName != customerName {
+		t.Fatalf("expected CustomerName %q, got %v", customerName, item.CustomerName)
 	}
 	if item.ProductName != "TestProduct" {
 		t.Fatalf("expected ProductName 'TestProduct', got '%s'", item.ProductName)
@@ -66,7 +70,7 @@ func TestToAdminLicenseItem(t *testing.T) {
 
 func TestToAdminLicenseItemNilTimestamps(t *testing.T) {
 	id := uuid.New()
-	item := toAdminLicenseItem(id, "", "", false, true, 1, 0,
+	item := toAdminLicenseItem(id, "", nil, "", false, true, 1, 0,
 		pgtype.Timestamptz{Valid: false},
 		pgtype.Timestamptz{Valid: false})
 

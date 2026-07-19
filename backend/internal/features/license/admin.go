@@ -26,7 +26,7 @@ func (svc *Service) AdminOverview(ctx context.Context, orgID uuid.UUID, productI
 
 	items := make([]AdminLicenseItem, len(recent))
 	for i, r := range recent {
-		items[i] = toAdminLicenseItem(r.ID, r.CustomerEmail, r.ProductName, r.IsActive, r.IsTrial, r.MaxActivations, r.ActivationCount, r.CreatedAt, r.ExpiresAt)
+		items[i] = toAdminLicenseItem(r.ID, r.CustomerEmail, r.CustomerName, r.ProductName, r.IsActive, r.IsTrial, r.MaxActivations, r.ActivationCount, r.CreatedAt, r.ExpiresAt)
 	}
 
 	return &AdminOverview{
@@ -79,7 +79,7 @@ func (svc *Service) AdminListTrials(ctx context.Context, orgID uuid.UUID, q, sta
 
 	items := make([]AdminLicenseItem, len(rows))
 	for i, r := range rows {
-		items[i] = toAdminLicenseItem(r.ID, r.CustomerEmail, r.ProductName, r.IsActive, r.IsTrial, r.MaxActivations, r.ActivationCount, r.CreatedAt, r.ExpiresAt)
+		items[i] = toAdminLicenseItem(r.ID, r.CustomerEmail, r.CustomerName, r.ProductName, r.IsActive, r.IsTrial, r.MaxActivations, r.ActivationCount, r.CreatedAt, r.ExpiresAt)
 	}
 	return items, nil
 }
@@ -112,7 +112,7 @@ func (svc *Service) AdminListLicenses(ctx context.Context, orgID uuid.UUID, q st
 
 	items := make([]AdminLicenseItem, len(rows))
 	for i, r := range rows {
-		items[i] = toAdminLicenseItem(r.ID, r.CustomerEmail, r.ProductName, r.IsActive, r.IsTrial, r.MaxActivations, r.ActivationCount, r.CreatedAt, r.ExpiresAt)
+		items[i] = toAdminLicenseItem(r.ID, r.CustomerEmail, r.CustomerName, r.ProductName, r.IsActive, r.IsTrial, r.MaxActivations, r.ActivationCount, r.CreatedAt, r.ExpiresAt)
 	}
 
 	return &AdminLicenseListResponse{
@@ -148,6 +148,7 @@ func (svc *Service) AdminLicenseDetail(ctx context.Context, orgID uuid.UUID, id 
 	return &AdminLicenseDetailResponse{
 		ID:              row.ID.String(),
 		CustomerEmail:   row.CustomerEmail,
+		CustomerName:    row.CustomerName,
 		ProductName:     row.ProductName,
 		ProductID:       row.ProductID.String(),
 		IsActive:        row.IsActive,
@@ -175,6 +176,7 @@ func (svc *Service) AdminUpdateLicense(ctx context.Context, orgID, id uuid.UUID,
 		ID:             id,
 		OrganizationID: orgID,
 		CustomerEmail:  strings.ToLower(strings.TrimSpace(req.CustomerEmail)),
+		CustomerName:   optionalCustomerName(req.CustomerName),
 		MaxActivations: req.MaxActivations,
 		IsActive:       req.IsActive,
 		ExpiresAt:      expires,
@@ -302,6 +304,7 @@ func (svc *Service) AdminListDevices(ctx context.Context, orgID uuid.UUID, q str
 			CheckedInAt:   timePtr(r.CheckedInAt),
 			LicenseID:     r.LicenseID.String(),
 			CustomerEmail: r.CustomerEmail,
+			CustomerName:  r.CustomerName,
 			LicenseActive: r.LicenseActive,
 			ProductID:     r.ProductID.String(),
 			ProductName:   r.ProductName,
@@ -411,6 +414,7 @@ func (svc *Service) AdminListRecentLicenses(ctx context.Context, orgID uuid.UUID
 		results[i] = LicenseLookupResult{
 			ID:              r.ID.String(),
 			CustomerEmail:   r.CustomerEmail,
+			CustomerName:    r.CustomerName,
 			ProductName:     r.ProductName,
 			IsActive:        r.IsActive,
 			IsTrial:         r.IsTrial,
@@ -430,6 +434,7 @@ func detailToLookupResult(d *AdminLicenseDetailResponse) LicenseLookupResult {
 	return LicenseLookupResult{
 		ID:              d.ID,
 		CustomerEmail:   d.CustomerEmail,
+		CustomerName:    d.CustomerName,
 		ProductName:     d.ProductName,
 		ProductID:       d.ProductID,
 		IsActive:        d.IsActive,
@@ -446,6 +451,7 @@ func rowToLookupResult(r db.GetAdminLicenseByDigestRow) LicenseLookupResult {
 	return LicenseLookupResult{
 		ID:              r.ID.String(),
 		CustomerEmail:   r.CustomerEmail,
+		CustomerName:    r.CustomerName,
 		ProductName:     r.ProductName,
 		ProductID:       r.ProductID.String(),
 		IsActive:        r.IsActive,
@@ -462,6 +468,7 @@ func emailRowToLookupResult(r db.GetAdminLicensesByEmailRow) LicenseLookupResult
 	return LicenseLookupResult{
 		ID:              r.ID.String(),
 		CustomerEmail:   r.CustomerEmail,
+		CustomerName:    r.CustomerName,
 		ProductName:     r.ProductName,
 		ProductID:       r.ProductID.String(),
 		IsActive:        r.IsActive,

@@ -68,6 +68,7 @@ function LicensesPage() {
   const pageSize = 20;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newEmail, setNewEmail] = useState("");
+  const [newName, setNewName] = useState("");
   const [newProductId, setNewProductId] = useState("");
   const [newMaxActs, setNewMaxActs] = useState("3");
   const [newType, setNewType] = useState("standard");
@@ -76,7 +77,14 @@ function LicensesPage() {
   const [newKey, setNewKey] = useState("");
   const [deleting, setDeleting] = useState<AdminLicenseItem | null>(null);
 
-  const params: ListLicensesParams = { q, status, type, productId: productId || undefined, page, pageSize };
+  const params: ListLicensesParams = {
+    q,
+    status,
+    type,
+    productId: productId || undefined,
+    page,
+    pageSize,
+  };
 
   const { data: licenseData, isLoading } = useQuery({
     queryKey: ["adminLicenses", params],
@@ -95,6 +103,7 @@ function LicensesPage() {
         productId: newProductId,
         maxActivations: parseInt(newMaxActs, 10) || 3,
         customerEmail: newEmail,
+        customerName: newName.trim() || undefined,
         isTrial,
         trialDays: isTrial ? parseInt(newTrialDays, 10) || 14 : undefined,
         sendEmail: newSendEmail,
@@ -106,7 +115,10 @@ function LicensesPage() {
       queryClient.invalidateQueries({ queryKey: ["adminLicenses"] });
       queryClient.invalidateQueries({ queryKey: ["adminOverview"] });
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to create license"),
+    onError: (err) =>
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create license",
+      ),
   });
 
   const deleteMutation = useMutation({
@@ -117,10 +129,15 @@ function LicensesPage() {
       queryClient.invalidateQueries({ queryKey: ["adminOverview"] });
       setDeleting(null);
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to delete license"),
+    onError: (err) =>
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete license",
+      ),
   });
 
-  const totalPages = licenseData ? Math.ceil(licenseData.total / licenseData.pageSize) : 0;
+  const totalPages = licenseData
+    ? Math.ceil(licenseData.total / licenseData.pageSize)
+    : 0;
 
   const createDialog = (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -130,79 +147,143 @@ function LicensesPage() {
         </Button>
       </DialogTrigger>
       <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create License</DialogTitle>
-              <DialogDescription>Generate a new license key for a customer.</DialogDescription>
-            </DialogHeader>
-            {newKey ? (
-              <div className="space-y-3">
-                <p className="text-sm font-medium">License key (copy it now — it won't be shown again):</p>
-                <div className="rounded-md bg-muted p-3 font-mono text-sm break-all">{newKey}</div>
-                <Button variant="outline" onClick={() => navigator.clipboard.writeText(newKey)} className="w-full">Copy</Button>
+        <DialogHeader>
+          <DialogTitle>Create License</DialogTitle>
+          <DialogDescription>
+            Generate a new license key for a customer.
+          </DialogDescription>
+        </DialogHeader>
+        {newKey ? (
+          <div className="space-y-3">
+            <p className="text-sm font-medium">
+              License key (copy it now — it won't be shown again):
+            </p>
+            <div className="rounded-md bg-muted p-3 font-mono text-sm break-all">
+              {newKey}
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => navigator.clipboard.writeText(newKey)}
+              className="w-full"
+            >
+              Copy
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-name">Customer name</Label>
+              <Input
+                id="new-name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-email">Customer email</Label>
+              <Input
+                id="new-email"
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-product">Product</Label>
+              <Select value={newProductId} onValueChange={setNewProductId}>
+                <SelectTrigger id="new-product" className="w-full">
+                  <SelectValue placeholder="Select product…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {products?.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="new-max">Max activations</Label>
+                <Input
+                  id="new-max"
+                  type="number"
+                  min={1}
+                  value={newMaxActs}
+                  onChange={(e) => setNewMaxActs(e.target.value)}
+                />
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="new-email">Customer email</Label>
-                  <Input id="new-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="new-product">Product</Label>
-                  <Select value={newProductId} onValueChange={setNewProductId}>
-                    <SelectTrigger id="new-product" className="w-full">
-                      <SelectValue placeholder="Select product…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products?.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="new-max">Max activations</Label>
-                    <Input id="new-max" type="number" min={1} value={newMaxActs} onChange={(e) => setNewMaxActs(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="new-type">Type</Label>
-                    <Select value={newType} onValueChange={setNewType}>
-                      <SelectTrigger id="new-type" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="standard">Standard</SelectItem>
-                        <SelectItem value="trial">Trial</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                {newType === "trial" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="new-trial-days">Trial length (days)</Label>
-                    <Input id="new-trial-days" type="number" min={1} max={365} value={newTrialDays} onChange={(e) => setNewTrialDays(e.target.value)} />
-                  </div>
-                )}
-                <div className="flex items-center justify-between rounded-md border p-3">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="new-send-email">Email the license</Label>
-                    <p className="text-muted-foreground text-xs">Send the key and portal link to the customer.</p>
-                  </div>
-                  <Switch id="new-send-email" checked={newSendEmail} onCheckedChange={setNewSendEmail} />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-type">Type</Label>
+                <Select value={newType} onValueChange={setNewType}>
+                  <SelectTrigger id="new-type" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Standard</SelectItem>
+                    <SelectItem value="trial">Trial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {newType === "trial" && (
+              <div className="space-y-2">
+                <Label htmlFor="new-trial-days">Trial length (days)</Label>
+                <Input
+                  id="new-trial-days"
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={newTrialDays}
+                  onChange={(e) => setNewTrialDays(e.target.value)}
+                />
               </div>
             )}
-            <DialogFooter>
-              {newKey ? (
-                <Button onClick={() => { setDialogOpen(false); setNewKey(""); setNewEmail(""); setNewProductId(""); setNewMaxActs("3"); setNewType("standard"); setNewTrialDays("14"); setNewSendEmail(true); }}>Close</Button>
-              ) : (
-                <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !newEmail || !newProductId}>
-                  {createMutation.isPending ? "Creating…" : "Create"}
-                </Button>
-              )}
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="new-send-email">Email the license</Label>
+                <p className="text-muted-foreground text-xs">
+                  Send the key and portal link to the customer.
+                </p>
+              </div>
+              <Switch
+                id="new-send-email"
+                checked={newSendEmail}
+                onCheckedChange={setNewSendEmail}
+              />
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          {newKey ? (
+            <Button
+              onClick={() => {
+                setDialogOpen(false);
+                setNewKey("");
+                setNewName("");
+                setNewEmail("");
+                setNewProductId("");
+                setNewMaxActs("3");
+                setNewType("standard");
+                setNewTrialDays("14");
+                setNewSendEmail(true);
+              }}
+            >
+              Close
+            </Button>
+          ) : (
+            <Button
+              onClick={() => createMutation.mutate()}
+              disabled={createMutation.isPending || !newEmail || !newProductId}
+            >
+              {createMutation.isPending ? "Creating…" : "Create"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 
   return (
@@ -221,15 +302,21 @@ function LicensesPage() {
         <div className="relative flex-1 sm:max-w-sm">
           <Search className="text-muted-foreground absolute top-2.5 left-2.5 size-4" />
           <Input
-            placeholder="Search email or product…"
+            placeholder="Search name, email, or product…"
             value={q}
-            onChange={(e) => { setQ(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
             className="pl-8"
           />
         </div>
         <Select
           value={status}
-          onValueChange={(v) => { setStatus(v); setPage(1); }}
+          onValueChange={(v) => {
+            setStatus(v);
+            setPage(1);
+          }}
         >
           <SelectTrigger className="sm:w-36">
             <SelectValue />
@@ -243,7 +330,10 @@ function LicensesPage() {
         </Select>
         <Select
           value={type}
-          onValueChange={(v) => { setType(v); setPage(1); }}
+          onValueChange={(v) => {
+            setType(v);
+            setPage(1);
+          }}
         >
           <SelectTrigger className="sm:w-32">
             <SelectValue />
@@ -256,7 +346,10 @@ function LicensesPage() {
         </Select>
         <Select
           value={productId || "all"}
-          onValueChange={(v) => { setProductId(v === "all" ? "" : v); setPage(1); }}
+          onValueChange={(v) => {
+            setProductId(v === "all" ? "" : v);
+            setPage(1);
+          }}
         >
           <SelectTrigger className="sm:w-44">
             <SelectValue />
@@ -264,7 +357,9 @@ function LicensesPage() {
           <SelectContent>
             <SelectItem value="all">All products</SelectItem>
             {products?.map((p) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -286,22 +381,46 @@ function LicensesPage() {
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="ml-auto h-4 w-10" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="ml-auto h-4 w-20" /></TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-40" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-24" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Skeleton className="ml-auto h-4 w-10" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Skeleton className="ml-auto h-4 w-20" />
+                  </TableCell>
                   <TableCell />
                 </TableRow>
               ))
             ) : !licenseData?.items.length ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground h-24 text-center">No licenses found</TableCell>
+                <TableCell
+                  colSpan={6}
+                  className="text-muted-foreground h-24 text-center"
+                >
+                  No licenses found
+                </TableCell>
               </TableRow>
             ) : (
               licenseData.items.map((l) => (
                 <TableRow key={l.id}>
-                  <TableCell className="font-medium">{l.customerEmail}</TableCell>
+                  <TableCell>
+                    <div className="font-medium">
+                      {l.customerName || l.customerEmail}
+                    </div>
+                    {l.customerName && (
+                      <div className="text-muted-foreground text-xs">
+                        {l.customerEmail}
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell>{l.productName}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
@@ -311,13 +430,20 @@ function LicensesPage() {
                       {l.isTrial && <Badge variant="outline">Trial</Badge>}
                     </div>
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{l.activationCount}/{l.maxActivations}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {l.activationCount}/{l.maxActivations}
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-right text-sm">
-                    {l.expiresAt ? new Date(l.expiresAt).toLocaleDateString() : "—"}
+                    {l.expiresAt
+                      ? new Date(l.expiresAt).toLocaleDateString()
+                      : "—"}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="sm" asChild>
-                      <Link to="/licenses/$licenseId" params={{ licenseId: l.id }}>
+                      <Link
+                        to="/licenses/$licenseId"
+                        params={{ licenseId: l.id }}
+                      >
                         <Eye className="size-4" />
                       </Link>
                     </Button>
@@ -343,8 +469,9 @@ function LicensesPage() {
         title="Delete license?"
         description={
           <>
-            This permanently deletes the license for <strong>{deleting?.customerEmail}</strong> and
-            all its activations. This can't be undone.
+            This permanently deletes the license for{" "}
+            <strong>{deleting?.customerName || deleting?.customerEmail}</strong>{" "}
+            and all its activations. This can't be undone.
           </>
         }
         pending={deleteMutation.isPending}
@@ -357,8 +484,20 @@ function LicensesPage() {
             Page {page} of {totalPages} ({licenseData?.total} total)
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-            <Button variant="outline" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+            <Button
+              variant="outline"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
           </div>
         </div>
       )}

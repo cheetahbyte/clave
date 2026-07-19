@@ -102,6 +102,7 @@ type License struct {
 	OrganizationID uuid.UUID          `json:"organization_id"`
 	IsTrial        bool               `json:"is_trial"`
 	TrialHwidHash  []byte             `json:"trial_hwid_hash"`
+	CustomerName   *string            `json:"customer_name"`
 }
 
 type LicenseFeature struct {

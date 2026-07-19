@@ -5,8 +5,8 @@ select * from licenses where id = $1;
 select * from licenses where lookup_digest = $1;
 
 -- name: CreateLicense :one
-INSERT INTO licenses(organization_id, product_id, max_activations, lookup_digest, key_phc, customer_email, expires_at, is_trial, trial_hwid_hash, features)
-values(sqlc.arg('organization_id')::uuid, sqlc.arg('product_id'), sqlc.arg('max_activations'), sqlc.arg('lookup_digest'), sqlc.arg('key_phc'), sqlc.arg('customer_email'), sqlc.arg('expires_at'), sqlc.arg('is_trial'), sqlc.arg('trial_hwid_hash'), sqlc.arg('features'))
+INSERT INTO licenses(organization_id, product_id, max_activations, lookup_digest, key_phc, customer_email, customer_name, expires_at, is_trial, trial_hwid_hash, features)
+values(sqlc.arg('organization_id')::uuid, sqlc.arg('product_id'), sqlc.arg('max_activations'), sqlc.arg('lookup_digest'), sqlc.arg('key_phc'), sqlc.arg('customer_email'), sqlc.narg('customer_name'), sqlc.arg('expires_at'), sqlc.arg('is_trial'), sqlc.arg('trial_hwid_hash'), sqlc.arg('features'))
 returning *;
 
 -- name: CountTrialsByEmailProduct :one
@@ -34,6 +34,7 @@ RETURNING id;
 -- name: UpdateAdminLicense :one
 UPDATE licenses SET
     customer_email = sqlc.arg('customer_email'),
+    customer_name = sqlc.narg('customer_name'),
     max_activations = sqlc.arg('max_activations'),
     is_active = sqlc.arg('is_active'),
     expires_at = sqlc.arg('expires_at'),

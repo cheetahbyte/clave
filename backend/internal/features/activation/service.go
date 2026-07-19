@@ -103,6 +103,7 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 		Token:          signed,
 		ValidUntil:     claims.ExpiresAt.Unix(),
 		MaskedEmail:    maskEmail(lic.CustomerEmail),
+		Name:           lic.CustomerName,
 		UpdateChannels: svc.availableUpdateChannels(ctx, lic.ProductID, lic.Features),
 	}, nil
 }

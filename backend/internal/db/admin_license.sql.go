@@ -17,7 +17,7 @@ SELECT count(*)
 FROM licenses lt
 JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = $1::uuid
-    AND ($2::text = '' OR lt.customer_email ILIKE '%' || $2::text || '%' OR p.name ILIKE '%' || $2::text || '%')
+    AND ($2::text = '' OR lt.customer_email ILIKE '%' || $2::text || '%' OR lt.customer_name ILIKE '%' || $2::text || '%' OR p.name ILIKE '%' || $2::text || '%')
     AND (
         $3::text = 'all'
         OR ($3::text = 'active' AND lt.is_active = true AND (lt.expires_at IS NULL OR lt.expires_at > now()))
@@ -57,6 +57,7 @@ const getAdminLicenseByDigest = `-- name: GetAdminLicenseByDigest :one
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -80,6 +81,7 @@ type GetAdminLicenseByDigestParams struct {
 type GetAdminLicenseByDigestRow struct {
 	ID              uuid.UUID          `json:"id"`
 	CustomerEmail   string             `json:"customer_email"`
+	CustomerName    *string            `json:"customer_name"`
 	IsActive        bool               `json:"is_active"`
 	MaxActivations  int32              `json:"max_activations"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
@@ -97,6 +99,7 @@ func (q *Queries) GetAdminLicenseByDigest(ctx context.Context, arg GetAdminLicen
 	err := row.Scan(
 		&i.ID,
 		&i.CustomerEmail,
+		&i.CustomerName,
 		&i.IsActive,
 		&i.MaxActivations,
 		&i.CreatedAt,
@@ -114,6 +117,7 @@ const getAdminLicenseDetailByOrganization = `-- name: GetAdminLicenseDetailByOrg
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -136,6 +140,7 @@ type GetAdminLicenseDetailByOrganizationParams struct {
 type GetAdminLicenseDetailByOrganizationRow struct {
 	ID              uuid.UUID          `json:"id"`
 	CustomerEmail   string             `json:"customer_email"`
+	CustomerName    *string            `json:"customer_name"`
 	IsActive        bool               `json:"is_active"`
 	MaxActivations  int32              `json:"max_activations"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
@@ -153,6 +158,7 @@ func (q *Queries) GetAdminLicenseDetailByOrganization(ctx context.Context, arg G
 	err := row.Scan(
 		&i.ID,
 		&i.CustomerEmail,
+		&i.CustomerName,
 		&i.IsActive,
 		&i.MaxActivations,
 		&i.CreatedAt,
@@ -170,6 +176,7 @@ const getAdminLicensesByEmail = `-- name: GetAdminLicensesByEmail :many
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -194,6 +201,7 @@ type GetAdminLicensesByEmailParams struct {
 type GetAdminLicensesByEmailRow struct {
 	ID              uuid.UUID          `json:"id"`
 	CustomerEmail   string             `json:"customer_email"`
+	CustomerName    *string            `json:"customer_name"`
 	IsActive        bool               `json:"is_active"`
 	MaxActivations  int32              `json:"max_activations"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
@@ -217,6 +225,7 @@ func (q *Queries) GetAdminLicensesByEmail(ctx context.Context, arg GetAdminLicen
 		if err := rows.Scan(
 			&i.ID,
 			&i.CustomerEmail,
+			&i.CustomerName,
 			&i.IsActive,
 			&i.MaxActivations,
 			&i.CreatedAt,
@@ -445,6 +454,7 @@ const listAdminLicensesByOrganization = `-- name: ListAdminLicensesByOrganizatio
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -455,7 +465,7 @@ SELECT
 FROM licenses lt
 JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = $1::uuid
-    AND ($2::text = '' OR lt.customer_email ILIKE '%' || $2::text || '%' OR p.name ILIKE '%' || $2::text || '%')
+    AND ($2::text = '' OR lt.customer_email ILIKE '%' || $2::text || '%' OR lt.customer_name ILIKE '%' || $2::text || '%' OR p.name ILIKE '%' || $2::text || '%')
     AND (
         $3::text = 'all'
         OR ($3::text = 'active' AND lt.is_active = true AND (lt.expires_at IS NULL OR lt.expires_at > now()))
@@ -486,6 +496,7 @@ type ListAdminLicensesByOrganizationParams struct {
 type ListAdminLicensesByOrganizationRow struct {
 	ID              uuid.UUID          `json:"id"`
 	CustomerEmail   string             `json:"customer_email"`
+	CustomerName    *string            `json:"customer_name"`
 	IsActive        bool               `json:"is_active"`
 	MaxActivations  int32              `json:"max_activations"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
@@ -515,6 +526,7 @@ func (q *Queries) ListAdminLicensesByOrganization(ctx context.Context, arg ListA
 		if err := rows.Scan(
 			&i.ID,
 			&i.CustomerEmail,
+			&i.CustomerName,
 			&i.IsActive,
 			&i.MaxActivations,
 			&i.CreatedAt,
@@ -537,6 +549,7 @@ const listAdminRecentLicensesByOrganization = `-- name: ListAdminRecentLicensesB
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -560,6 +573,7 @@ type ListAdminRecentLicensesByOrganizationParams struct {
 type ListAdminRecentLicensesByOrganizationRow struct {
 	ID              uuid.UUID          `json:"id"`
 	CustomerEmail   string             `json:"customer_email"`
+	CustomerName    *string            `json:"customer_name"`
 	IsActive        bool               `json:"is_active"`
 	MaxActivations  int32              `json:"max_activations"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
@@ -582,6 +596,7 @@ func (q *Queries) ListAdminRecentLicensesByOrganization(ctx context.Context, arg
 		if err := rows.Scan(
 			&i.ID,
 			&i.CustomerEmail,
+			&i.CustomerName,
 			&i.IsActive,
 			&i.MaxActivations,
 			&i.CreatedAt,
@@ -605,6 +620,7 @@ const listAdminTrialsByOrganization = `-- name: ListAdminTrialsByOrganization :m
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -617,7 +633,7 @@ JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = $1::uuid
     AND lt.is_trial = true
     AND ($2::uuid IS NULL OR lt.product_id = $2::uuid)
-    AND ($3::text = '' OR lt.customer_email ILIKE '%' || $3::text || '%' OR p.name ILIKE '%' || $3::text || '%')
+    AND ($3::text = '' OR lt.customer_email ILIKE '%' || $3::text || '%' OR lt.customer_name ILIKE '%' || $3::text || '%' OR p.name ILIKE '%' || $3::text || '%')
     AND (
         $4::text = 'all'
         OR ($4::text = 'active' AND lt.is_active = true AND (lt.expires_at IS NULL OR lt.expires_at > now()))
@@ -637,6 +653,7 @@ type ListAdminTrialsByOrganizationParams struct {
 type ListAdminTrialsByOrganizationRow struct {
 	ID              uuid.UUID          `json:"id"`
 	CustomerEmail   string             `json:"customer_email"`
+	CustomerName    *string            `json:"customer_name"`
 	IsActive        bool               `json:"is_active"`
 	MaxActivations  int32              `json:"max_activations"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
@@ -663,6 +680,7 @@ func (q *Queries) ListAdminTrialsByOrganization(ctx context.Context, arg ListAdm
 		if err := rows.Scan(
 			&i.ID,
 			&i.CustomerEmail,
+			&i.CustomerName,
 			&i.IsActive,
 			&i.MaxActivations,
 			&i.CreatedAt,

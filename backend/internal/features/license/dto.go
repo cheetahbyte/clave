@@ -6,6 +6,7 @@ type CreationRequest struct {
 	ProductID      string     `json:"productId" validate:"required,uuid"`
 	MaxActivations int32      `json:"maxActivations" validate:"required,gte=1"`
 	CustomerEmail  string     `json:"customerEmail" validate:"required,email"`
+	CustomerName   *string    `json:"customerName,omitempty"`
 	IsTrial        bool       `json:"isTrial"`
 	TrialDays      int        `json:"trialDays" validate:"omitempty,gte=1,lte=365"`
 	SendEmail      bool       `json:"sendEmail"`
@@ -40,6 +41,7 @@ type AdminTimeseriesPoint struct {
 type AdminLicenseItem struct {
 	ID              string     `json:"id"`
 	CustomerEmail   string     `json:"customerEmail"`
+	CustomerName    *string    `json:"customerName,omitempty"`
 	ProductName     string     `json:"productName"`
 	IsActive        bool       `json:"isActive"`
 	IsTrial         bool       `json:"isTrial"`
@@ -59,6 +61,7 @@ type AdminLicenseListResponse struct {
 type AdminLicenseDetailResponse struct {
 	ID              string                `json:"id"`
 	CustomerEmail   string                `json:"customerEmail"`
+	CustomerName    *string               `json:"customerName,omitempty"`
 	ProductName     string                `json:"productName"`
 	ProductID       string                `json:"productId"`
 	IsActive        bool                  `json:"isActive"`
@@ -101,6 +104,7 @@ type UpdateProductRequest struct {
 
 type UpdateLicenseRequest struct {
 	CustomerEmail  string     `json:"customerEmail" validate:"required,email"`
+	CustomerName   *string    `json:"customerName,omitempty"`
 	MaxActivations int32      `json:"maxActivations" validate:"required,gte=1"`
 	IsActive       bool       `json:"isActive"`
 	ExpiresAt      *time.Time `json:"expiresAt"`
@@ -115,6 +119,7 @@ type AdminDeviceItem struct {
 	CheckedInAt   *time.Time `json:"checkedInAt"`
 	LicenseID     string     `json:"licenseId"`
 	CustomerEmail string     `json:"customerEmail"`
+	CustomerName  *string    `json:"customerName,omitempty"`
 	LicenseActive bool       `json:"licenseActive"`
 	ProductID     string     `json:"productId"`
 	ProductName   string     `json:"productName"`
@@ -133,6 +138,7 @@ type AdminDeviceListResponse struct {
 type LicenseLookupResult struct {
 	ID              string     `json:"id"`
 	CustomerEmail   string     `json:"customerEmail"`
+	CustomerName    *string    `json:"customerName,omitempty"`
 	ProductName     string     `json:"productName"`
 	ProductID       string     `json:"productId"`
 	IsActive        bool       `json:"isActive"`

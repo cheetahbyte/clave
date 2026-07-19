@@ -80,7 +80,7 @@ func (svc *Service) Authorize(ctx context.Context, token, deviceID, instance str
 
 	lic := &license.License{
 		ID: row.ID, ProductID: uuid.UUID(row.ProductID.Bytes), LookupDigest: row.LookupDigest,
-		KeyPhc: row.KeyPhc, CustomerEmail: row.CustomerEmail, MaxActivations: row.MaxActivations,
+		KeyPhc: row.KeyPhc, CustomerEmail: row.CustomerEmail, CustomerName: row.CustomerName, MaxActivations: row.MaxActivations,
 		Active: row.IsActive, Features: row.Features, CreatedAt: row.CreatedAt.Time,
 	}
 	if row.ExpiresAt.Valid {

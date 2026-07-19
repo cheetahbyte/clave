@@ -51,6 +51,7 @@ func mapToDomainLicense(row db.License) *License {
 		LookupDigest:   row.LookupDigest,
 		KeyPhc:         row.KeyPhc,
 		CustomerEmail:  row.CustomerEmail,
+		CustomerName:   row.CustomerName,
 		Active:         row.IsActive,
 		Features:       row.Features,
 		CreatedAt:      row.CreatedAt.Time,

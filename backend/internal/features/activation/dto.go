@@ -26,6 +26,7 @@ type ActivateResponse struct {
 	Token          string                   `json:"token"`
 	ValidUntil     int64                    `json:"validUntil"`
 	MaskedEmail    string                   `json:"maskedEmail"`
+	Name           *string                  `json:"name,omitempty"`
 	UpdateChannels []clientchannels.Channel `json:"updateChannels"`
 }
 

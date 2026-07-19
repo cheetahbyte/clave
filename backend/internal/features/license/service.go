@@ -67,6 +67,7 @@ func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data Creati
 	}
 
 	email := strings.ToLower(strings.TrimSpace(data.CustomerEmail))
+	customerName := optionalCustomerName(data.CustomerName)
 	productUUID := pgtype.UUID{Bytes: [16]byte(productID), Valid: true}
 
 	// Apply active feature windows for this product, then merge any manually
@@ -102,6 +103,7 @@ func (svc *Service) NewLicense(ctx context.Context, orgID uuid.UUID, data Creati
 		LookupDigest:   digest,
 		KeyPhc:         hash,
 		CustomerEmail:  email,
+		CustomerName:   customerName,
 		ExpiresAt:      expiresAt,
 		IsTrial:        data.IsTrial,
 		Features:       allFeatures,
@@ -243,6 +245,17 @@ func (svc *Service) formatKey(prefix, raw string, groupSize int) string {
 	}
 
 	return prefix + "-" + strings.Join(parts, "-")
+}
+
+func optionalCustomerName(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func LicenseIDFromSubject(sub string) (uuid.UUID, error) {

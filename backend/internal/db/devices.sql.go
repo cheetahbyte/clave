@@ -23,6 +23,7 @@ WHERE l.organization_id = $1::uuid
   AND ($2::text IS NULL
        OR d.hostname ILIKE '%' || $2::text || '%'
        OR l.customer_email ILIKE '%' || $2::text || '%'
+       OR l.customer_name ILIKE '%' || $2::text || '%'
        OR p.name ILIKE '%' || $2::text || '%'
        OR d.id::text ILIKE '%' || $2::text || '%'
        OR l.id::text ILIKE '%' || $2::text || '%')
@@ -136,6 +137,7 @@ SELECT
     a.checked_in_at,
     l.id AS license_id,
     l.customer_email,
+    l.customer_name,
     l.is_active AS license_active,
     p.id AS product_id,
     p.name AS product_name
@@ -148,6 +150,7 @@ WHERE l.organization_id = $1::uuid
   AND ($2::text IS NULL
        OR d.hostname ILIKE '%' || $2::text || '%'
        OR l.customer_email ILIKE '%' || $2::text || '%'
+       OR l.customer_name ILIKE '%' || $2::text || '%'
        OR p.name ILIKE '%' || $2::text || '%'
        OR d.id::text ILIKE '%' || $2::text || '%'
        OR l.id::text ILIKE '%' || $2::text || '%')
@@ -180,6 +183,7 @@ type ListAdminDevicesByOrganizationRow struct {
 	CheckedInAt     pgtype.Timestamptz `json:"checked_in_at"`
 	LicenseID       uuid.UUID          `json:"license_id"`
 	CustomerEmail   string             `json:"customer_email"`
+	CustomerName    *string            `json:"customer_name"`
 	LicenseActive   bool               `json:"license_active"`
 	ProductID       uuid.UUID          `json:"product_id"`
 	ProductName     string             `json:"product_name"`
@@ -210,6 +214,7 @@ func (q *Queries) ListAdminDevicesByOrganization(ctx context.Context, arg ListAd
 			&i.CheckedInAt,
 			&i.LicenseID,
 			&i.CustomerEmail,
+			&i.CustomerName,
 			&i.LicenseActive,
 			&i.ProductID,
 			&i.ProductName,

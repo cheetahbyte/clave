@@ -2,7 +2,12 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { getAdminLicense, updateLicense, deleteLicense, type AdminLicenseDetail } from "@/features/admin/api";
+import {
+  getAdminLicense,
+  updateLicense,
+  deleteLicense,
+  type AdminLicenseDetail,
+} from "@/features/admin/api";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -25,7 +30,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Pencil, Trash2, ShieldCheck, Laptop, Monitor, HardDrive } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  ShieldCheck,
+  Laptop,
+  Monitor,
+  HardDrive,
+} from "lucide-react";
 
 export const Route = createFileRoute("/_dash/licenses/$licenseId")({
   component: LicenseDetailPage,
@@ -50,7 +62,8 @@ function LicenseDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["adminOverview"] });
       navigate({ to: "/licenses" });
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to delete license"),
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : "Failed to delete license"),
   });
 
   return (
@@ -95,13 +108,20 @@ function LicenseDetailPage() {
             </div>
             <div className="min-w-0 flex-1 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-2xl font-semibold tracking-tight">{license.productName}</h1>
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  {license.productName}
+                </h1>
                 <Badge variant={license.isActive ? "default" : "secondary"}>
                   {license.isActive ? "Active" : "Inactive"}
                 </Badge>
                 {license.isTrial && <Badge variant="outline">Trial</Badge>}
               </div>
-              <p className="text-muted-foreground text-sm">{license.customerEmail}</p>
+              {license.customerName && (
+                <p className="text-sm font-medium">{license.customerName}</p>
+              )}
+              <p className="text-muted-foreground text-sm">
+                {license.customerEmail}
+              </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Button variant="outline" onClick={() => setEditOpen(true)}>
@@ -114,96 +134,130 @@ function LicenseDetailPage() {
           </div>
 
           <div className="grid gap-x-12 gap-y-8 lg:grid-cols-5">
-          {/* left column */}
-          <div className="space-y-8 lg:col-span-2">
-          {/* seat usage */}
-          <div className="space-y-2">
-            <div className="flex items-baseline justify-between text-sm">
-              <span className="font-medium">Seat usage</span>
-              <span className="text-muted-foreground tabular-nums">
-                {license.activationCount} / {license.maxActivations} used
-              </span>
-            </div>
-            <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
-              <div
-                className="bg-foreground h-full rounded-full transition-all"
-                style={{
-                  width: `${Math.min(100, (license.activationCount / Math.max(1, license.maxActivations)) * 100)}%`,
-                }}
-              />
-            </div>
-          </div>
-
-          {/* meta grid */}
-          <dl className="grid grid-cols-2 gap-x-8 gap-y-6 border-y py-6">
-            <Field label="Created">
-              {license.createdAt ? new Date(license.createdAt).toLocaleDateString() : "—"}
-            </Field>
-            <Field label="Expires">
-              {license.expiresAt ? new Date(license.expiresAt).toLocaleDateString() : "Never"}
-            </Field>
-            <Field label="Type">{license.isTrial ? "Trial" : "Standard"}</Field>
-            <Field label="License ID">
-              <span className="font-mono text-xs">{license.id.slice(0, 8)}</span>
-            </Field>
-          </dl>
-
-          {/* features */}
-          <section className="space-y-3">
-            <h2 className="text-sm font-medium">Features</h2>
-            {license.features?.length ? (
-              <div className="flex flex-wrap gap-1.5">
-                {license.features.map((f) => (
-                  <Badge key={f} variant="secondary" className="rounded-full">{f}</Badge>
-                ))}
+            {/* left column */}
+            <div className="space-y-8 lg:col-span-2">
+              {/* seat usage */}
+              <div className="space-y-2">
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="font-medium">Seat usage</span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {license.activationCount} / {license.maxActivations} used
+                  </span>
+                </div>
+                <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+                  <div
+                    className="bg-foreground h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min(100, (license.activationCount / Math.max(1, license.maxActivations)) * 100)}%`,
+                    }}
+                  />
+                </div>
               </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">No features assigned.</p>
-            )}
-          </section>
-          </div>
 
-          {/* right column: activations */}
-          <section className="space-y-3 lg:col-span-3">
-            <div className="flex items-baseline justify-between">
-              <h2 className="text-sm font-medium">Activations</h2>
-              <span className="text-muted-foreground text-xs tabular-nums">
-                {license.activations.length} device{license.activations.length === 1 ? "" : "s"}
-              </span>
+              {/* meta grid */}
+              <dl className="grid grid-cols-2 gap-x-8 gap-y-6 border-y py-6">
+                <Field label="Created">
+                  {license.createdAt
+                    ? new Date(license.createdAt).toLocaleDateString()
+                    : "—"}
+                </Field>
+                <Field label="Expires">
+                  {license.expiresAt
+                    ? new Date(license.expiresAt).toLocaleDateString()
+                    : "Never"}
+                </Field>
+                <Field label="Type">
+                  {license.isTrial ? "Trial" : "Standard"}
+                </Field>
+                <Field label="License ID">
+                  <span className="font-mono text-xs">
+                    {license.id.slice(0, 8)}
+                  </span>
+                </Field>
+              </dl>
+
+              {/* features */}
+              <section className="space-y-3">
+                <h2 className="text-sm font-medium">Features</h2>
+                {license.features?.length ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {license.features.map((f) => (
+                      <Badge
+                        key={f}
+                        variant="secondary"
+                        className="rounded-full"
+                      >
+                        {f}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    No features assigned.
+                  </p>
+                )}
+              </section>
             </div>
-            {!license.activations.length ? (
-              <div className="rounded-xl border border-dashed py-12 text-center">
-                <Monitor className="text-muted-foreground/50 mx-auto size-6" />
-                <p className="text-muted-foreground mt-2 text-sm">No devices activated yet.</p>
+
+            {/* right column: activations */}
+            <section className="space-y-3 lg:col-span-3">
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-sm font-medium">Activations</h2>
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  {license.activations.length} device
+                  {license.activations.length === 1 ? "" : "s"}
+                </span>
               </div>
-            ) : (
-              <ul className="divide-border divide-y overflow-hidden rounded-xl border">
-                {license.activations.map((a) => {
-                  const name = a.hostname ?? "";
-                  const Icon = /mac|book/i.test(name)
-                    ? Laptop
-                    : /linux|server|ubuntu/i.test(name)
-                      ? HardDrive
-                      : Monitor;
-                  return (
-                    <li key={a.id} className="flex items-center gap-3.5 px-4 py-3.5">
-                      <div className="bg-muted grid size-9 shrink-0 place-items-center rounded-lg">
-                        <Icon className="text-muted-foreground size-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-medium">{a.hostname ?? "Unknown device"}</div>
-                        <div className="text-muted-foreground truncate font-mono text-xs">{a.deviceId}</div>
-                      </div>
-                      <div className="text-muted-foreground hidden shrink-0 text-right text-xs sm:block">
-                        <div>{a.checkedInAt ? `Seen ${new Date(a.checkedInAt).toLocaleDateString()}` : "Never seen"}</div>
-                        <div>{a.createdAt ? `Added ${new Date(a.createdAt).toLocaleDateString()}` : ""}</div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
+              {!license.activations.length ? (
+                <div className="rounded-xl border border-dashed py-12 text-center">
+                  <Monitor className="text-muted-foreground/50 mx-auto size-6" />
+                  <p className="text-muted-foreground mt-2 text-sm">
+                    No devices activated yet.
+                  </p>
+                </div>
+              ) : (
+                <ul className="divide-border divide-y overflow-hidden rounded-xl border">
+                  {license.activations.map((a) => {
+                    const name = a.hostname ?? "";
+                    const Icon = /mac|book/i.test(name)
+                      ? Laptop
+                      : /linux|server|ubuntu/i.test(name)
+                        ? HardDrive
+                        : Monitor;
+                    return (
+                      <li
+                        key={a.id}
+                        className="flex items-center gap-3.5 px-4 py-3.5"
+                      >
+                        <div className="bg-muted grid size-9 shrink-0 place-items-center rounded-lg">
+                          <Icon className="text-muted-foreground size-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">
+                            {a.hostname ?? "Unknown device"}
+                          </div>
+                          <div className="text-muted-foreground truncate font-mono text-xs">
+                            {a.deviceId}
+                          </div>
+                        </div>
+                        <div className="text-muted-foreground hidden shrink-0 text-right text-xs sm:block">
+                          <div>
+                            {a.checkedInAt
+                              ? `Seen ${new Date(a.checkedInAt).toLocaleDateString()}`
+                              : "Never seen"}
+                          </div>
+                          <div>
+                            {a.createdAt
+                              ? `Added ${new Date(a.createdAt).toLocaleDateString()}`
+                              : ""}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
           </div>
         </div>
       )}
@@ -214,7 +268,9 @@ function LicenseDetailPage() {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="space-y-1">
-      <dt className="text-muted-foreground text-xs font-medium uppercase tracking-wide">{label}</dt>
+      <dt className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+        {label}
+      </dt>
       <dd className="text-sm">{children}</dd>
     </div>
   );
@@ -238,8 +294,11 @@ function EditLicenseDialog({
 }) {
   const queryClient = useQueryClient();
   const [email, setEmail] = useState(license.customerEmail);
+  const [name, setName] = useState(license.customerName ?? "");
   const [maxActs, setMaxActs] = useState(String(license.maxActivations));
-  const [active, setActive] = useState(license.isActive ? "active" : "inactive");
+  const [active, setActive] = useState(
+    license.isActive ? "active" : "inactive",
+  );
   const [expiresAt, setExpiresAt] = useState(toDateInput(license.expiresAt));
   const [features, setFeatures] = useState(license.features.join(", "));
 
@@ -247,6 +306,7 @@ function EditLicenseDialog({
     mutationFn: () =>
       updateLicense(license.id, {
         customerEmail: email.trim(),
+        customerName: name.trim() || undefined,
         maxActivations: parseInt(maxActs, 10) || 1,
         isActive: active === "active",
         expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
@@ -262,7 +322,8 @@ function EditLicenseDialog({
       queryClient.invalidateQueries({ queryKey: ["adminOverview"] });
       onOpenChange(false);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to update license"),
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : "Failed to update license"),
   });
 
   return (
@@ -270,7 +331,9 @@ function EditLicenseDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Edit license</DialogTitle>
-          <DialogDescription>Update license details for {license.productName}.</DialogDescription>
+          <DialogDescription>
+            Update license details for {license.productName}.
+          </DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(e) => {
@@ -280,8 +343,22 @@ function EditLicenseDialog({
         >
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="edit-name">Customer name</Label>
+              <Input
+                id="edit-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="edit-email">Customer email</Label>
-              <Input id="edit-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input
+                id="edit-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -315,7 +392,9 @@ function EditLicenseDialog({
                 value={expiresAt}
                 onChange={(e) => setExpiresAt(e.target.value)}
               />
-              <p className="text-muted-foreground text-xs">Leave empty for no expiry.</p>
+              <p className="text-muted-foreground text-xs">
+                Leave empty for no expiry.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-features">Features</Label>
@@ -329,7 +408,10 @@ function EditLicenseDialog({
             </div>
           </div>
           <DialogFooter className="mt-4">
-            <Button type="submit" disabled={mutation.isPending || !email.trim()}>
+            <Button
+              type="submit"
+              disabled={mutation.isPending || !email.trim()}
+            >
               {mutation.isPending ? "Saving…" : "Save changes"}
             </Button>
           </DialogFooter>

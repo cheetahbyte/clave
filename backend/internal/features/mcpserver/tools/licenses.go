@@ -33,6 +33,7 @@ type FindLicenseInput struct {
 type LicenseResult struct {
 	ID              string     `json:"id"`
 	CustomerEmail   string     `json:"customerEmail"`
+	CustomerName    *string    `json:"customerName,omitempty"`
 	ProductName     string     `json:"productName"`
 	ProductID       string     `json:"productId"`
 	IsActive        bool       `json:"isActive"`
@@ -72,6 +73,7 @@ func (t *LicenseTools) FindLicense(ctx context.Context, req *mcp.CallToolRequest
 		out[i] = LicenseResult{
 			ID:              r.ID,
 			CustomerEmail:   r.CustomerEmail,
+			CustomerName:    r.CustomerName,
 			ProductName:     r.ProductName,
 			ProductID:       r.ProductID,
 			IsActive:        r.IsActive,
@@ -90,6 +92,7 @@ func (t *LicenseTools) FindLicense(ctx context.Context, req *mcp.CallToolRequest
 
 type CreateLicenseInput struct {
 	Email          string   `json:"email" jsonschema:"Customer email address"`
+	Name           *string  `json:"name,omitempty" jsonschema:"Optional customer name"`
 	ProductID      string   `json:"productId" jsonschema:"Product UUID"`
 	Features       []string `json:"features,omitempty" jsonschema:"Optional feature keys to grant on the license"`
 	MaxActivations int32    `json:"maxActivations,omitempty" jsonschema:"Maximum device activations (default 1)"`
@@ -115,6 +118,7 @@ func (t *LicenseTools) CreateLicense(ctx context.Context, req *mcp.CallToolReque
 	result, err := t.Svc.NewLicense(ctx, orgID, license.CreationRequest{
 		ProductID:      input.ProductID,
 		CustomerEmail:  input.Email,
+		CustomerName:   input.Name,
 		MaxActivations: maxActivations,
 		Features:       input.Features,
 	})
@@ -183,6 +187,7 @@ func (t *LicenseTools) ListLicenses(ctx context.Context, req *mcp.CallToolReques
 		out[i] = LicenseResult{
 			ID:              r.ID,
 			CustomerEmail:   r.CustomerEmail,
+			CustomerName:    r.CustomerName,
 			ProductName:     r.ProductName,
 			ProductID:       r.ProductID,
 			IsActive:        r.IsActive,

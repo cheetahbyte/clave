@@ -93,3 +93,19 @@ func TestDedupeFeatures(t *testing.T) {
 		})
 	}
 }
+
+func TestOptionalCustomerName(t *testing.T) {
+	value := "  Ada Lovelace  "
+	if got := optionalCustomerName(&value); got == nil || *got != "Ada Lovelace" {
+		t.Fatalf("expected trimmed name, got %v", got)
+	}
+
+	blank := "  "
+	if got := optionalCustomerName(&blank); got != nil {
+		t.Fatalf("expected nil for blank name, got %q", *got)
+	}
+
+	if got := optionalCustomerName(nil); got != nil {
+		t.Fatalf("expected nil for absent name, got %q", *got)
+	}
+}

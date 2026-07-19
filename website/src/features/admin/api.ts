@@ -35,7 +35,9 @@ interface LoginRequest {
   password: string;
 }
 
-export async function loginAdmin(data: LoginRequest): Promise<AdminLoginResponse> {
+export async function loginAdmin(
+  data: LoginRequest,
+): Promise<AdminLoginResponse> {
   return adminFetch<AdminLoginResponse>("/api/v1/admin/auth/login", {
     method: "POST",
     body: JSON.stringify(data),
@@ -82,9 +84,12 @@ export function getMCPToken(): Promise<MCPTokenInfo> {
 }
 
 export function regenerateMCPToken(): Promise<RegenerateMCPTokenResponse> {
-  return adminFetch<RegenerateMCPTokenResponse>("/api/v1/admin/mcp-token/regenerate", {
-    method: "POST",
-  });
+  return adminFetch<RegenerateMCPTokenResponse>(
+    "/api/v1/admin/mcp-token/regenerate",
+    {
+      method: "POST",
+    },
+  );
 }
 
 export function createOrganization(name: string): Promise<Organization> {
@@ -94,7 +99,9 @@ export function createOrganization(name: string): Promise<Organization> {
   });
 }
 
-export function switchOrganization(organizationId: string): Promise<Organization> {
+export function switchOrganization(
+  organizationId: string,
+): Promise<Organization> {
   return adminFetch<Organization>("/api/v1/admin/organizations/switch", {
     method: "POST",
     body: JSON.stringify({ organizationId }),
@@ -138,7 +145,10 @@ export function listMembers(): Promise<MembersResponse> {
   return adminFetch<MembersResponse>("/api/v1/admin/organizations/members");
 }
 
-export function inviteMember(email: string, role: string): Promise<InviteResponse> {
+export function inviteMember(
+  email: string,
+  role: string,
+): Promise<InviteResponse> {
   return adminFetch<InviteResponse>("/api/v1/admin/organizations/invites", {
     method: "POST",
     body: JSON.stringify({ email, role }),
@@ -146,15 +156,21 @@ export function inviteMember(email: string, role: string): Promise<InviteRespons
 }
 
 export function deleteInvite(id: string): Promise<{ ok: boolean }> {
-  return adminFetch<{ ok: boolean }>(`/api/v1/admin/organizations/invites/${id}`, {
-    method: "DELETE",
-  });
+  return adminFetch<{ ok: boolean }>(
+    `/api/v1/admin/organizations/invites/${id}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export function removeMember(memberId: string): Promise<{ ok: boolean }> {
-  return adminFetch<{ ok: boolean }>(`/api/v1/admin/organizations/members/${memberId}`, {
-    method: "DELETE",
-  });
+  return adminFetch<{ ok: boolean }>(
+    `/api/v1/admin/organizations/members/${memberId}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 // Public invite accept flow (no admin session).
@@ -164,7 +180,10 @@ export function previewInvite(token: string): Promise<InvitePreview> {
   );
 }
 
-export function acceptInvite(token: string, password?: string): Promise<{ ok: boolean }> {
+export function acceptInvite(
+  token: string,
+  password?: string,
+): Promise<{ ok: boolean }> {
   return publicFetch<{ ok: boolean }>("/api/v1/admin/invites/accept", {
     method: "POST",
     body: JSON.stringify({ token, password: password ?? "" }),
@@ -211,6 +230,7 @@ export interface AdminOverview {
 export interface AdminLicenseItem {
   id: string;
   customerEmail: string;
+  customerName?: string;
   productName: string;
   isActive: boolean;
   isTrial: boolean;
@@ -230,6 +250,7 @@ export interface AdminLicenseListResponse {
 export interface AdminLicenseDetail {
   id: string;
   customerEmail: string;
+  customerName?: string;
   productName: string;
   productId: string;
   isActive: boolean;
@@ -260,13 +281,18 @@ export interface AdminProductItem {
 
 export interface UpdateLicenseRequest {
   customerEmail: string;
+  customerName?: string;
   maxActivations: number;
   isActive: boolean;
   expiresAt: string | null;
   features: string[];
 }
 
-export function createProduct(name: string, version: string | null, logoUrl: string | null): Promise<AdminProductItem> {
+export function createProduct(
+  name: string,
+  version: string | null,
+  logoUrl: string | null,
+): Promise<AdminProductItem> {
   return adminFetch<AdminProductItem>("/api/v1/admin/products", {
     method: "POST",
     body: JSON.stringify({ name, version, logoUrl }),
@@ -357,6 +383,7 @@ export interface CreateLicenseRequest {
   productId: string;
   maxActivations: number;
   customerEmail: string;
+  customerName?: string;
   isTrial?: boolean;
   trialDays?: number;
   sendEmail?: boolean;
@@ -380,10 +407,15 @@ export interface TimeseriesPoint {
   activations: number;
 }
 
-export function getAdminTimeseries(days = 30, productId?: string): Promise<TimeseriesPoint[]> {
+export function getAdminTimeseries(
+  days = 30,
+  productId?: string,
+): Promise<TimeseriesPoint[]> {
   const params = new URLSearchParams({ days: String(days) });
   if (productId) params.set("productId", productId);
-  return adminFetch<TimeseriesPoint[]>(`/api/v1/admin/stats/timeseries?${params.toString()}`);
+  return adminFetch<TimeseriesPoint[]>(
+    `/api/v1/admin/stats/timeseries?${params.toString()}`,
+  );
 }
 
 export interface VersionDistribution {
@@ -421,10 +453,15 @@ export interface VersionAdoptionResponse {
   devices: VersionDevice[];
 }
 
-export function getVersionAdoption(productId?: string, days = 30): Promise<VersionAdoptionResponse> {
+export function getVersionAdoption(
+  productId?: string,
+  days = 30,
+): Promise<VersionAdoptionResponse> {
   const params = new URLSearchParams({ days: String(days) });
   if (productId) params.set("productId", productId);
-  return adminFetch<VersionAdoptionResponse>(`/api/v1/admin/version-adoption?${params.toString()}`);
+  return adminFetch<VersionAdoptionResponse>(
+    `/api/v1/admin/version-adoption?${params.toString()}`,
+  );
 }
 
 export interface ListTrialsParams {
@@ -433,13 +470,17 @@ export interface ListTrialsParams {
   productId?: string;
 }
 
-export function listAdminTrials(params?: ListTrialsParams): Promise<AdminLicenseItem[]> {
+export function listAdminTrials(
+  params?: ListTrialsParams,
+): Promise<AdminLicenseItem[]> {
   const searchParams = new URLSearchParams();
   if (params?.q) searchParams.set("q", params.q);
   if (params?.status) searchParams.set("status", params.status);
   if (params?.productId) searchParams.set("productId", params.productId);
   const qs = searchParams.toString();
-  return adminFetch<AdminLicenseItem[]>(`/api/v1/admin/trials${qs ? `?${qs}` : ""}`);
+  return adminFetch<AdminLicenseItem[]>(
+    `/api/v1/admin/trials${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export interface ListLicensesParams {
@@ -451,7 +492,9 @@ export interface ListLicensesParams {
   pageSize?: number;
 }
 
-export function listAdminLicenses(params?: ListLicensesParams): Promise<AdminLicenseListResponse> {
+export function listAdminLicenses(
+  params?: ListLicensesParams,
+): Promise<AdminLicenseListResponse> {
   const searchParams = new URLSearchParams();
   if (params?.q) searchParams.set("q", params.q);
   if (params?.status) searchParams.set("status", params.status);
@@ -460,14 +503,18 @@ export function listAdminLicenses(params?: ListLicensesParams): Promise<AdminLic
   if (params?.page) searchParams.set("page", String(params.page));
   if (params?.pageSize) searchParams.set("pageSize", String(params.pageSize));
   const qs = searchParams.toString();
-  return adminFetch<AdminLicenseListResponse>(`/api/v1/admin/licenses${qs ? `?${qs}` : ""}`);
+  return adminFetch<AdminLicenseListResponse>(
+    `/api/v1/admin/licenses${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export function getAdminLicense(id: string): Promise<AdminLicenseDetail> {
   return adminFetch<AdminLicenseDetail>(`/api/v1/admin/licenses/${id}`);
 }
 
-export function createLicense(data: CreateLicenseRequest): Promise<CreateLicenseResponse> {
+export function createLicense(
+  data: CreateLicenseRequest,
+): Promise<CreateLicenseResponse> {
   return adminFetch<CreateLicenseResponse>("/api/v1/admin/licenses", {
     method: "POST",
     body: JSON.stringify(data),
@@ -479,7 +526,9 @@ export function listAdminProducts(): Promise<AdminProductItem[]> {
 }
 
 export function getAdminProduct(id: string): Promise<AdminProductItem> {
-  return adminFetch<AdminProductItem>(`/api/v1/admin/products/${encodeURIComponent(id)}`);
+  return adminFetch<AdminProductItem>(
+    `/api/v1/admin/products/${encodeURIComponent(id)}`,
+  );
 }
 
 export interface ProductUpdateConfigDTO {
@@ -494,7 +543,9 @@ export interface ProductUpdateConfigDTO {
   feedUrl?: string;
 }
 
-export function listProductUpdateConfigs(productId: string): Promise<ProductUpdateConfigDTO[]> {
+export function listProductUpdateConfigs(
+  productId: string,
+): Promise<ProductUpdateConfigDTO[]> {
   return adminFetch<ProductUpdateConfigDTO[]>(
     `/api/v1/admin/products/${encodeURIComponent(productId)}/update-configs`,
   );
@@ -502,7 +553,13 @@ export function listProductUpdateConfigs(productId: string): Promise<ProductUpda
 
 export function saveProductUpdateConfig(
   productId: string,
-  data: { platform: string; channel: string; providerKey: string; enabled: boolean; config: Record<string, unknown> },
+  data: {
+    platform: string;
+    channel: string;
+    providerKey: string;
+    enabled: boolean;
+    config: Record<string, unknown>;
+  },
 ): Promise<ProductUpdateConfigDTO> {
   return adminFetch<ProductUpdateConfigDTO>(
     `/api/v1/admin/products/${encodeURIComponent(productId)}/update-configs`,
@@ -513,7 +570,9 @@ export function saveProductUpdateConfig(
   );
 }
 
-export function deleteProductUpdateConfig(configId: string): Promise<{ ok: string }> {
+export function deleteProductUpdateConfig(
+  configId: string,
+): Promise<{ ok: string }> {
   return adminFetch<{ ok: string }>(
     `/api/v1/admin/update-configs/${encodeURIComponent(configId)}`,
     { method: "DELETE" },
@@ -526,7 +585,9 @@ export interface StorageConfigDTO {
   config: Record<string, unknown>;
 }
 
-export function getProductStorageConfig(productId: string): Promise<StorageConfigDTO> {
+export function getProductStorageConfig(
+  productId: string,
+): Promise<StorageConfigDTO> {
   return adminFetch<StorageConfigDTO>(
     `/api/v1/admin/products/${encodeURIComponent(productId)}/storage-config`,
   );
@@ -611,7 +672,9 @@ export function listReleases(params?: {
   if (params?.offset) searchParams.set("offset", String(params.offset));
   if (params?.productId) searchParams.set("productId", params.productId);
   const qs = searchParams.toString();
-  return adminFetch<ReleaseDTO[]>(`/api/v1/admin/update-releases${qs ? `?${qs}` : ""}`);
+  return adminFetch<ReleaseDTO[]>(
+    `/api/v1/admin/update-releases${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export function createRelease(data: {
@@ -646,7 +709,12 @@ export function listChannels(productId: string): Promise<ChannelDTO[]> {
 
 export function createChannel(
   productId: string,
-  data: { name: string; isDefault: boolean; requiredFeatures: string[]; description?: string },
+  data: {
+    name: string;
+    isDefault: boolean;
+    requiredFeatures: string[];
+    description?: string;
+  },
 ): Promise<ChannelDTO> {
   return adminFetch<ChannelDTO>(
     `/api/v1/admin/products/${encodeURIComponent(productId)}/channels`,
@@ -656,7 +724,12 @@ export function createChannel(
 
 export function updateChannel(
   channelId: string,
-  data: { name: string; isDefault: boolean; requiredFeatures: string[]; description?: string },
+  data: {
+    name: string;
+    isDefault: boolean;
+    requiredFeatures: string[];
+    description?: string;
+  },
 ): Promise<ChannelDTO> {
   return adminFetch<ChannelDTO>(
     `/api/v1/admin/channels/${encodeURIComponent(channelId)}`,
@@ -781,6 +854,7 @@ export interface AdminDeviceItem {
   checkedInAt: string | null;
   licenseId: string;
   customerEmail: string;
+  customerName?: string;
   licenseActive: boolean;
   productId: string;
   productName: string;
@@ -801,7 +875,9 @@ export interface ListAdminDevicesParams {
   pageSize?: number;
 }
 
-export function listAdminDevices(params?: ListAdminDevicesParams): Promise<AdminDeviceListResponse> {
+export function listAdminDevices(
+  params?: ListAdminDevicesParams,
+): Promise<AdminDeviceListResponse> {
   const sp = new URLSearchParams();
   if (params?.page) sp.set("page", String(params.page));
   if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
@@ -809,13 +885,18 @@ export function listAdminDevices(params?: ListAdminDevicesParams): Promise<Admin
   if (params?.productId) sp.set("productId", params.productId);
   if (params?.status) sp.set("status", params.status);
   const qs = sp.toString();
-  return adminFetch<AdminDeviceListResponse>(`/api/v1/admin/devices${qs ? `?${qs}` : ""}`);
+  return adminFetch<AdminDeviceListResponse>(
+    `/api/v1/admin/devices${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export function deleteAdminDevice(deviceId: string): Promise<{ ok: boolean }> {
-  return adminFetch<{ ok: boolean }>(`/api/v1/admin/devices/${encodeURIComponent(deviceId)}`, {
-    method: "DELETE",
-  });
+  return adminFetch<{ ok: boolean }>(
+    `/api/v1/admin/devices/${encodeURIComponent(deviceId)}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 // ============ Product Features ============
@@ -830,18 +911,25 @@ export interface ProductFeature {
   createdAt: string | null;
 }
 
-export function listProductFeatures(productId: string): Promise<ProductFeature[]> {
-  return adminFetch<ProductFeature[]>(`/api/v1/admin/products/${encodeURIComponent(productId)}/features`);
+export function listProductFeatures(
+  productId: string,
+): Promise<ProductFeature[]> {
+  return adminFetch<ProductFeature[]>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/features`,
+  );
 }
 
 export function createProductFeature(
   productId: string,
   data: { key: string; name?: string; description?: string },
 ): Promise<ProductFeature> {
-  return adminFetch<ProductFeature>(`/api/v1/admin/products/${encodeURIComponent(productId)}/features`, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+  return adminFetch<ProductFeature>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/features`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
 }
 
 export function updateProductFeature(
@@ -858,7 +946,10 @@ export function updateProductFeature(
   );
 }
 
-export function deleteProductFeature(productId: string, featureId: string): Promise<{ ok: boolean }> {
+export function deleteProductFeature(
+  productId: string,
+  featureId: string,
+): Promise<{ ok: boolean }> {
   return adminFetch<{ ok: boolean }>(
     `/api/v1/admin/products/${encodeURIComponent(productId)}/features/${encodeURIComponent(featureId)}`,
     { method: "DELETE" },
@@ -879,24 +970,43 @@ export interface FeatureWindow {
   createdAt: string | null;
 }
 
-export function listFeatureWindows(productId: string): Promise<FeatureWindow[]> {
-  return adminFetch<FeatureWindow[]>(`/api/v1/admin/products/${encodeURIComponent(productId)}/feature-windows`);
+export function listFeatureWindows(
+  productId: string,
+): Promise<FeatureWindow[]> {
+  return adminFetch<FeatureWindow[]>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/feature-windows`,
+  );
 }
 
 export function createFeatureWindow(
   productId: string,
-  data: { featureKey: string; startsAt: string; endsAt: string; appliesTo: string; isActive: boolean },
+  data: {
+    featureKey: string;
+    startsAt: string;
+    endsAt: string;
+    appliesTo: string;
+    isActive: boolean;
+  },
 ): Promise<FeatureWindow> {
-  return adminFetch<FeatureWindow>(`/api/v1/admin/products/${encodeURIComponent(productId)}/feature-windows`, {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
+  return adminFetch<FeatureWindow>(
+    `/api/v1/admin/products/${encodeURIComponent(productId)}/feature-windows`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  );
 }
 
 export function updateFeatureWindow(
   productId: string,
   windowId: string,
-  data: { featureKey: string; startsAt: string; endsAt: string; appliesTo: string; isActive: boolean },
+  data: {
+    featureKey: string;
+    startsAt: string;
+    endsAt: string;
+    appliesTo: string;
+    isActive: boolean;
+  },
 ): Promise<FeatureWindow> {
   return adminFetch<FeatureWindow>(
     `/api/v1/admin/products/${encodeURIComponent(productId)}/feature-windows/${encodeURIComponent(windowId)}`,
@@ -907,7 +1017,10 @@ export function updateFeatureWindow(
   );
 }
 
-export function deleteFeatureWindow(productId: string, windowId: string): Promise<{ ok: boolean }> {
+export function deleteFeatureWindow(
+  productId: string,
+  windowId: string,
+): Promise<{ ok: boolean }> {
   return adminFetch<{ ok: boolean }>(
     `/api/v1/admin/products/${encodeURIComponent(productId)}/feature-windows/${encodeURIComponent(windowId)}`,
     { method: "DELETE" },

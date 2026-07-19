@@ -34,6 +34,7 @@ CROSS JOIN activation_stats acts;
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -52,6 +53,7 @@ LIMIT sqlc.arg('limit');
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -71,6 +73,7 @@ ORDER BY lt.created_at DESC;
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -104,7 +107,7 @@ SELECT count(*)
 FROM licenses lt
 JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
-    AND (sqlc.arg('q')::text = '' OR lt.customer_email ILIKE '%' || sqlc.arg('q')::text || '%' OR p.name ILIKE '%' || sqlc.arg('q')::text || '%')
+    AND (sqlc.arg('q')::text = '' OR lt.customer_email ILIKE '%' || sqlc.arg('q')::text || '%' OR lt.customer_name ILIKE '%' || sqlc.arg('q')::text || '%' OR p.name ILIKE '%' || sqlc.arg('q')::text || '%')
     AND (
         sqlc.arg('status')::text = 'all'
         OR (sqlc.arg('status')::text = 'active' AND lt.is_active = true AND (lt.expires_at IS NULL OR lt.expires_at > now()))
@@ -122,6 +125,7 @@ WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -132,7 +136,7 @@ SELECT
 FROM licenses lt
 JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
-    AND (sqlc.arg('q')::text = '' OR lt.customer_email ILIKE '%' || sqlc.arg('q')::text || '%' OR p.name ILIKE '%' || sqlc.arg('q')::text || '%')
+    AND (sqlc.arg('q')::text = '' OR lt.customer_email ILIKE '%' || sqlc.arg('q')::text || '%' OR lt.customer_name ILIKE '%' || sqlc.arg('q')::text || '%' OR p.name ILIKE '%' || sqlc.arg('q')::text || '%')
     AND (
         sqlc.arg('status')::text = 'all'
         OR (sqlc.arg('status')::text = 'active' AND lt.is_active = true AND (lt.expires_at IS NULL OR lt.expires_at > now()))
@@ -153,6 +157,7 @@ OFFSET sqlc.arg('offset');
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -226,6 +231,7 @@ ORDER BY d.day ASC;
 SELECT
     lt.id,
     lt.customer_email,
+    lt.customer_name,
     lt.is_active,
     lt.max_activations,
     lt.created_at,
@@ -238,7 +244,7 @@ JOIN products p ON lt.product_id = p.id
 WHERE lt.organization_id = sqlc.arg('organization_id')::uuid
     AND lt.is_trial = true
     AND (sqlc.narg('product_id')::uuid IS NULL OR lt.product_id = sqlc.narg('product_id')::uuid)
-    AND (sqlc.arg('q')::text = '' OR lt.customer_email ILIKE '%' || sqlc.arg('q')::text || '%' OR p.name ILIKE '%' || sqlc.arg('q')::text || '%')
+    AND (sqlc.arg('q')::text = '' OR lt.customer_email ILIKE '%' || sqlc.arg('q')::text || '%' OR lt.customer_name ILIKE '%' || sqlc.arg('q')::text || '%' OR p.name ILIKE '%' || sqlc.arg('q')::text || '%')
     AND (
         sqlc.arg('status')::text = 'all'
         OR (sqlc.arg('status')::text = 'active' AND lt.is_active = true AND (lt.expires_at IS NULL OR lt.expires_at > now()))

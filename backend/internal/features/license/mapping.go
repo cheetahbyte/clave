@@ -68,10 +68,11 @@ func (svc *Service) AdminUpdateProduct(ctx context.Context, orgID, id uuid.UUID,
 	return productItem(p), nil
 }
 
-func toAdminLicenseItem(id uuid.UUID, email, product string, active, trial bool, maxActs int32, actCount int64, createdAt, expiresAt pgtype.Timestamptz) AdminLicenseItem {
+func toAdminLicenseItem(id uuid.UUID, email string, customerName *string, product string, active, trial bool, maxActs int32, actCount int64, createdAt, expiresAt pgtype.Timestamptz) AdminLicenseItem {
 	return AdminLicenseItem{
 		ID:              id.String(),
 		CustomerEmail:   email,
+		CustomerName:    customerName,
 		ProductName:     product,
 		IsActive:        active,
 		IsTrial:         trial,
