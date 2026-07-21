@@ -777,6 +777,36 @@ export function publishRelease(releaseId: string): Promise<ReleaseDTO> {
   );
 }
 
+export interface DeltaJobDTO {
+  id: string;
+  release_id: string;
+  source_release_id: string;
+  status: string;
+  algorithm: string;
+  source_size: number;
+  target_size: number;
+  patch_size?: number | null;
+  error_message?: string | null;
+  created_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+export function listDeltaJobs(releaseId: string): Promise<DeltaJobDTO[]> {
+  return adminFetch<DeltaJobDTO[]>(
+    `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}/delta-jobs`,
+  );
+}
+
+export function retryDeltaJobs(
+  releaseId: string,
+): Promise<{ requeued: number }> {
+  return adminFetch<{ requeued: number }>(
+    `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}/delta-jobs/retry`,
+    { method: "POST" },
+  );
+}
+
 export function yankRelease(releaseId: string): Promise<ReleaseDTO> {
   return adminFetch<ReleaseDTO>(
     `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}/yank`,

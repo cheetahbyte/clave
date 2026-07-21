@@ -13,7 +13,7 @@ help:
     @just --list
 
 dev:
-    @just dev-be & just dev-fe & just dev-emailer & wait
+    @just dev-be & just dev-fe & just dev-emailer & just dev-worker & wait
 
 dev-infra:
     docker compose -f compose.dev.yaml up -d {{ infra_services }}
@@ -26,6 +26,9 @@ dev-fe:
 
 dev-emailer:
     cd {{ emailer_dir }} && bun dev
+
+dev-worker:
+    cd {{ backend_dir }} && go run ./cmd/deltaworker
 
 migrate:
     @echo "Running backend migrations..."

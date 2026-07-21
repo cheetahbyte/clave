@@ -9,6 +9,8 @@ includes an admin dashboard and customer self-service portal.
 - **Emailer** — RabbitMQ consumer and SMTP sender in `emailer/`.
 - **Client integration** — activation, validation, updates, grace periods, and
   certificate pinning are documented in [`CLIENT.md`](./CLIENT.md).
+- **Server deployment** — the supported Docker Compose and TLS-proxy procedure
+  is in [`setup.md`](./setup.md).
 - **Version adoption** — authorized client synchronization records the running
   version and optional platform diagnostics for the admin dashboard.
 

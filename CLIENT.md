@@ -12,6 +12,12 @@ A trial is really just activation without a key. Instead of sending a license ke
 
 All requests and responses are plain JSON over **HTTPS**. There's no application-layer payload encryption — transport security comes from TLS, so always use `https://` and never talk to the server over plaintext HTTP. For defense against a rogue CA or an untrusted TLS terminator, pin the server's TLS certificate (see [Security Notes](#security-notes)).
 
+Before shipping, provision the server's Ed25519 **public** key with the client
+(for example, embed it in the signed application bundle). Clave does not expose
+a JWKS or public-key endpoint. Treat a replacement key as an application update,
+retain the previous key during a planned rotation, and never fetch a verification
+key from an unauthenticated network response.
+
 ---
 
 ## Activation
@@ -30,12 +36,14 @@ All requests and responses are plain JSON over **HTTPS**. There's no application
 ```
 
 A couple of things that trip people up:
+
 - `productId` is the product's UUID (a string), not a number.
 - `deviceId` here is an object. Watch out: the trial endpoint below calls the same object `device` instead.
 
 **About the hardware fingerprint (`hwid`):** build it from stable bits of the machine like its UUID, serial number, or MAC address. Hash those together so you're sending a fixed-length value rather than raw hardware details. The important part is consistency: the same device has to produce the same HWID every single time.
 
 **You'll get back:**
+
 ```json
 {
   "activationId": "<uuid>",
@@ -54,6 +62,14 @@ A couple of things that trip people up:
 ```
 
 Stash `token` and `validUntil` in an encrypted local cache; you'll lean on both during offline grace periods. `maskedEmail` is fine to show the user (something like "licensed to u***@e***.com") - it never contains the full address. When the license has a customer name, `name` is returned here; otherwise the field is omitted. Cache it during activation if the client needs it because validation and synchronization responses do not return it. `updateChannels` lists the update channels this license can use.
+
+After verifying the Ed25519 signature, require the `EdDSA` algorithm and
+validate the registered claims (`sub`, `aud`, `nbf`, `iat`, and `exp`). Also
+require `product_id` to match the integrated product and `hwid` to match the
+local fingerprint. `activation_id` identifies this device activation; `features`
+is the local entitlement set; `license_exp`, when present, is the license's
+absolute expiry. Never enable a feature solely because an unverified token says
+it is available.
 
 ---
 
@@ -77,6 +93,7 @@ backoff and random jitter rather than on every foreground event.
 ```
 
 **You'll get back:**
+
 ```json
 {
   "token": "<refreshed jwt>",
@@ -145,11 +162,13 @@ Reach for this when the user doesn't have a license key and you want to give the
 ```
 
 Worth noting:
+
 - No `licenseKey`, no `customerEmail`. The server mints the trial for you.
 - The device object is called `device` here, not `deviceId` like on the activation endpoint. The fields inside (`hwid`, `hostname`) are exactly the same.
 - Use the same `hwid` you'd use for a real activation, derived the same way. The server hashes it to make sure a device only gets one trial.
 
 **You'll get back** the same thing activation gives you:
+
 ```json
 {
   "activationId": "<uuid>",
@@ -171,11 +190,37 @@ Worth noting:
 
 ---
 
+## Deactivating a Device
+
+`POST /api/v1/client/licenses/deactivate`
+
+Call this when the user deliberately signs out, transfers the license, or
+retires a machine. It frees the activation capacity for that device. Do not call
+it merely because a validation request failed.
+
+```json
+{
+  "licenseKey": "LIC-XXXX-XXXX-XXXX-XXXX",
+  "deviceId": "<same hwid used at activation>"
+}
+```
+
+A successful response is:
+
+```json
+{ "ok": true }
+```
+
+Clear the cached token only after a successful response. This endpoint uses a
+string `deviceId`, unlike activation's `deviceId` object.
+
+---
+
 ## Offline Grace Period
 
 If you can't reach the server, fall back to what's in your local cache:
 
-```
+```text
 now < validUntil              -> license is fine, proceed
 now < validUntil + gracePeriod -> warn the user, but still proceed
 now >= validUntil + gracePeriod -> block, and tell them to get back online
@@ -188,9 +233,10 @@ Seven days is a sensible grace period. Don't push it past the token's TTL (also 
 ## Error Handling
 
 | Status | Meaning |
-|--------|---------|
-| 400 | Bad request — malformed JSON, missing required field, or invalid value |
+| -------- | --------- |
+| 400 | Bad request — malformed JSON, unknown field, missing required field, or invalid value |
 | 401 | Token unusable — invalid, malformed, bad signature, or expired beyond the refresh grace window |
+| 422 | Field validation failed; inspect `errors` and fix the request |
 | 403 | Token parsed, but the license/device is no longer valid — license revoked or expired, HWID mismatch, or activation deactivated |
 | 404 | License not found |
 | 409 | Activation limit reached, or this device already used its trial |
@@ -219,10 +265,11 @@ Use this when your client needs to refresh the channel list without activating o
 
 Native feeds return an `ETag`. Retain it and send `If-None-Match` on the next
 feed request; a `304` means the cached feed is still current. Artifact downloads
-support HTTP byte ranges when Clave uses local storage. Download into a
-temporary file, resume with `Range`, verify the published SHA-256, then rename
-the completed file atomically. S3-backed artifacts redirect to short-lived
-presigned URLs and should use the same resume and checksum workflow.
+require `Authorization: Bearer <jwt>`; URLs never contain the token. Local
+artifact storage supports HTTP byte ranges. Download into a temporary file,
+resume with `Range`, verify the published SHA-256, then rename the completed
+file atomically. S3-backed artifacts redirect to short-lived presigned URLs and
+should use the same resume and checksum workflow.
 
 ```json
 {
@@ -231,6 +278,7 @@ presigned URLs and should use the same resume and checksum workflow.
 ```
 
 **You'll get back:**
+
 ```json
 {
   "updateChannels": [
@@ -270,10 +318,12 @@ Use your license JWT to check if a newer version is available. The server resolv
 ```
 
 Only `version` and `token` are required. Defaults when omitted:
+
 - `platform`: `"macos"`
 - `channel`: `"stable"`
 
 **You'll get back:**
+
 ```json
 {
   "currentVersion": "1.0.0",
@@ -358,6 +408,7 @@ A static JSON feed listing every published release for a product/platform/channe
 **Channel gating**: Channels with required features need a license token. Pass it via `Authorization: Bearer <jwt>`. The query-string form (`?token=<jwt>`) is not accepted, since the token would leak into the artifact URLs the feed returns (and from there into proxy, cache, and client logs).
 
 **You'll get back:**
+
 ```json
 {
   "schema": "clave.native.feed/v1",

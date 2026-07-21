@@ -13,6 +13,8 @@ import {
   deleteRelease,
   uploadArtifact,
   attachReleaseChangelog,
+  listDeltaJobs,
+  retryDeltaJobs,
   type ReleaseDTO,
 } from "@/features/admin/api";
 import { useCurrentProduct } from "@/features/admin/product-context";
@@ -45,7 +47,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Upload, Rocket, Ban, Trash2, Pencil } from "lucide-react";
+import { Plus, Upload, Rocket, Ban, Trash2, Pencil, Layers, RefreshCw } from "lucide-react";
 
 export const Route = createFileRoute("/_dash/updates/releases")({
   component: ReleasesPage,
@@ -78,6 +80,7 @@ function ReleasesPage() {
   const [newReleaseOpen, setNewReleaseOpen] = useState(false);
   const [uploadReleaseId, setUploadReleaseId] = useState<string | null>(null);
   const [editRelease, setEditRelease] = useState<ReleaseDTO | null>(null);
+  const [deltaReleaseId, setDeltaReleaseId] = useState<string | null>(null);
 
   const { data: releases, isLoading: releasesLoading } = useQuery({
     queryKey: ["updateReleases", product?.id],
@@ -248,6 +251,15 @@ function ReleasesPage() {
                             <Button
                               variant="ghost"
                               size="sm"
+                              className="size-8"
+                              title="Delta updates"
+                              onClick={() => setDeltaReleaseId(r.id)}
+                            >
+                              <Layers className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               className="size-8 text-destructive"
                               onClick={() => yankMut.mutate(r.id)}
                             >
@@ -286,6 +298,12 @@ function ReleasesPage() {
         onSaved={invalidate}
       />
 
+      <DeltaJobsDialog
+        releaseId={deltaReleaseId}
+        open={deltaReleaseId !== null}
+        onOpenChange={(open) => !open && setDeltaReleaseId(null)}
+      />
+
       <EditReleaseDialog
         release={editRelease}
         productId={product?.id ?? ""}
@@ -294,6 +312,126 @@ function ReleasesPage() {
         onSaved={invalidate}
       />
     </AdminShell>
+  );
+}
+
+function deltaStatusVariant(status: string) {
+  switch (status) {
+    case "completed": return "default" as const;
+    case "failed": return "destructive" as const;
+    default: return "outline" as const;
+  }
+}
+
+function DeltaJobsDialog({
+  releaseId,
+  open,
+  onOpenChange,
+}: {
+  releaseId: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const { data: jobs, isLoading } = useQuery({
+    queryKey: ["deltaJobs", releaseId],
+    queryFn: () => listDeltaJobs(releaseId!),
+    enabled: open && !!releaseId,
+    refetchInterval: open ? 5000 : false,
+  });
+
+  const retryMut = useMutation({
+    mutationFn: () => retryDeltaJobs(releaseId!),
+    onSuccess: (res) => {
+      toast.success(
+        res.requeued > 0
+          ? `Requeued ${res.requeued} delta job${res.requeued === 1 ? "" : "s"}`
+          : "No delta jobs to requeue",
+      );
+      queryClient.invalidateQueries({ queryKey: ["deltaJobs", releaseId] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Retry failed"),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Delta updates</DialogTitle>
+          <DialogDescription>
+            Patch jobs generated for this release. Requeue jobs that are queued,
+            failed, skipped, or stuck running.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Algorithm</TableHead>
+                <TableHead>Patch size</TableHead>
+                <TableHead>Savings</TableHead>
+                <TableHead>Error</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    <Skeleton className="h-4 w-32" />
+                  </TableCell>
+                </TableRow>
+              ) : !jobs?.length ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground h-16 text-center text-xs">
+                    No delta jobs for this release.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                jobs.map((j) => (
+                  <TableRow key={j.id}>
+                    <TableCell>
+                      <Badge variant={deltaStatusVariant(j.status)} className="text-xs">
+                        {statusLabel(j.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs font-mono">
+                      {j.algorithm}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {j.patch_size != null ? formatBytes(j.patch_size) : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {j.patch_size != null && j.target_size > 0
+                        ? `${Math.round((1 - j.patch_size / j.target_size) * 100)}%`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-destructive max-w-[16rem] truncate text-xs">
+                      {j.error_message || ""}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <DialogFooter className="mt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+          <Button
+            onClick={() => retryMut.mutate()}
+            disabled={retryMut.isPending || !releaseId}
+          >
+            <RefreshCw className="size-4" />
+            {retryMut.isPending ? "Requeueing…" : "Requeue jobs"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
