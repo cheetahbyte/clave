@@ -8,7 +8,6 @@ export interface AdminLoginResponse {
   organizationName: string;
   mfaEnabled: boolean;
   mfaVerified: boolean;
-  mfaSetupRequired?: boolean;
   mfaVerificationRequired?: boolean;
   created_at: string;
 }
@@ -23,11 +22,6 @@ export interface AdminProfile {
   mfaVerified: boolean;
   last_login_at: string | null;
   created_at: string;
-}
-
-export interface SetupStartResponse {
-  otpauthUrl: string;
-  secret: string;
 }
 
 interface LoginRequest {
@@ -190,19 +184,6 @@ export function acceptInvite(
   });
 }
 
-export async function start2FASetup(): Promise<SetupStartResponse> {
-  return adminFetch<SetupStartResponse>("/api/v1/admin/auth/2fa/setup/start", {
-    method: "POST",
-  });
-}
-
-export async function verify2FASetup(code: string): Promise<{ ok: boolean }> {
-  return adminFetch<{ ok: boolean }>("/api/v1/admin/auth/2fa/setup/verify", {
-    method: "POST",
-    body: JSON.stringify({ code }),
-  });
-}
-
 export async function verify2FA(code: string): Promise<{ ok: boolean }> {
   return adminFetch<{ ok: boolean }>("/api/v1/admin/auth/2fa/verify", {
     method: "POST",
@@ -210,8 +191,8 @@ export async function verify2FA(code: string): Promise<{ ok: boolean }> {
   });
 }
 
-export async function disable2FA(): Promise<{ ok: boolean }> {
-  return adminFetch<{ ok: boolean }>("/api/v1/admin/auth/2fa/disable", {
+export async function resend2FACode(): Promise<{ ok: boolean }> {
+  return adminFetch<{ ok: boolean }>("/api/v1/admin/auth/2fa/resend", {
     method: "POST",
   });
 }

@@ -23,7 +23,7 @@ go run ./scripts/generate_jwt_keys.go ./license-jwt-private.pem
 openssl rand -hex 32 # LICENSE_HMAC_SECRET
 openssl rand -hex 32 # SELF_SERVICE_TOKEN_PEPPER
 openssl rand -hex 32 # CSRF_AUTH_KEY
-openssl rand -hex 32 # ADMIN_TOTP_ENCRYPTION_KEY
+openssl rand -hex 32 # ADMIN_MFA_CODE_PEPPER
 ```
 
 Create `.env`, set `LICENSE_JWT_PRIVATE_KEY_FILE` to the absolute path of the
@@ -88,7 +88,7 @@ openssl rand -hex 32 # RABBITMQ_PASSWORD
 openssl rand -hex 32 # LICENSE_HMAC_SECRET
 openssl rand -hex 32 # SELF_SERVICE_TOKEN_PEPPER
 openssl rand -hex 32 # CSRF_AUTH_KEY (must be exactly 32 bytes / 64 hex chars)
-openssl rand -hex 32 # ADMIN_TOTP_ENCRYPTION_KEY (same format)
+openssl rand -hex 32 # ADMIN_MFA_CODE_PEPPER (same format)
 ```
 
 Set `PUBLIC_APP_URL` to the public HTTPS origin, configure `SMTP_URL` and
@@ -185,8 +185,8 @@ curl --fail https://clave.example.com/api/v1/health
 ```
 
 Inspect failures with `docker compose --env-file .env.production -f
-compose.production.yaml logs <service>`. To reset an administrator's 2FA, run
-`/resetadmin2fa` in the backend container and follow its usage output.
+compose.production.yaml logs <service>`. Admin 2FA codes are emailed, so a
+working SMTP configuration is required for anyone to sign in.
 
 ## Environment variables
 
@@ -203,9 +203,9 @@ Unless noted otherwise, variables are read at process startup.
 | `LICENSE_HMAC_SECRET` | **Required** | Secret used when deriving license keys. |
 | `SELF_SERVICE_TOKEN_PEPPER` | **Required** | Secret mixed into self-service and organization tokens. |
 | `CSRF_AUTH_KEY` | **Required in production** | Exactly 32 random bytes encoded as 64 hex characters; protects CSRF tokens. Dev mode otherwise generates an ephemeral key. |
-| `ADMIN_TOTP_ENCRYPTION_KEY` | **Required in production** | Exactly 32 random bytes encoded as 64 hex characters; encrypts admin TOTP secrets. Dev mode otherwise generates an ephemeral key. |
+| `ADMIN_MFA_CODE_PEPPER` | **Required in production** | Exactly 32 random bytes encoded as 64 hex characters; peppers hashed admin 2FA email codes. Dev mode otherwise generates an ephemeral key. The legacy name `ADMIN_TOTP_ENCRYPTION_KEY` is still accepted. |
 | `PORT` | `8000` | HTTP listen port. |
-| `DEV` | False | Truthy enables insecure development cookies and permits ephemeral CSRF/TOTP keys. Never enable in production. |
+| `DEV` | False | Truthy enables insecure development cookies, permits ephemeral CSRF/MFA keys, and skips the emailed 2FA code at login. Never enable in production. |
 | `RUN_MIGRATIONS` | False | Truthy applies pending Goose migrations before listening. |
 | `MIGRATIONS_DIR` | `./migrations` | Migration directory; the backend image uses `/migrations`. |
 | `PUBLIC_APP_URL` | Empty | Public website origin used to construct email, portal, invite, and update links. Set the HTTPS production origin without a trailing path. |
@@ -287,7 +287,7 @@ change can move the BSDIFF ratio above 70 percent and Clave records the job as
 | Variable | Required/default | Purpose |
 | --- | --- | --- |
 | `E2E_BASE_URL` | Test default | Backend base URL used by Go end-to-end tests. |
-| `DATABASE_URL` | Test/CLI default | Also used by E2E tests, `createadmin`, `resetadmin2fa`, Goose, and `psql` recipes. |
+| `DATABASE_URL` | Test/CLI default | Also used by E2E tests, `createadmin`, Goose, and `psql` recipes. |
 | `POSTGRES_PASSWORD` | Production Compose required | Initializes PostgreSQL and interpolates the backend DSN; not read by Clave itself. |
 | `RABBITMQ_PASSWORD` | Production Compose required | Initializes RabbitMQ and interpolates service AMQP URLs; not read directly by Clave. |
 | `CLAVE_ENV_FILE` | `.env.production` | Optional Compose-only override for the file injected into backend and emailer containers. |

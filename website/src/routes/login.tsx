@@ -52,9 +52,7 @@ function LoginPage() {
     try {
       const resp = await loginAdmin(values);
 
-      if (resp.mfaSetupRequired) {
-        navigate({ to: "/2fa/setup" });
-      } else if (resp.mfaVerificationRequired) {
+      if (resp.mfaVerificationRequired) {
         navigate({ to: "/2fa" });
       } else {
         navigate({ to: "/dashboard" });

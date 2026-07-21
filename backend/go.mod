@@ -21,7 +21,6 @@ require (
 	github.com/kr/binarydist v0.1.0
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/pquerna/otp v1.5.0
 	github.com/pressly/goose/v3 v3.26.0
 	github.com/rabbitmq/amqp091-go v1.11.0
 	github.com/yuin/goldmark v1.8.2
@@ -44,7 +43,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.29 // indirect
 	github.com/aws/smithy-go v1.27.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
-	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect

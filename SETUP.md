@@ -48,11 +48,11 @@ openssl rand -hex 32 # RABBITMQ_PASSWORD
 openssl rand -hex 32 # LICENSE_HMAC_SECRET
 openssl rand -hex 32 # SELF_SERVICE_TOKEN_PEPPER
 openssl rand -hex 32 # CSRF_AUTH_KEY
-openssl rand -hex 32 # ADMIN_TOTP_ENCRYPTION_KEY
+openssl rand -hex 32 # ADMIN_MFA_CODE_PEPPER
 openssl rand -hex 32 # WORKER_TOKEN
 ```
 
-`CSRF_AUTH_KEY` and `ADMIN_TOTP_ENCRYPTION_KEY` must each be exactly 64
+`CSRF_AUTH_KEY` and `ADMIN_MFA_CODE_PEPPER` must each be exactly 64
 hexadecimal characters (32 bytes). `WORKER_TOKEN` must be identical for the
 backend and the delta worker. Never commit `.env.production` or the signing key.
 
@@ -137,7 +137,7 @@ names is overridden.
 | `LICENSE_HMAC_SECRET` | yes | — | HMAC secret for license keys. Rotating it invalidates existing keys. |
 | `SELF_SERVICE_TOKEN_PEPPER` | yes | — | Pepper for hashed self-service tokens. |
 | `CSRF_AUTH_KEY` | yes (prod) | — | CSRF signing key; exactly 64 hex characters. |
-| `ADMIN_TOTP_ENCRYPTION_KEY` | yes (prod) | — | Encrypts stored admin TOTP secrets; exactly 64 hex characters. |
+| `ADMIN_MFA_CODE_PEPPER` | yes (prod) | — | Peppers hashed admin 2FA email codes; exactly 64 hex characters. Legacy name `ADMIN_TOTP_ENCRYPTION_KEY` still works. |
 | `WORKER_TOKEN` | yes | — | Shared bearer token the delta worker authenticates with. Must match the worker's value. |
 | `PUBLIC_APP_URL` | yes | — | Public base URL, e.g. `https://clave.example.com`. Used in emails and links. |
 | `TRUST_PROXY_HEADERS` | recommended | `false` | Honour `X-Forwarded-*`. Safe **only** behind a trusted proxy that overwrites those headers. |
@@ -258,10 +258,11 @@ docker compose --env-file .env.production -f compose.production.yaml exec \
   backend /createadmin admin@example.com 'replace-with-a-strong-password'
 ```
 
-Sign in at `https://clave.example.com/login` and complete two-factor setup.
+Sign in at `https://clave.example.com/login`. A six-digit code is emailed to
+the admin address on every login, so SMTP must be configured first.
 
-The `createadmin` and `resetadmin2fa` helper binaries need only `DATABASE_URL`,
-which Compose already provides inside the backend container.
+The `createadmin` helper binary needs only `DATABASE_URL`, which Compose
+already provides inside the backend container.
 
 ## Back up and upgrade
 

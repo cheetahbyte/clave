@@ -1,38 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { disable2FA, getCurrentAdmin } from "@/features/admin/api";
+import { useQuery } from "@tanstack/react-query";
+import { getCurrentAdmin } from "@/features/admin/api";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ShieldOff } from "lucide-react";
-import { toast } from "sonner";
 
 export const Route = createFileRoute("/_dash/account")({
   component: AccountPage,
 });
 
 function AccountPage() {
-  const queryClient = useQueryClient();
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
   const { data: admin } = useQuery({
     queryKey: ["currentAdmin"],
     queryFn: getCurrentAdmin,
-  });
-
-  const disableMut = useMutation({
-    mutationFn: disable2FA,
-    onSuccess: () => {
-      toast.success("2FA disabled");
-      queryClient.invalidateQueries({ queryKey: ["currentAdmin"] });
-      setConfirmOpen(false);
-    },
-    onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Failed to disable 2FA");
-    },
   });
 
   const rows = [
@@ -42,7 +22,7 @@ function AccountPage() {
       label: "Two-factor auth",
       value: (
         <Badge variant={admin?.mfaEnabled ? "default" : "secondary"}>
-          {admin?.mfaEnabled ? "Enabled" : "Not enabled"}
+          {admin?.mfaEnabled ? "Email code" : "Not enabled"}
         </Badge>
       ),
     },
@@ -78,35 +58,6 @@ function AccountPage() {
         </CardContent>
       </Card>
 
-      {admin?.mfaEnabled ? (
-        <Card className="max-w-xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ShieldOff className="size-5" />
-              Disable 2FA
-            </CardTitle>
-            <CardDescription>
-              Dev-only convenience for local testing. Not available in production.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="destructive" onClick={() => setConfirmOpen(true)} disabled={disableMut.isPending}>
-              {disableMut.isPending ? "Working…" : "Disable 2FA"}
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <ConfirmDialog
-        open={confirmOpen}
-        onOpenChange={setConfirmOpen}
-        title="Disable 2FA?"
-        description="Two-factor authentication will be turned off for your account. Recovery codes will be invalidated. This endpoint only works in dev mode."
-        confirmLabel="Disable"
-        destructive
-        pending={disableMut.isPending}
-        onConfirm={() => disableMut.mutate()}
-      />
     </AdminShell>
   );
 }

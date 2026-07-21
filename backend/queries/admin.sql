@@ -14,37 +14,37 @@ UPDATE admin_users
 SET last_login_at = now(), updated_at = now()
 WHERE id = $1;
 
--- name: EnableTOTP :exec
-UPDATE admin_users
-SET totp_enabled = true,
-    totp_secret_enc = sqlc.arg(secret_enc),
-    totp_secret_nonce = sqlc.arg(secret_nonce),
-    updated_at = now()
+-- name: InsertAdminEmailCode :exec
+INSERT INTO admin_email_codes (admin_user_id, code_hash, expires_at)
+VALUES (sqlc.arg(admin_user_id), sqlc.arg(code_hash), sqlc.arg(expires_at));
+
+-- name: GetLatestAdminEmailCode :one
+SELECT * FROM admin_email_codes
+WHERE admin_user_id = sqlc.arg(admin_user_id)
+  AND used_at IS NULL
+ORDER BY created_at DESC
+LIMIT 1;
+
+-- name: MarkAdminEmailCodeUsed :exec
+UPDATE admin_email_codes
+SET used_at = now()
 WHERE id = sqlc.arg(id);
 
--- name: DisableTOTP :exec
-UPDATE admin_users
-SET totp_enabled = false,
-    totp_secret_enc = NULL,
-    totp_secret_nonce = NULL,
-    updated_at = now()
-WHERE id = $1;
+-- name: IncrementAdminEmailCodeAttempts :one
+UPDATE admin_email_codes
+SET attempts = attempts + 1
+WHERE id = sqlc.arg(id)
+RETURNING attempts;
 
--- name: InsertRecoveryCode :exec
-INSERT INTO admin_recovery_codes (admin_user_id, code_hash)
-VALUES (sqlc.arg(admin_user_id), sqlc.arg(code_hash));
-
--- name: ConsumeRecoveryCode :one
-UPDATE admin_recovery_codes
+-- name: InvalidateAdminEmailCodes :exec
+UPDATE admin_email_codes
 SET used_at = now()
 WHERE admin_user_id = sqlc.arg(admin_user_id)
-  AND code_hash = sqlc.arg(code_hash)
-  AND used_at IS NULL
-RETURNING id;
+  AND used_at IS NULL;
 
--- name: InvalidateRecoveryCodes :exec
-DELETE FROM admin_recovery_codes
-WHERE admin_user_id = sqlc.arg(admin_user_id);
+-- name: DeleteExpiredAdminEmailCodes :exec
+DELETE FROM admin_email_codes
+WHERE expires_at < now() - INTERVAL '1 day';
 
 -- name: InsertAuditLog :exec
 INSERT INTO admin_audit_log (admin_user_id, organization_id, action, resource_type, resource_id, metadata, ip, user_agent)

@@ -19,10 +19,8 @@ func (h *Handler) RegisterAdminAuthRoutes(r chi.Router, mw routing.MiddlewareCon
 			partial.Post("/logout", h.Logout)
 			partial.Get("/me", h.Me)
 
-			partial.Post("/2fa/setup/start", h.SetupStart)
-			partial.With(mw.SensitiveRate).Post("/2fa/setup/verify", h.SetupVerify)
 			partial.With(mw.SensitiveRate).Post("/2fa/verify", h.Verify)
-			partial.With(mw.SensitiveRate).Post("/2fa/disable", h.Disable2FA)
+			partial.With(mw.SensitiveRate).Post("/2fa/resend", h.Resend)
 		})
 	})
 }

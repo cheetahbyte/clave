@@ -34,26 +34,25 @@ type AdminAuditLog struct {
 	OrganizationID pgtype.UUID        `json:"organization_id"`
 }
 
-type AdminRecoveryCode struct {
+type AdminEmailCode struct {
 	ID          uuid.UUID          `json:"id"`
 	AdminUserID uuid.UUID          `json:"admin_user_id"`
 	CodeHash    string             `json:"code_hash"`
+	Attempts    int32              `json:"attempts"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 	UsedAt      pgtype.Timestamptz `json:"used_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type AdminUser struct {
-	ID              uuid.UUID          `json:"id"`
-	Email           string             `json:"email"`
-	PasswordHash    string             `json:"password_hash"`
-	Role            string             `json:"role"`
-	IsActive        bool               `json:"is_active"`
-	LastLoginAt     pgtype.Timestamptz `json:"last_login_at"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	TotpEnabled     bool               `json:"totp_enabled"`
-	TotpSecretEnc   []byte             `json:"totp_secret_enc"`
-	TotpSecretNonce []byte             `json:"totp_secret_nonce"`
+	ID           uuid.UUID          `json:"id"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	Role         string             `json:"role"`
+	IsActive     bool               `json:"is_active"`
+	LastLoginAt  pgtype.Timestamptz `json:"last_login_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Changelog struct {

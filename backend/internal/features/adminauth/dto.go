@@ -19,7 +19,6 @@ type LoginResponse struct {
 	OrganizationName        string    `json:"organizationName"`
 	MfaEnabled              bool      `json:"mfaEnabled"`
 	MfaVerified             bool      `json:"mfaVerified"`
-	MfaSetupRequired        bool      `json:"mfaSetupRequired,omitempty"`
 	MfaVerificationRequired bool      `json:"mfaVerificationRequired,omitempty"`
 	CreatedAt               time.Time `json:"created_at"`
 }
@@ -36,17 +35,8 @@ type AdminProfileResponse struct {
 	CreatedAt        time.Time  `json:"created_at"`
 }
 
-type SetupStartResponse struct {
-	OtpAuthURL string `json:"otpauthUrl"`
-	Secret     string `json:"secret"`
-}
-
-type SetupVerifyRequest struct {
-	Code string `json:"code" validate:"required,len=6"`
-}
-
-type TOTPVerifyRequest struct {
-	Code string `json:"code" validate:"required,len=6"`
+type VerifyCodeRequest struct {
+	Code string `json:"code" validate:"required,len=6,numeric"`
 }
 
 type CSRFTokenResponse struct {

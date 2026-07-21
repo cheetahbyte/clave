@@ -45,7 +45,7 @@ jobs:
           go run scripts/generate_jwt_keys.go "$jwt_private_key_file"
           echo "LICENSE_JWT_PRIVATE_KEY_FILE=$jwt_private_key_file" >> "$GITHUB_ENV"
 
-          echo "ADMIN_TOTP_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "ADMIN_MFA_CODE_PEPPER=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           echo "SELF_SERVICE_TOKEN_PEPPER=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
           echo "LICENSE_HMAC_SECRET=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
 

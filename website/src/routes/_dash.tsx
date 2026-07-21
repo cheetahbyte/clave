@@ -12,8 +12,7 @@ export const Route = createFileRoute("/_dash")({
         queryFn: getCurrentAdmin,
       });
       if (!admin.mfaVerified) {
-        if (admin.mfaEnabled) throw redirect({ to: "/2fa" });
-        throw redirect({ to: "/2fa/setup" });
+        throw redirect({ to: "/2fa" });
       }
     } catch (err) {
       if (

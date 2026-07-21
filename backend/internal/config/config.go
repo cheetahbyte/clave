@@ -28,7 +28,7 @@ type Config struct {
 	SelfServiceTokenPepper string
 	SelfServiceReturnToken bool
 
-	AdminTOTPEncryptionKey []byte
+	AdminMFACodePepper []byte
 
 	SMTPHost string
 	SMTPPort string
@@ -132,7 +132,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("SELF_SERVICE_TOKEN_PEPPER is required")
 	}
 
-	cfg.AdminTOTPEncryptionKey, err = loadTOTPKey(cfg.Dev)
+	cfg.AdminMFACodePepper, err = loadMFAPepper(cfg.Dev)
 	if err != nil {
 		return nil, err
 	}
@@ -196,26 +196,28 @@ func loadEd25519PrivateKeyFile(path string) (ed25519.PrivateKey, error) {
 	return privateKey, nil
 }
 
-func loadTOTPKey(dev bool) ([]byte, error) {
-	totpKey := os.Getenv("ADMIN_TOTP_ENCRYPTION_KEY")
-	if totpKey != "" {
-		decoded, err := hex.DecodeString(totpKey)
+func loadMFAPepper(dev bool) ([]byte, error) {
+	// ADMIN_TOTP_ENCRYPTION_KEY is the legacy name from the TOTP-based 2FA and
+	// stays supported so existing deployments keep booting.
+	pepper := getEnv("ADMIN_MFA_CODE_PEPPER", os.Getenv("ADMIN_TOTP_ENCRYPTION_KEY"))
+	if pepper != "" {
+		decoded, err := hex.DecodeString(pepper)
 		if err != nil {
-			return nil, fmt.Errorf("ADMIN_TOTP_ENCRYPTION_KEY must be a hex-encoded 32-byte key: %w", err)
+			return nil, fmt.Errorf("ADMIN_MFA_CODE_PEPPER must be a hex-encoded 32-byte key: %w", err)
 		}
 		if len(decoded) != 32 {
-			return nil, fmt.Errorf("ADMIN_TOTP_ENCRYPTION_KEY must be 32 bytes (64 hex chars), got %d bytes", len(decoded))
+			return nil, fmt.Errorf("ADMIN_MFA_CODE_PEPPER must be 32 bytes (64 hex chars), got %d bytes", len(decoded))
 		}
 		return decoded, nil
 	}
 	if !dev {
-		return nil, errors.New("ADMIN_TOTP_ENCRYPTION_KEY is required in production")
+		return nil, errors.New("ADMIN_MFA_CODE_PEPPER is required in production")
 	}
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
-		return nil, fmt.Errorf("failed to generate TOTP encryption key: %w", err)
+		return nil, fmt.Errorf("failed to generate MFA code pepper: %w", err)
 	}
-	slog.Warn("ADMIN_TOTP_ENCRYPTION_KEY not set, using ephemeral key")
+	slog.Warn("ADMIN_MFA_CODE_PEPPER not set, using ephemeral key")
 	return key, nil
 }
 

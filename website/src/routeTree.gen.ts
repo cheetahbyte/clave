@@ -17,7 +17,6 @@ import { Route as R2faIndexRouteImport } from './routes/2fa/index'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
 import { Route as DashDashboardRouteImport } from './routes/_dash/dashboard'
 import { Route as DashAccountRouteImport } from './routes/_dash/account'
-import { Route as R2faSetupRouteImport } from './routes/2fa/setup'
 import { Route as SelfserviceOrgSlugIndexRouteImport } from './routes/selfservice/$orgSlug/index'
 import { Route as DashUpdatesIndexRouteImport } from './routes/_dash/updates/index'
 import { Route as DashTrialsIndexRouteImport } from './routes/_dash/trials/index'
@@ -74,11 +73,6 @@ const DashAccountRoute = DashAccountRouteImport.update({
   id: '/account',
   path: '/account',
   getParentRoute: () => DashRoute,
-} as any)
-const R2faSetupRoute = R2faSetupRouteImport.update({
-  id: '/2fa/setup',
-  path: '/2fa/setup',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const SelfserviceOrgSlugIndexRoute = SelfserviceOrgSlugIndexRouteImport.update({
   id: '/$orgSlug/',
@@ -170,7 +164,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/selfservice': typeof SelfserviceRouteWithChildren
-  '/2fa/setup': typeof R2faSetupRoute
   '/account': typeof DashAccountRoute
   '/dashboard': typeof DashDashboardRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -197,7 +190,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/selfservice': typeof SelfserviceRouteWithChildren
-  '/2fa/setup': typeof R2faSetupRoute
   '/account': typeof DashAccountRoute
   '/dashboard': typeof DashDashboardRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -226,7 +218,6 @@ export interface FileRoutesById {
   '/_dash': typeof DashRouteWithChildren
   '/login': typeof LoginRoute
   '/selfservice': typeof SelfserviceRouteWithChildren
-  '/2fa/setup': typeof R2faSetupRoute
   '/_dash/account': typeof DashAccountRoute
   '/_dash/dashboard': typeof DashDashboardRoute
   '/invite/$token': typeof InviteTokenRoute
@@ -255,7 +246,6 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/selfservice'
-    | '/2fa/setup'
     | '/account'
     | '/dashboard'
     | '/invite/$token'
@@ -282,7 +272,6 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/selfservice'
-    | '/2fa/setup'
     | '/account'
     | '/dashboard'
     | '/invite/$token'
@@ -310,7 +299,6 @@ export interface FileRouteTypes {
     | '/_dash'
     | '/login'
     | '/selfservice'
-    | '/2fa/setup'
     | '/_dash/account'
     | '/_dash/dashboard'
     | '/invite/$token'
@@ -339,7 +327,6 @@ export interface RootRouteChildren {
   DashRoute: typeof DashRouteWithChildren
   LoginRoute: typeof LoginRoute
   SelfserviceRoute: typeof SelfserviceRouteWithChildren
-  R2faSetupRoute: typeof R2faSetupRoute
   InviteTokenRoute: typeof InviteTokenRoute
   R2faIndexRoute: typeof R2faIndexRoute
 }
@@ -401,13 +388,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/account'
       preLoaderRoute: typeof DashAccountRouteImport
       parentRoute: typeof DashRoute
-    }
-    '/2fa/setup': {
-      id: '/2fa/setup'
-      path: '/2fa/setup'
-      fullPath: '/2fa/setup'
-      preLoaderRoute: typeof R2faSetupRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/selfservice/$orgSlug/': {
       id: '/selfservice/$orgSlug/'
@@ -592,7 +572,6 @@ const rootRouteChildren: RootRouteChildren = {
   DashRoute: DashRouteWithChildren,
   LoginRoute: LoginRoute,
   SelfserviceRoute: SelfserviceRouteWithChildren,
-  R2faSetupRoute: R2faSetupRoute,
   InviteTokenRoute: InviteTokenRoute,
   R2faIndexRoute: R2faIndexRoute,
 }

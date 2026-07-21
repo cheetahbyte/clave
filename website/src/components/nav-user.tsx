@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router"
-import { ChevronsUpDown, LogOut, Settings, ShieldCheck } from "lucide-react"
+import { ChevronsUpDown, LogOut, Settings } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -76,12 +76,6 @@ export function NavUser({
                 <Link to="/account">
                   <Settings />
                   Account settings
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/2fa/setup">
-                  <ShieldCheck />
-                  Two-factor auth
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>

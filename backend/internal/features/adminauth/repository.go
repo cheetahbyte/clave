@@ -2,9 +2,11 @@ package adminauth
 
 import (
 	"context"
+	"time"
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Repository struct {
@@ -31,12 +33,28 @@ func (r *Repository) GetAdminByID(ctx context.Context, id uuid.UUID) (db.AdminUs
 	return r.q.GetAdminById(ctx, id)
 }
 
-func (r *Repository) EnableTOTP(ctx context.Context, id uuid.UUID, secretEnc, secretNonce []byte) error {
-	return r.q.EnableTOTP(ctx, db.EnableTOTPParams{
-		ID:          id,
-		SecretEnc:   secretEnc,
-		SecretNonce: secretNonce,
+func (r *Repository) InsertEmailCode(ctx context.Context, adminID uuid.UUID, codeHash string, expiresAt time.Time) error {
+	return r.q.InsertAdminEmailCode(ctx, db.InsertAdminEmailCodeParams{
+		AdminUserID: adminID,
+		CodeHash:    codeHash,
+		ExpiresAt:   pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	})
+}
+
+func (r *Repository) GetLatestEmailCode(ctx context.Context, adminID uuid.UUID) (db.AdminEmailCode, error) {
+	return r.q.GetLatestAdminEmailCode(ctx, adminID)
+}
+
+func (r *Repository) MarkEmailCodeUsed(ctx context.Context, id uuid.UUID) error {
+	return r.q.MarkAdminEmailCodeUsed(ctx, id)
+}
+
+func (r *Repository) IncrementEmailCodeAttempts(ctx context.Context, id uuid.UUID) (int32, error) {
+	return r.q.IncrementAdminEmailCodeAttempts(ctx, id)
+}
+
+func (r *Repository) InvalidateEmailCodes(ctx context.Context, adminID uuid.UUID) error {
+	return r.q.InvalidateAdminEmailCodes(ctx, adminID)
 }
 
 func (r *Repository) CreateAdmin(ctx context.Context, email, passwordHash, role string) (db.AdminUser, error) {
@@ -47,10 +65,3 @@ func (r *Repository) CreateAdmin(ctx context.Context, email, passwordHash, role 
 	})
 }
 
-func (r *Repository) DisableTOTP(ctx context.Context, id uuid.UUID) error {
-	return r.q.DisableTOTP(ctx, id)
-}
-
-func (r *Repository) InvalidateRecoveryCodes(ctx context.Context, adminID uuid.UUID) error {
-	return r.q.InvalidateRecoveryCodes(ctx, adminID)
-}

@@ -13,31 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const consumeRecoveryCode = `-- name: ConsumeRecoveryCode :one
-UPDATE admin_recovery_codes
-SET used_at = now()
-WHERE admin_user_id = $1
-  AND code_hash = $2
-  AND used_at IS NULL
-RETURNING id
-`
-
-type ConsumeRecoveryCodeParams struct {
-	AdminUserID uuid.UUID `json:"admin_user_id"`
-	CodeHash    string    `json:"code_hash"`
-}
-
-func (q *Queries) ConsumeRecoveryCode(ctx context.Context, arg ConsumeRecoveryCodeParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, consumeRecoveryCode, arg.AdminUserID, arg.CodeHash)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const createAdmin = `-- name: CreateAdmin :one
 INSERT INTO admin_users (email, password_hash, role)
 VALUES ($1, $2, $3)
-RETURNING id, email, password_hash, role, is_active, last_login_at, created_at, updated_at, totp_enabled, totp_secret_enc, totp_secret_nonce
+RETURNING id, email, password_hash, role, is_active, last_login_at, created_at, updated_at
 `
 
 type CreateAdminParams struct {
@@ -58,9 +37,6 @@ func (q *Queries) CreateAdmin(ctx context.Context, arg CreateAdminParams) (Admin
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.TotpEnabled,
-		&i.TotpSecretEnc,
-		&i.TotpSecretNonce,
 	)
 	return i, err
 }
@@ -102,42 +78,18 @@ func (q *Queries) CreateOrganizationMember(ctx context.Context, arg CreateOrgani
 	return err
 }
 
-const disableTOTP = `-- name: DisableTOTP :exec
-UPDATE admin_users
-SET totp_enabled = false,
-    totp_secret_enc = NULL,
-    totp_secret_nonce = NULL,
-    updated_at = now()
-WHERE id = $1
+const deleteExpiredAdminEmailCodes = `-- name: DeleteExpiredAdminEmailCodes :exec
+DELETE FROM admin_email_codes
+WHERE expires_at < now() - INTERVAL '1 day'
 `
 
-func (q *Queries) DisableTOTP(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, disableTOTP, id)
-	return err
-}
-
-const enableTOTP = `-- name: EnableTOTP :exec
-UPDATE admin_users
-SET totp_enabled = true,
-    totp_secret_enc = $1,
-    totp_secret_nonce = $2,
-    updated_at = now()
-WHERE id = $3
-`
-
-type EnableTOTPParams struct {
-	SecretEnc   []byte    `json:"secret_enc"`
-	SecretNonce []byte    `json:"secret_nonce"`
-	ID          uuid.UUID `json:"id"`
-}
-
-func (q *Queries) EnableTOTP(ctx context.Context, arg EnableTOTPParams) error {
-	_, err := q.db.Exec(ctx, enableTOTP, arg.SecretEnc, arg.SecretNonce, arg.ID)
+func (q *Queries) DeleteExpiredAdminEmailCodes(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteExpiredAdminEmailCodes)
 	return err
 }
 
 const getAdminByEmail = `-- name: GetAdminByEmail :one
-SELECT id, email, password_hash, role, is_active, last_login_at, created_at, updated_at, totp_enabled, totp_secret_enc, totp_secret_nonce FROM admin_users WHERE email = $1
+SELECT id, email, password_hash, role, is_active, last_login_at, created_at, updated_at FROM admin_users WHERE email = $1
 `
 
 func (q *Queries) GetAdminByEmail(ctx context.Context, email string) (AdminUser, error) {
@@ -152,15 +104,12 @@ func (q *Queries) GetAdminByEmail(ctx context.Context, email string) (AdminUser,
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.TotpEnabled,
-		&i.TotpSecretEnc,
-		&i.TotpSecretNonce,
 	)
 	return i, err
 }
 
 const getAdminById = `-- name: GetAdminById :one
-SELECT id, email, password_hash, role, is_active, last_login_at, created_at, updated_at, totp_enabled, totp_secret_enc, totp_secret_nonce FROM admin_users WHERE id = $1
+SELECT id, email, password_hash, role, is_active, last_login_at, created_at, updated_at FROM admin_users WHERE id = $1
 `
 
 func (q *Queries) GetAdminById(ctx context.Context, id uuid.UUID) (AdminUser, error) {
@@ -175,9 +124,6 @@ func (q *Queries) GetAdminById(ctx context.Context, id uuid.UUID) (AdminUser, er
 		&i.LastLoginAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.TotpEnabled,
-		&i.TotpSecretEnc,
-		&i.TotpSecretNonce,
 	)
 	return i, err
 }
@@ -223,6 +169,29 @@ func (q *Queries) GetAdminOrganizations(ctx context.Context, adminUserID uuid.UU
 		return nil, err
 	}
 	return items, nil
+}
+
+const getLatestAdminEmailCode = `-- name: GetLatestAdminEmailCode :one
+SELECT id, admin_user_id, code_hash, attempts, expires_at, used_at, created_at FROM admin_email_codes
+WHERE admin_user_id = $1
+  AND used_at IS NULL
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestAdminEmailCode(ctx context.Context, adminUserID uuid.UUID) (AdminEmailCode, error) {
+	row := q.db.QueryRow(ctx, getLatestAdminEmailCode, adminUserID)
+	var i AdminEmailCode
+	err := row.Scan(
+		&i.ID,
+		&i.AdminUserID,
+		&i.CodeHash,
+		&i.Attempts,
+		&i.ExpiresAt,
+		&i.UsedAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const getOrganizationById = `-- name: GetOrganizationById :one
@@ -282,6 +251,36 @@ func (q *Queries) GetOrganizationMembership(ctx context.Context, arg GetOrganiza
 	return i, err
 }
 
+const incrementAdminEmailCodeAttempts = `-- name: IncrementAdminEmailCodeAttempts :one
+UPDATE admin_email_codes
+SET attempts = attempts + 1
+WHERE id = $1
+RETURNING attempts
+`
+
+func (q *Queries) IncrementAdminEmailCodeAttempts(ctx context.Context, id uuid.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, incrementAdminEmailCodeAttempts, id)
+	var attempts int32
+	err := row.Scan(&attempts)
+	return attempts, err
+}
+
+const insertAdminEmailCode = `-- name: InsertAdminEmailCode :exec
+INSERT INTO admin_email_codes (admin_user_id, code_hash, expires_at)
+VALUES ($1, $2, $3)
+`
+
+type InsertAdminEmailCodeParams struct {
+	AdminUserID uuid.UUID          `json:"admin_user_id"`
+	CodeHash    string             `json:"code_hash"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) InsertAdminEmailCode(ctx context.Context, arg InsertAdminEmailCodeParams) error {
+	_, err := q.db.Exec(ctx, insertAdminEmailCode, arg.AdminUserID, arg.CodeHash, arg.ExpiresAt)
+	return err
+}
+
 const insertAuditLog = `-- name: InsertAuditLog :exec
 INSERT INTO admin_audit_log (admin_user_id, organization_id, action, resource_type, resource_id, metadata, ip, user_agent)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -312,28 +311,26 @@ func (q *Queries) InsertAuditLog(ctx context.Context, arg InsertAuditLogParams) 
 	return err
 }
 
-const insertRecoveryCode = `-- name: InsertRecoveryCode :exec
-INSERT INTO admin_recovery_codes (admin_user_id, code_hash)
-VALUES ($1, $2)
+const invalidateAdminEmailCodes = `-- name: InvalidateAdminEmailCodes :exec
+UPDATE admin_email_codes
+SET used_at = now()
+WHERE admin_user_id = $1
+  AND used_at IS NULL
 `
 
-type InsertRecoveryCodeParams struct {
-	AdminUserID uuid.UUID `json:"admin_user_id"`
-	CodeHash    string    `json:"code_hash"`
-}
-
-func (q *Queries) InsertRecoveryCode(ctx context.Context, arg InsertRecoveryCodeParams) error {
-	_, err := q.db.Exec(ctx, insertRecoveryCode, arg.AdminUserID, arg.CodeHash)
+func (q *Queries) InvalidateAdminEmailCodes(ctx context.Context, adminUserID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, invalidateAdminEmailCodes, adminUserID)
 	return err
 }
 
-const invalidateRecoveryCodes = `-- name: InvalidateRecoveryCodes :exec
-DELETE FROM admin_recovery_codes
-WHERE admin_user_id = $1
+const markAdminEmailCodeUsed = `-- name: MarkAdminEmailCodeUsed :exec
+UPDATE admin_email_codes
+SET used_at = now()
+WHERE id = $1
 `
 
-func (q *Queries) InvalidateRecoveryCodes(ctx context.Context, adminUserID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, invalidateRecoveryCodes, adminUserID)
+func (q *Queries) MarkAdminEmailCodeUsed(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markAdminEmailCodeUsed, id)
 	return err
 }
 

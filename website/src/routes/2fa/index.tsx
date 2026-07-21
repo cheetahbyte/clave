@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { REGEXP_ONLY_DIGITS } from "input-otp";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { verify2FA, getCurrentAdmin } from "@/features/admin/api";
+import { verify2FA, resend2FACode, getCurrentAdmin } from "@/features/admin/api";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +39,14 @@ function TwoFactorPage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   const { data: admin } = useQuery({
     queryKey: ["currentAdmin"],
@@ -61,13 +69,32 @@ function TwoFactorPage() {
     }
   }
 
+  async function handleResend() {
+    setError(null);
+    setResending(true);
+    try {
+      await resend2FACode();
+      setCode("");
+      setCooldown(60);
+      toast.success("New code sent.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Could not send a new code.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setResending(false);
+    }
+  }
+
   return (
     <div className="min-h-screen grid place-items-center p-6">
       <Card className="mx-auto w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-2xl">Two-factor authentication</CardTitle>
           <CardDescription>
-            {admin ? `Enter the 6-digit code for ${admin.email}.` : "Enter your authenticator code."}
+            {admin
+              ? `We sent a 6-digit code to ${admin.email}. It expires in 10 minutes.`
+              : "Enter the 6-digit code we emailed you."}
           </CardDescription>
         </CardHeader>
 
@@ -81,7 +108,7 @@ function TwoFactorPage() {
 
             <div className="flex flex-col items-center gap-3">
               <Label htmlFor="code" className="self-start">
-                Authenticator code
+                Verification code
               </Label>
               <InputOTP
                 id="code"
@@ -108,9 +135,18 @@ function TwoFactorPage() {
             </div>
           </CardContent>
 
-          <CardFooter className="pt-6">
+          <CardFooter className="flex-col gap-2 pt-6">
             <Button className="w-full" type="submit" disabled={loading || code.length !== 6}>
               {loading ? "Verifying…" : "Verify"}
+            </Button>
+            <Button
+              className="w-full"
+              type="button"
+              variant="ghost"
+              onClick={handleResend}
+              disabled={resending || cooldown > 0}
+            >
+              {cooldown > 0 ? `Resend code in ${cooldown}s` : resending ? "Sending…" : "Resend code"}
             </Button>
           </CardFooter>
         </form>
