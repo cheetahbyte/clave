@@ -12,6 +12,7 @@ import (
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/cheetahbyte/clave/internal/features/license"
+	"github.com/cheetahbyte/clave/internal/features/validation"
 	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/cheetahbyte/clave/internal/shared/clientchannels"
 	"github.com/cheetahbyte/clave/internal/shared/signing"
@@ -19,18 +20,20 @@ import (
 )
 
 type Service struct {
-	repo     *Repository
-	signer   signing.Provider
-	licenses *license.Service
-	channels clientchannels.Lister
+	repo      *Repository
+	signer    signing.Provider
+	licenses  *license.Service
+	channels  clientchannels.Lister
+	validator *validation.Service
 }
 
-func NewService(q *db.Queries, pool *pgxpool.Pool, signer signing.Provider, licenses *license.Service, channels clientchannels.Lister) *Service {
+func NewService(q *db.Queries, pool *pgxpool.Pool, signer signing.Provider, licenses *license.Service, channels clientchannels.Lister, validator *validation.Service) *Service {
 	return &Service{
-		repo:     NewRepository(q, pool),
-		signer:   signer,
-		licenses: licenses,
-		channels: channels,
+		repo:      NewRepository(q, pool),
+		signer:    signer,
+		licenses:  licenses,
+		channels:  channels,
+		validator: validator,
 	}
 }
 
@@ -108,16 +111,16 @@ func (svc *Service) Activate(ctx context.Context, data ActivateRequest) (Activat
 	}, nil
 }
 
-func (svc *Service) Deactivate(ctx context.Context, data DeactivateRequest) error {
+func (svc *Service) Deactivate(ctx context.Context, token, deviceID string) error {
 	instance := "/licenses/deactivate"
-	lic, err := svc.validateLicense(ctx, data.LicenseKey, instance)
+	auth, err := svc.validator.Authorize(ctx, token, deviceID, instance, false)
 	if err != nil {
 		return err
 	}
 
-	hwidHash := svc.signer.HMACSign(data.DeviceID, signing.DontNormalizeKey)
-	if err := svc.repo.DeactivateByLicenseAndHwid(ctx, lic.ID, hwidHash); err != nil {
-		slog.Error("failed to deactivate license", "licenseId", lic.ID, "err", err)
+	hwidHash := svc.signer.HMACSign(deviceID, signing.DontNormalizeKey)
+	if err := svc.repo.DeactivateByLicenseAndHwid(ctx, auth.LicenseID, hwidHash); err != nil {
+		slog.Error("failed to deactivate license", "licenseId", auth.LicenseID, "err", err)
 		return problem.Of(500).
 			Append(problem.Type("https://api.yourapp.dev/problems/internal")).
 			Append(problem.Title("Internal error")).

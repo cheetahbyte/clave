@@ -77,10 +77,10 @@ func (svc *Service) channelsForProduct(ctx context.Context, productID uuid.UUID)
 	return channels, nil
 }
 
-func (svc *Service) ClientChannels(ctx context.Context, data ChannelsRequest) (ChannelsResponse, error) {
+func (svc *Service) ClientChannels(ctx context.Context, token string) (ChannelsResponse, error) {
 	instance := "/updates/channels"
 
-	_, lic, _, err := svc.parseActiveLicenseToken(ctx, data.Token, instance)
+	_, lic, _, err := svc.parseActiveLicenseToken(ctx, token, instance)
 	if err != nil {
 		return ChannelsResponse{}, err
 	}

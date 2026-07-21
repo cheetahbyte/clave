@@ -126,8 +126,8 @@ func (svc *Service) Refresh(ctx context.Context, auth *Authorized) (ValidateResp
 		UpdateChannels: svc.availableUpdateChannels(ctx, auth.License.ProductID, auth.License.Features)}, nil
 }
 
-func (svc *Service) Validate(ctx context.Context, data ValidateRequest) (ValidateResponse, error) {
-	auth, err := svc.Authorize(ctx, data.Token, data.DeviceID, "/licenses/validate", true)
+func (svc *Service) Validate(ctx context.Context, token string, data ValidateRequest) (ValidateResponse, error) {
+	auth, err := svc.Authorize(ctx, token, data.DeviceID, "/licenses/validate", true)
 	if err != nil {
 		observability.CountLicenseValidation(ctx, "failure")
 		return ValidateResponse{}, err

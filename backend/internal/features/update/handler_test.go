@@ -1,69 +1,100 @@
 package update
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/cheetahbyte/clave/internal/db"
+	"github.com/cheetahbyte/clave/internal/shared/middleware"
+	"github.com/cheetahbyte/clave/internal/shared/signing"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-func TestFeedTokenReadsAuthorizationHeader(t *testing.T) {
-	r := httptest.NewRequest("GET", "/updates/products/abc/macos/stable/feed.json", nil)
-	r.Header.Set("Authorization", "Bearer license.jwt.token")
+func TestBearerToken(t *testing.T) {
+	tests := []struct {
+		name string
+		auth string
+		want string
+	}{
+		{name: "header", auth: "Bearer license.jwt.token", want: "license.jwt.token"},
+		{name: "case insensitive scheme", auth: "bearer license.jwt.token", want: "license.jwt.token"},
+		{name: "whitespace", auth: "Bearer   spaced.token   ", want: "spaced.token"},
+		{name: "missing"},
+		{name: "basic", auth: "Basic dXNlcjpwYXNz"},
+	}
 
-	got := feedToken(r)
-	if got != "license.jwt.token" {
-		t.Fatalf("expected 'license.jwt.token', got %q", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/updates/products/abc/macos/stable/feed.json", nil)
+			r.Header.Set("Authorization", tt.auth)
+			if got := middleware.BearerToken(r); got != tt.want {
+				t.Fatalf("BearerToken() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestFeedTokenIgnoresQueryToken(t *testing.T) {
-	r := httptest.NewRequest("GET", "/updates/products/abc/macos/stable/feed.json?token=query.token", nil)
-
-	got := feedToken(r)
-	if got != "" {
-		t.Fatalf("query-string token must not be accepted, got %q", got)
+func TestBearerTokenRejectsBodyAndQueryCredentials(t *testing.T) {
+	r := httptest.NewRequest("POST", "/client/updates/check?token=query", strings.NewReader(`{"token":"body"}`))
+	if got := middleware.BearerToken(r); got != "" {
+		t.Fatalf("BearerToken() = %q, want empty", got)
 	}
 }
 
-func TestFeedTokenHeaderWinsOverQuery(t *testing.T) {
-	r := httptest.NewRequest("GET", "/updates/products/abc/macos/stable/feed.json?token=query.token", nil)
-	r.Header.Set("Authorization", "Bearer header.token")
+func TestClientEndpointsRejectBodyToken(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	got := feedToken(r)
-	if got != "header.token" {
-		t.Fatalf("expected header token to win, got %q", got)
+	tests := []struct {
+		name string
+		body string
+		h    func(http.ResponseWriter, *http.Request)
+		want int
+	}{
+		{"check", `{"token":"body-token","version":"1.0.0"}`, NewHandler(nil, nil).Check, http.StatusBadRequest},
+		{"channels", `{"token":"body-token"}`, NewHandler(&Service{signer: signing.New(publicKey, privateKey, "")}, nil).ClientChannels, http.StatusUnauthorized},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPost, "/updates/"+tt.name, strings.NewReader(tt.body))
+			w := httptest.NewRecorder()
+			tt.h(w, r)
+			if w.Code != tt.want {
+				t.Fatalf("status = %d, want %d; body = %s", w.Code, tt.want, w.Body.String())
+			}
+			if tt.name == "channels" && strings.Contains(w.Body.String(), "EOF") {
+				t.Fatalf("body must not contain JSON EOF error: %s", w.Body.String())
+			}
+		})
 	}
 }
 
-func TestFeedTokenEmptyWhenMissing(t *testing.T) {
-	r := httptest.NewRequest("GET", "/updates/products/abc/macos/stable/feed.json", nil)
-
-	got := feedToken(r)
-	if got != "" {
-		t.Fatalf("expected empty string, got %q", got)
+func TestClientChannelsAcceptsBodylessBearerRequest(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
+	router := chi.NewRouter()
+	NewHandler(&Service{signer: signing.New(publicKey, privateKey, "")}, nil).RegisterClientRoutes(router)
 
-func TestFeedTokenTrimsHeaderWhitespace(t *testing.T) {
-	r := httptest.NewRequest("GET", "/updates/products/abc/macos/stable/feed.json", nil)
-	r.Header.Set("Authorization", "Bearer   spaced.token   ")
+	req := httptest.NewRequest(http.MethodPost, "/updates/channels", nil)
+	req.Header.Set("Authorization", "Bearer valid-header-token")
+	res := httptest.NewRecorder()
+	router.ServeHTTP(res, req)
 
-	got := feedToken(r)
-	if got != "spaced.token" {
-		t.Fatalf("expected trimmed token, got %q", got)
+	if res.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d; body = %s", res.Code, http.StatusUnauthorized, res.Body.String())
 	}
-}
-
-func TestFeedTokenRejectsNonBearerScheme(t *testing.T) {
-	r := httptest.NewRequest("GET", "/updates/products/abc/macos/stable/feed.json", nil)
-	r.Header.Set("Authorization", "Basic dXNlcjpwYXNz")
-
-	got := feedToken(r)
-	if got != "" {
-		t.Fatalf("non-Bearer scheme must not yield a token, got %q", got)
+	if strings.Contains(res.Body.String(), "EOF") {
+		t.Fatalf("body must not contain JSON EOF error: %s", res.Body.String())
 	}
 }
 

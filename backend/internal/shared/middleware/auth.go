@@ -25,6 +25,15 @@ const adminEmailKey contextKey = "admin_email"
 const adminRoleKey contextKey = "admin_role"
 const adminOrganizationIDKey contextKey = "admin_organization_id"
 
+// BearerToken returns the token from an Authorization: Bearer header.
+func BearerToken(r *http.Request) string {
+	parts := strings.Fields(strings.TrimSpace(r.Header.Get("Authorization")))
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	return parts[1]
+}
+
 func SelfServiceEmailFromContext(ctx context.Context) (string, bool) {
 	email, ok := ctx.Value(selfServiceEmailKey).(string)
 	return email, ok

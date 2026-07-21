@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
+	"github.com/cheetahbyte/clave/internal/shared/middleware"
 )
 
 type Handler struct {
@@ -32,7 +33,7 @@ func (h *Handler) Deactivate(w http.ResponseWriter, r *http.Request) {
 	if !helpers.DecodeValidated(w, r, &data) {
 		return
 	}
-	if err := h.svc.Deactivate(r.Context(), data); err != nil {
+	if err := h.svc.Deactivate(r.Context(), middleware.BearerToken(r), data.DeviceID); err != nil {
 		helpers.WriteError(w, r, err)
 		return
 	}

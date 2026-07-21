@@ -1,9 +1,11 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/json"
 	"net/http"
 	"os"
 	"strings"
@@ -60,12 +62,39 @@ func TestClientDeviceDeactivate(t *testing.T) {
 	}
 	activation := decode[struct {
 		ActivationID uuid.UUID `json:"activationId"`
+		Token        string    `json:"token"`
 	}](t, resp)
 
+	postDeactivate := func(body map[string]string) *http.Response {
+		t.Helper()
+		payload, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("marshal deactivation: %v", err)
+		}
+		req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/client/licenses/deactivate", bytes.NewReader(payload))
+		if err != nil {
+			t.Fatalf("create deactivation request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+activation.Token)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("deactivate request: %v", err)
+		}
+		return resp
+	}
+
 	resp = postJSON(t, client, "/api/v1/client/licenses/deactivate", map[string]string{
-		"licenseKey": licenseKey,
-		"deviceId":   hwid,
+		"token":    activation.Token,
+		"deviceId": hwid,
 	})
+	if resp.StatusCode == http.StatusOK {
+		drain(resp)
+		t.Fatal("deactivate with JSON token status = 200, want failure")
+	}
+	drain(resp)
+
+	resp = postDeactivate(map[string]string{"deviceId": hwid})
 	if resp.StatusCode != http.StatusOK {
 		drain(resp)
 		t.Fatalf("deactivate status = %d, want 200", resp.StatusCode)
@@ -90,13 +119,10 @@ func TestClientDeviceDeactivate(t *testing.T) {
 		t.Fatalf("deactivation = (%t, %q), want (true, %q)", deactivated, reason, "client_unregistration")
 	}
 
-	resp = postJSON(t, client, "/api/v1/client/licenses/deactivate", map[string]string{
-		"licenseKey": licenseKey,
-		"deviceId":   hwid,
-	})
-	if resp.StatusCode != http.StatusOK {
+	resp = postDeactivate(map[string]string{"deviceId": hwid})
+	if resp.StatusCode == http.StatusOK {
 		drain(resp)
-		t.Fatalf("repeated deactivate status = %d, want 200", resp.StatusCode)
+		t.Fatal("repeated deactivate status = 200, want failure")
 	}
 	drain(resp)
 

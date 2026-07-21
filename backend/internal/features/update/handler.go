@@ -54,7 +54,7 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.svc.Check(r.Context(), data)
+	result, err := h.svc.Check(r.Context(), middleware.BearerToken(r), data)
 	if err != nil {
 		observability.CountUpdateCheck(r.Context(), "failure")
 		helpers.WriteError(w, r, err)
@@ -66,12 +66,7 @@ func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ClientChannels(w http.ResponseWriter, r *http.Request) {
-	var data ChannelsRequest
-	if !helpers.DecodeValidated(w, r, &data) {
-		return
-	}
-
-	result, err := h.svc.ClientChannels(r.Context(), data)
+	result, err := h.svc.ClientChannels(r.Context(), middleware.BearerToken(r))
 	if err != nil {
 		helpers.WriteError(w, r, err)
 		return
@@ -270,7 +265,7 @@ func (h *Handler) NativeFeed(w http.ResponseWriter, r *http.Request) {
 	platform := chi.URLParam(r, "platform")
 	channel := chi.URLParam(r, "channel")
 
-	if err := h.svc.AuthorizeChannelAccess(r.Context(), productID, channel, feedToken(r)); err != nil {
+	if err := h.svc.AuthorizeChannelAccess(r.Context(), productID, channel, middleware.BearerToken(r)); err != nil {
 		helpers.WriteJSON(w, http.StatusForbidden, map[string]string{"error": err.Error()})
 		return
 	}
@@ -291,18 +286,6 @@ func (h *Handler) NativeFeed(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write(feed.body)
-}
-
-// feedToken extracts a license token from an Authorization: Bearer header,
-// used to gate feature-restricted channels. Query string tokens are no longer
-// accepted because the token would otherwise be written into returned feed
-// URLs, which would be logged in caches, proxies, and clients.
-func feedToken(r *http.Request) string {
-	auth := r.Header.Get("Authorization")
-	if strings.HasPrefix(auth, "Bearer ") {
-		return strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
-	}
-	return ""
 }
 
 func (h *Handler) Changelog(w http.ResponseWriter, r *http.Request) {
@@ -796,7 +779,7 @@ func (h *Handler) DownloadArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.AuthorizeArtifactAccess(r.Context(), artifactID, feedToken(r)); err != nil {
+	if err := h.svc.AuthorizeArtifactAccess(r.Context(), artifactID, middleware.BearerToken(r)); err != nil {
 		observability.CountArtifactDownload(r.Context(), "failure")
 		w.WriteHeader(http.StatusForbidden)
 		return

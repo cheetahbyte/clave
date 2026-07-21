@@ -175,17 +175,17 @@ func (svc *Service) parseActiveLicenseToken(ctx context.Context, token string, i
 	return licenseID, lic, claims, nil
 }
 
-func (svc *Service) Check(ctx context.Context, data CheckRequest) (CheckResponse, error) {
+func (svc *Service) Check(ctx context.Context, token string, data CheckRequest) (CheckResponse, error) {
 	instance := "/updates/check"
 
 	if svc.validator != nil {
-		auth, err := svc.validator.Authorize(ctx, data.Token, "", instance, false)
+		auth, err := svc.validator.Authorize(ctx, token, "", instance, false)
 		if err != nil {
 			return CheckResponse{}, err
 		}
 		return svc.CheckAuthorized(ctx, data, auth)
 	}
-	licenseID, lic, claims, err := svc.parseActiveLicenseToken(ctx, data.Token, instance)
+	licenseID, lic, claims, err := svc.parseActiveLicenseToken(ctx, token, instance)
 	if err != nil {
 		return CheckResponse{}, err
 	}

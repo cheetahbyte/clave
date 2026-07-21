@@ -6,7 +6,6 @@ import (
 )
 
 type Request struct {
-	Token     string `json:"token" validate:"required"`
 	DeviceID  string `json:"deviceId" validate:"required"`
 	Version   string `json:"version,omitempty"`
 	Build     string `json:"build,omitempty"`

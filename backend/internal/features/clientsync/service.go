@@ -20,8 +20,8 @@ func NewService(validationSvc *validation.Service, updateSvc *update.Service, re
 	return &Service{validation: validationSvc, updates: updateSvc, recorder: recorder}
 }
 
-func (svc *Service) Sync(ctx context.Context, req Request) (Response, error) {
-	auth, err := svc.validation.Authorize(ctx, req.Token, req.DeviceID, "/sync", true)
+func (svc *Service) Sync(ctx context.Context, token string, req Request) (Response, error) {
+	auth, err := svc.validation.Authorize(ctx, token, req.DeviceID, "/sync", true)
 	if err != nil {
 		return Response{}, err
 	}
@@ -49,7 +49,7 @@ func (svc *Service) Sync(ctx context.Context, req Request) (Response, error) {
 		return response, nil
 	}
 	check, err := svc.updates.CheckAuthorized(ctx, update.CheckRequest{
-		Token: req.Token, Version: version, Build: req.Build, Platform: req.Platform,
+		Version: version, Build: req.Build, Platform: req.Platform,
 		Channel: req.Channel, Arch: req.Arch, OSVersion: req.OSVersion, ClientID: req.ClientID,
 	}, auth)
 	if err != nil {

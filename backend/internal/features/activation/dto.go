@@ -17,8 +17,7 @@ type ActivateRequest struct {
 }
 
 type DeactivateRequest struct {
-	LicenseKey string `json:"licenseKey" validate:"required"`
-	DeviceID   string `json:"deviceId" validate:"required"`
+	DeviceID string `json:"deviceId" validate:"required"`
 }
 
 type ActivateResponse struct {

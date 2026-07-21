@@ -1,8 +1,10 @@
 package clientsync
 
 import (
-	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"net/http"
+
+	"github.com/cheetahbyte/clave/internal/shared/helpers"
+	"github.com/cheetahbyte/clave/internal/shared/middleware"
 )
 
 type Handler struct{ svc *Service }
@@ -13,7 +15,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	if !helpers.DecodeValidated(w, r, &req) {
 		return
 	}
-	response, err := h.svc.Sync(r.Context(), req)
+	response, err := h.svc.Sync(r.Context(), middleware.BearerToken(r), req)
 	if err != nil {
 		helpers.WriteError(w, r, err)
 		return

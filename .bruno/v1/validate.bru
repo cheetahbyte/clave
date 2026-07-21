@@ -10,10 +10,13 @@ post {
   auth: inherit
 }
 
+headers {
+  Authorization: Bearer <activation-jwt>
+}
+
 body:json {
   {
-    "deviceId": "apfelmus3",
-    "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJwcm9kdWN0X2lkIjoxLCJod2lkIjoiYXBmZWxtdXMzIiwiZmVhdHVyZXMiOlsidGVzdCJdLCJzdWIiOiJsaWNfNSIsImF1ZCI6WyJ0ZXN0Il0sImV4cCI6MTc2OTg0NTUzMiwibmJmIjoxNzY5ODQ0OTAyLCJpYXQiOjE3Njk4NDQ5MzJ9.mEG-d4YSVoY0SA0r_36qLMhe4eiBapsOLMkFIpWJX_f2d2Z_1HjHr4EUy_1yd4e0zAlR-XRURAbQDQNcJxGlCw"
+    "deviceId": "apfelmus3"
   }
 }
 

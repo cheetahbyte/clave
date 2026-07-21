@@ -3,7 +3,6 @@ package update
 import "github.com/cheetahbyte/clave/internal/shared/clientchannels"
 
 type CheckRequest struct {
-	Token   string `json:"token" validate:"required"`
 	Version string `json:"version" validate:"required"`
 
 	Build     string `json:"build,omitempty"`
@@ -25,10 +24,6 @@ type CheckResponse struct {
 	ChangelogURL    string         `json:"changelogUrl,omitempty"`
 	Artifacts       []ArtifactDTO  `json:"artifacts,omitempty"`
 	Metadata        map[string]any `json:"metadata,omitempty"`
-}
-
-type ChannelsRequest struct {
-	Token string `json:"token" validate:"required"`
 }
 
 type ChannelsResponse struct {

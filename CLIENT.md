@@ -87,9 +87,12 @@ avoids expiry races. Deduplicate refreshes inside the process so concurrent
 features share one request. After transient failures, retry with exponential
 backoff and random jitter rather than on every foreground event.
 
+```
+Authorization: Bearer <activation-jwt>
+```
+
 ```json
 {
-  "token": "<jwt from activation or last validation>",
   "deviceId": "<same hwid you used at activation>"
 }
 ```
@@ -120,9 +123,12 @@ If the cached token has only recently expired (within the same seven-day window 
 optional update check. Prefer it for scheduled background work because the
 server authorizes the license and activation only once.
 
+```
+Authorization: Bearer <activation-jwt>
+```
+
 ```json
 {
-  "token": "<cached jwt>",
   "deviceId": "<same hwid>",
   "version": "1.4.0",
   "build": "140",
@@ -200,9 +206,12 @@ Call this when the user deliberately signs out, transfers the license, or
 retires a machine. It frees the activation capacity for that device. Do not call
 it merely because a validation request failed.
 
+```http
+Authorization: Bearer <activation-jwt>
+```
+
 ```json
 {
-  "licenseKey": "LIC-XXXX-XXXX-XXXX-XXXX",
   "deviceId": "<same hwid used at activation>"
 }
 ```
@@ -273,11 +282,11 @@ resume with `Range`, verify the published SHA-256, then rename the completed
 file atomically. S3-backed artifacts redirect to short-lived presigned URLs and
 should use the same resume and checksum workflow.
 
-```json
-{
-  "token": "<jwt from activation or validation>"
-}
 ```
+Authorization: Bearer <activation-jwt>
+```
+
+This endpoint has no request body.
 
 **You'll get back:**
 
@@ -306,10 +315,13 @@ Use `name` as the `channel` value in update checks. If you're not giving users a
 
 Use your license JWT to check if a newer version is available. The server resolves which update backend to use based on the product's configuration.
 
+```
+Authorization: Bearer <activation-jwt>
+```
+
 ```json
 {
   "version": "1.0.0",
-  "token": "<jwt from activation or validation>",
   "platform": "macos",
   "channel": "stable",
   "build": "42",
@@ -319,7 +331,7 @@ Use your license JWT to check if a newer version is available. The server resolv
 }
 ```
 
-Only `version` and `token` are required. Defaults when omitted:
+The `Authorization` header and `version` are required. Defaults when omitted:
 
 - `platform`: `"macos"`
 - `channel`: `"stable"`
