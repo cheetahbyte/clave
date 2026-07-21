@@ -5,6 +5,8 @@
 .envrc
 .env
 .DS_Store
+*.pem
+*.key
 backend/clave
 backend/createadmin
 backend/deltaworker
