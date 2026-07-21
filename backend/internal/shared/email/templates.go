@@ -2,7 +2,6 @@ package email
 
 import (
 	"bytes"
-	"fmt"
 	"html/template"
 )
 
@@ -116,17 +115,6 @@ func InviteEmail(orgName, link string) (Message, error) {
 		FooterNote:  "If you weren't expecting this invitation, you can ignore this email.",
 	})
 	return Message{subject: "You've been invited to Clave", html: html}, err
-}
-
-func TwoFactorCodeEmail(code string, ttlMinutes int) (Message, error) {
-	html, err := render(templateData{
-		Preheader:  "Your Clave verification code.",
-		Heading:    "Your verification code",
-		Paragraphs: []string{fmt.Sprintf("Enter this code to finish signing in. It expires in %d minutes and can only be used once.", ttlMinutes)},
-		CodeBlock:  code,
-		FooterNote: "If you didn't try to sign in, change your password — someone else may know it.",
-	})
-	return Message{subject: "Your Clave verification code", html: html}, err
 }
 
 func LicenseCreatedEmail(productName, licenseKey, portalLink string, isTrial bool) (Message, error) {

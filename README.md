@@ -34,9 +34,9 @@ docker compose -f compose.dev.yaml up -d
 ```
 
 The API is at `http://localhost:8000`, PostgreSQL at `localhost:54321`, and
-Mailpit at `http://localhost:8025`. Start the UI with `cd website && pnpm install
-&& pnpm dev`; Vite proxies `/api` to the backend. `just dev` runs the backend,
-website, and emailer on the host after `just dev-infra` starts their dependencies.
+Mailpit at `http://localhost:8025`. The Compose stack includes the emailer worker,
+so forced-development admin 2FA codes arrive in Mailpit. Start the UI with `cd
+website && pnpm install && pnpm dev`; Vite proxies `/api` to the backend.
 
 ## Production server setup
 
@@ -91,8 +91,9 @@ openssl rand -hex 32 # CSRF_AUTH_KEY (must be exactly 32 bytes / 64 hex chars)
 openssl rand -hex 32 # ADMIN_MFA_CODE_PEPPER (same format)
 ```
 
-Set `PUBLIC_APP_URL` to the public HTTPS origin, configure `SMTP_URL` and
-`EMAIL_FROM`, and leave `DEV` unset. The two Compose passwords should be
+Set `PUBLIC_APP_URL` to the public HTTPS origin, configure the emailer's
+`SMTP_URL` and `EMAIL_FROM`, and leave `DEV` unset. RabbitMQ is required because
+admin 2FA and other transactional email are delivered by the emailer worker. The two Compose passwords should be
 URL-safe; the hexadecimal values above are. Never commit `.env.production` or
 the PEM.
 
@@ -185,8 +186,9 @@ curl --fail https://clave.example.com/api/v1/health
 ```
 
 Inspect failures with `docker compose --env-file .env.production -f
-compose.production.yaml logs <service>`. Admin 2FA codes are emailed, so a
-working SMTP configuration is required for anyone to sign in.
+compose.production.yaml logs <service>`. Admin 2FA codes are published through
+RabbitMQ and sent by the emailer, so both services and its SMTP configuration
+must be working for anyone to sign in.
 
 ## Environment variables
 
@@ -212,7 +214,7 @@ Unless noted otherwise, variables are read at process startup.
 | `PUBLIC_APP_URL` | Empty | Public website origin used to construct email, portal, invite, and update links. Set the HTTPS production origin without a trailing path. |
 | `TRUST_PROXY_HEADERS` | False | Trust proxy IP/scheme headers and enable proxy-aware HTTPS enforcement. Use only behind a trusted overwriting proxy. |
 | `SELF_SERVICE_RETURN_TOKEN` | False | Only the exact value `true` returns magic-link tokens in API responses. Development convenience; do not enable in production. |
-| `RABBITMQ_URL` | Empty | AMQP URL. When set, the backend publishes transactional-email events to `clave.events`; set the same broker on the emailer. |
+| `RABBITMQ_URL` | Required when admin 2FA is enabled | AMQP URL. The backend publishes admin 2FA and transactional-email events to `clave.events`; set the same broker on the emailer. |
 | `WORKER_TOKEN` | **Required for delta worker** | Shared bearer token protecting `/api/v1/worker/*`; configure the same high-entropy value on the backend and delta worker. |
 | `UPDATE_ARTIFACT_STORAGE_PATH` | `./data/update-artifacts` | Persistent local storage for uploaded release artifacts. |
 | `UPDATE_CHECK_RETENTION_DAYS` | `90` | Deletes update-check telemetry older than this many days every 24 hours. Set `0` to disable cleanup. |

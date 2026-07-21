@@ -1,6 +1,6 @@
 // One-shot test publisher. Sends a single email event then exits.
 // Usage: bun run src/publish-test.ts [event-type] [recipient@example.com]
-// Event types: license.created, license.replaced, selfservice.magic_link, organization.invite
+// Event types: admin.2fa_code, license.created, license.replaced, selfservice.magic_link, organization.invite
 import { publishEmailEvent, closeQueue } from "./queue.ts"
 import type { EmailEvent } from "./templates.ts"
 
@@ -9,6 +9,12 @@ const to = process.argv[3] ?? "test@example.com"
 
 const event: EmailEvent = (() => {
   switch (eventType) {
+    case "admin.2fa_code":
+      return {
+        type: "admin.2fa_code",
+        email: to,
+        data: { code: "123456", ttlMinutes: 10 },
+      }
     case "license.created":
       return {
         type: "license.created",

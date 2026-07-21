@@ -5,7 +5,8 @@
     "dev": "bun --watch src/main.ts",
     "start": "bun run src/main.ts",
     "publish:test": "bun run src/publish-test.ts",
-    "email:dev": "email dev --dir src/emails"
+    "email:dev": "email dev --dir src/emails",
+    "test": "bun test"
   },
   "devDependencies": {
     "@react-email/ui": "6.6.0",

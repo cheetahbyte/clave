@@ -122,6 +122,9 @@ func Load() (*Config, error) {
 	}
 
 	cfg.DevSkip2FA = cfg.Dev && !truthy(os.Getenv("DEV_FORCE_2FA"))
+	if !cfg.DevSkip2FA && cfg.RabbitMQURL == "" {
+		return nil, errors.New("RABBITMQ_URL is required when admin 2FA is enabled")
+	}
 
 	if cfg.LicenseHMACSecret == "" {
 		return nil, fmt.Errorf("LICENSE_HMAC_SECRET is required")

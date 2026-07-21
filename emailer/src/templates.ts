@@ -1,4 +1,5 @@
 import { render, toPlainText } from "react-email"
+import AdminTwoFactorCode from "./emails/admin-two-factor-code.js"
 import LicenseCreated from "./emails/license-created.js"
 import LicenseReplaced from "./emails/license-replaced.js"
 import MagicLink from "./emails/magic-link.js"
@@ -40,10 +41,33 @@ export type EmailEvent =
       }
     }
 
+  | {
+      type: "admin.2fa_code"
+      email: string
+      data: {
+        code: string
+        ttlMinutes: number
+      }
+    }
+
 export type Rendered = { subject: string; html: string; text: string }
 
 export async function renderEmail(event: EmailEvent): Promise<Rendered> {
   switch (event.type) {
+    case "admin.2fa_code": {
+      const d = event.data
+      if (!/^\d{6}$/.test(d.code)) {
+        throw new Error("admin.2fa_code requires a six-digit code")
+      }
+      if (!Number.isInteger(d.ttlMinutes) || d.ttlMinutes <= 0) {
+        throw new Error("admin.2fa_code requires a positive integer ttlMinutes")
+      }
+
+      const html = await render(AdminTwoFactorCode(d))
+      const text = toPlainText(html)
+      return { subject: "Your Clave verification code", html, text }
+    }
+
     case "license.created": {
       const d = event.data
       if (!d.licenseKey) throw new Error("license.created requires licenseKey")

@@ -2,7 +2,8 @@
 #
 #   docker compose -f compose.dev.yaml up -d
 #
-# Brings up Postgres, Mailpit (catch-all SMTP) and the Clave backend.
+# Brings up Postgres, RabbitMQ, Mailpit (catch-all SMTP), the Clave backend,
+# and the emailer worker.
 # The backend reads secrets from your .env file (see README). The few
 # vars below override host/port so the containers can find each other.
 
@@ -96,6 +97,19 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+
+  emailer:
+    build:
+      context: ./emailer
+    environment:
+      RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
+      SMTP_URL: "smtp://mailpit:1025"
+      EMAIL_FROM: "Clave <no-reply@clave.dev>"
+    depends_on:
       mailpit:
         condition: service_started
       rabbitmq:

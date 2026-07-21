@@ -258,8 +258,9 @@ docker compose --env-file .env.production -f compose.production.yaml exec \
   backend /createadmin admin@example.com 'replace-with-a-strong-password'
 ```
 
-Sign in at `https://clave.example.com/login`. A six-digit code is emailed to
-the admin address on every login, so SMTP must be configured first.
+Sign in at `https://clave.example.com/login`. A six-digit code is published to
+RabbitMQ and sent by the emailer on every login, so RabbitMQ, the emailer, and
+its SMTP configuration must be working first.
 
 The `createadmin` helper binary needs only `DATABASE_URL`, which Compose
 already provides inside the backend container.

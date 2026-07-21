@@ -127,6 +127,19 @@ func (p *Publisher) PublishLicenseCreated(ctx context.Context, email, licenseKey
 	})
 }
 
+// PublishAdminTwoFactorCode emits an "admin.2fa_code" event for the emailer
+// worker.
+func (p *Publisher) PublishAdminTwoFactorCode(ctx context.Context, email, code string, ttlMinutes int) error {
+	return p.PublishEmail(ctx, EmailEvent{
+		Type:  "admin.2fa_code",
+		Email: email,
+		Data: map[string]any{
+			"code":       code,
+			"ttlMinutes": ttlMinutes,
+		},
+	})
+}
+
 // PublishSelfServiceMagicLink emits a "selfservice.magic_link" event for the
 // emailer worker.
 func (p *Publisher) PublishSelfServiceMagicLink(ctx context.Context, email, link string) error {

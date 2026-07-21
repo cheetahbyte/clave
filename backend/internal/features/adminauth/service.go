@@ -14,7 +14,6 @@ import (
 
 	"github.com/alexedwards/argon2id"
 	"github.com/cheetahbyte/clave/internal/db"
-	"github.com/cheetahbyte/clave/internal/shared/email"
 	"github.com/google/uuid"
 )
 
@@ -40,19 +39,19 @@ var (
 	ErrNoOrganization     = errors.New("admin has no organization")
 )
 
-// Mailer is the subset of email.Sender the service needs.
-type Mailer interface {
-	Enqueue(to string, msg email.Message)
+// TwoFactorPublisher publishes admin verification code emails.
+type TwoFactorPublisher interface {
+	PublishAdminTwoFactorCode(context.Context, string, string, int) error
 }
 
 type Service struct {
-	repo   *Repository
-	mailer Mailer
-	pepper []byte
+	repo      *Repository
+	publisher TwoFactorPublisher
+	pepper    []byte
 }
 
-func NewService(repo *Repository, mailer Mailer, pepper []byte) *Service {
-	return &Service{repo: repo, mailer: mailer, pepper: pepper}
+func NewService(repo *Repository, publisher TwoFactorPublisher, pepper []byte) *Service {
+	return &Service{repo: repo, publisher: publisher, pepper: pepper}
 }
 
 func (s *Service) Login(ctx context.Context, email, password string) (*LoginResponse, error) {
@@ -166,11 +165,9 @@ func (s *Service) SendCode(ctx context.Context, adminID uuid.UUID) error {
 		return fmt.Errorf("store code: %w", err)
 	}
 
-	msg, err := email.TwoFactorCodeEmail(code, int(CodeTTL.Minutes()))
-	if err != nil {
-		return fmt.Errorf("render 2fa email: %w", err)
+	if err := s.publisher.PublishAdminTwoFactorCode(ctx, admin.Email, code, int(CodeTTL.Minutes())); err != nil {
+		return fmt.Errorf("publish admin 2fa email: %w", err)
 	}
-	s.mailer.Enqueue(admin.Email, msg)
 
 	return nil
 }

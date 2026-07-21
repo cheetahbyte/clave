@@ -74,6 +74,23 @@ the `type` field. The worker consumes them from the `clave.email-worker` queue.
 
 **Generated subject:** `Your Clave license key` (or `Your Clave trial key` when `isTrial` is true).
 
+### `admin.2fa_code`
+
+| Field | Required | Type | Description |
+| --- | --- | --- | --- |
+| `code` | yes | string | Six ASCII digits used to verify an admin sign-in. |
+| `ttlMinutes` | yes | integer | Positive expiration time in minutes. |
+
+```json
+{
+  "type": "admin.2fa_code",
+  "email": "admin@example.com",
+  "data": { "code": "123456", "ttlMinutes": 10 }
+}
+```
+
+**Generated subject:** `Your Clave verification code`.
+
 ## Adding a new email type
 
 1. Create `src/emails/<name>.tsx` — export a default React component using

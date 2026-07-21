@@ -25,7 +25,6 @@ import (
 	"github.com/cheetahbyte/clave/internal/features/update/providers/native"
 	"github.com/cheetahbyte/clave/internal/features/validation"
 	"github.com/cheetahbyte/clave/internal/observability"
-	"github.com/cheetahbyte/clave/internal/shared/email"
 	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
@@ -130,15 +129,13 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	selfServiceRepo := selfservice.NewRepository(q, pool)
 	selfserviceSvc := selfservice.NewService(selfServiceRepo, []byte(cfg.SelfServiceTokenPepper), signer, licenseSvc, updateSvc)
 
-	mailer := email.NewSender(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.MailFrom)
-
-	adminAuthRepo := adminauth.NewRepository(q)
-	adminAuthSvc := adminauth.NewService(adminAuthRepo, mailer, cfg.AdminMFACodePepper)
-
 	if cfg.RabbitMQURL != "" {
 		publisher = events.NewPublisher(cfg.RabbitMQURL)
 		updateSvc.SetDeltaPublisher(publisher)
 	}
+
+	adminAuthRepo := adminauth.NewRepository(q)
+	adminAuthSvc := adminauth.NewService(adminAuthRepo, publisher, cfg.AdminMFACodePepper)
 
 	appURL := cfg.PublicAppURL
 	auditRepo := audit.NewRepository(q)
