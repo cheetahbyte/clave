@@ -69,3 +69,9 @@ type VersionAdoptionResponse struct {
 	Trend         []VersionTrendPoint   `json:"trend"`
 	Devices       []VersionDevice       `json:"devices"`
 }
+
+type SigningKeyResponse struct {
+	Algorithm   string `json:"algorithm"`
+	PublicKey   string `json:"publicKey"`
+	Fingerprint string `json:"fingerprint"`
+}

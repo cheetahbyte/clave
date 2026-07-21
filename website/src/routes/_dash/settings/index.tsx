@@ -4,6 +4,7 @@ import { useState } from "react";
 import {
   getCurrentAdmin,
   getMCPToken,
+  getSigningKey,
   listOrganizations,
   regenerateMCPToken,
 } from "@/features/admin/api";
@@ -13,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Copy, ExternalLink, KeyRound, RefreshCw, ShieldAlert, Users } from "lucide-react";
+import { Copy, ExternalLink, KeyRound, RefreshCw, ShieldAlert, Signature, Users } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_dash/settings/")({
@@ -38,6 +39,11 @@ function SettingsPage() {
   const { data: mcpToken } = useQuery({
     queryKey: ["mcpToken"],
     queryFn: getMCPToken,
+  });
+
+  const { data: signingKey } = useQuery({
+    queryKey: ["signingKey"],
+    queryFn: getSigningKey,
   });
 
   const regenerateMut = useMutation({
@@ -234,6 +240,74 @@ function SettingsPage() {
                 </span>
               ) : null}
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="max-w-xl lg:col-span-2 lg:max-w-none">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Signature className="size-5" />
+              Client signing key
+            </CardTitle>
+            <CardDescription>
+              Public half of the {signingKey?.algorithm ?? "Ed25519"} keypair this server signs
+              license tokens and delta update contracts with.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm">
+            <Alert>
+              <ShieldAlert className="size-4" />
+              <AlertTitle>Embed this key at build time</AlertTitle>
+              <AlertDescription>
+                Ship it inside the signed application bundle. Clients must never fetch a
+                verification key over the network — an attacker who can impersonate this server
+                would otherwise supply both a forged update and the key that validates it.
+              </AlertDescription>
+            </Alert>
+
+            {signingKey ? (
+              <>
+                <div className="space-y-2">
+                  <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                    Public key (raw 32 bytes, Base64)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="bg-muted flex-1 truncate rounded-md px-3 py-2 font-mono text-xs">
+                      {signingKey.publicKey}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(signingKey.publicKey);
+                        toast.success("Copied");
+                      }}
+                    >
+                      <Copy className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                    SHA-256 fingerprint
+                  </p>
+                  <p className="font-mono text-base font-medium">
+                    {signingKey.fingerprint.split(":").slice(0, 4).join(":")}
+                  </p>
+                  <p className="text-muted-foreground font-mono text-xs break-all">
+                    {signingKey.fingerprint}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    Compare the short form against the fingerprint a client logs for its embedded
+                    key to confirm the two still match.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <p className="text-muted-foreground">Loading signing key…</p>
+            )}
           </CardContent>
         </Card>
       </div>

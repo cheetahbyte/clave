@@ -147,7 +147,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	validationH := validation.NewHandler(validationSvc)
 	clientSyncH := clientsync.NewHandler(clientSyncSvc)
 	updateH := update.NewHandler(updateSvc, auditSvc)
-	diagnosticsH := diagnostics.NewHandler(diagnosticsSvc)
+	diagnosticsH := diagnostics.NewHandler(diagnosticsSvc, cfg.LicenseJWTPublicKey)
 	selfserviceH := selfservice.NewHandler(selfserviceSvc, publisher, appURL, cfg.SelfServiceReturnToken, cfg.Dev)
 
 	sessionManager := scs.New()

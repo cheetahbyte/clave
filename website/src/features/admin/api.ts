@@ -464,6 +464,16 @@ export function getVersionAdoption(
   );
 }
 
+export interface SigningKeyResponse {
+  algorithm: string;
+  publicKey: string;
+  fingerprint: string;
+}
+
+export function getSigningKey(): Promise<SigningKeyResponse> {
+  return adminFetch<SigningKeyResponse>("/api/v1/admin/signing-key");
+}
+
 export interface ListTrialsParams {
   q?: string;
   status?: string;

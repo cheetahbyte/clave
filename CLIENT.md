@@ -13,10 +13,12 @@ A trial is really just activation without a key. Instead of sending a license ke
 All requests and responses are plain JSON over **HTTPS**. There's no application-layer payload encryption — transport security comes from TLS, so always use `https://` and never talk to the server over plaintext HTTP. For defense against a rogue CA or an untrusted TLS terminator, pin the server's TLS certificate (see [Security Notes](#security-notes)).
 
 Before shipping, provision the server's Ed25519 **public** key with the client
-(for example, embed it in the signed application bundle). Clave does not expose
-a JWKS or public-key endpoint. Treat a replacement key as an application update,
-retain the previous key during a planned rotation, and never fetch a verification
-key from an unauthenticated network response.
+(for example, embed it in the signed application bundle). Clave exposes no JWKS
+or public-key endpoint your client can reach; the key and its SHA-256
+fingerprint are shown to operators in the admin dashboard under Settings, to be
+copied into the client at build time. Treat a replacement key as an application
+update, retain the previous key during a planned rotation, and never fetch a
+verification key from an unauthenticated network response.
 
 ---
 

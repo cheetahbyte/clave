@@ -1,7 +1,15 @@
 package diagnostics
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -41,5 +49,40 @@ func TestParseVersionAdoptionParamsRejectsInvalidValues(t *testing.T) {
 		if _, _, err := parseVersionAdoptionParams(req); err == nil {
 			t.Fatalf("%s: expected error", target)
 		}
+	}
+}
+
+func TestAdminSigningKeyReturnsEncodedKeyAndFingerprint(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	NewHandler(nil, pub).AdminSigningKey(rec, httptest.NewRequest("GET", "/signing-key", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var body SigningKeyResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.PublicKey != base64.StdEncoding.EncodeToString(pub) {
+		t.Fatalf("publicKey = %q", body.PublicKey)
+	}
+	sum := sha256.Sum256(pub)
+	if strings.ReplaceAll(body.Fingerprint, ":", "") != hex.EncodeToString(sum[:]) {
+		t.Fatalf("fingerprint = %q", body.Fingerprint)
+	}
+	if body.Algorithm != "Ed25519" {
+		t.Fatalf("algorithm = %q", body.Algorithm)
+	}
+}
+
+func TestAdminSigningKeyRejectsMissingKey(t *testing.T) {
+	rec := httptest.NewRecorder()
+	NewHandler(nil, nil).AdminSigningKey(rec, httptest.NewRequest("GET", "/signing-key", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d", rec.Code)
 	}
 }
