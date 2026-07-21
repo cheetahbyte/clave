@@ -20,6 +20,9 @@ type Config struct {
 	RunMigrations    bool
 	VerboseLogging   bool
 	Dev              bool
+	// DevSkip2FA short-circuits the emailed admin 2FA code. True in dev unless
+	// DEV_FORCE_2FA asks for the real flow (e.g. testing against Mailpit).
+	DevSkip2FA bool
 
 	LicenseJWTPublicKey  ed25519.PublicKey
 	LicenseJWTPrivateKey ed25519.PrivateKey
@@ -117,6 +120,8 @@ func Load() (*Config, error) {
 		UpdateArtifactStoragePath: getEnv("UPDATE_ARTIFACT_STORAGE_PATH", "./data/update-artifacts"),
 		UpdateCheckRetentionDays:  retentionDays,
 	}
+
+	cfg.DevSkip2FA = cfg.Dev && !truthy(os.Getenv("DEV_FORCE_2FA"))
 
 	if cfg.LicenseHMACSecret == "" {
 		return nil, fmt.Errorf("LICENSE_HMAC_SECRET is required")

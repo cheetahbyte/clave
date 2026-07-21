@@ -164,7 +164,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	sessionManager.Cookie.Path = "/"
 	sessionManager.Cookie.Persist = true
 
-	adminAuthH := adminauth.NewHandler(adminAuthSvc, sessionManager, auditSvc, cfg.Dev)
+	adminAuthH := adminauth.NewHandler(adminAuthSvc, sessionManager, auditSvc, cfg.DevSkip2FA)
 
 	orgRepo := organization.NewRepository(q)
 	orgSvc := organization.NewService(orgRepo, []byte(cfg.SelfServiceTokenPepper))

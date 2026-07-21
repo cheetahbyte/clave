@@ -83,6 +83,8 @@ services:
       RABBITMQ_URL: "amqp://guest:guest@rabbitmq:5672/"
       RUN_MIGRATIONS: "true"
       DEV: "true"
+      # Set to "true" to exercise the real emailed 2FA code (read it in Mailpit).
+      DEV_FORCE_2FA: "false"
       PORT: "8000"
       PUBLIC_APP_URL: "http://backend:8000"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"

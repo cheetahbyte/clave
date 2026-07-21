@@ -206,6 +206,7 @@ Unless noted otherwise, variables are read at process startup.
 | `ADMIN_MFA_CODE_PEPPER` | **Required in production** | Exactly 32 random bytes encoded as 64 hex characters; peppers hashed admin 2FA email codes. Dev mode otherwise generates an ephemeral key. The legacy name `ADMIN_TOTP_ENCRYPTION_KEY` is still accepted. |
 | `PORT` | `8000` | HTTP listen port. |
 | `DEV` | False | Truthy enables insecure development cookies, permits ephemeral CSRF/MFA keys, and skips the emailed 2FA code at login. Never enable in production. |
+| `DEV_FORCE_2FA` | False | Only read when `DEV` is truthy. Truthy restores the real emailed 2FA code at login while keeping dev cookies and CSRF handling, so the flow can be tested locally against Mailpit. |
 | `RUN_MIGRATIONS` | False | Truthy applies pending Goose migrations before listening. |
 | `MIGRATIONS_DIR` | `./migrations` | Migration directory; the backend image uses `/migrations`. |
 | `PUBLIC_APP_URL` | Empty | Public website origin used to construct email, portal, invite, and update links. Set the HTTPS production origin without a trailing path. |

@@ -21,7 +21,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/2fa/")({
   beforeLoad: async () => {
@@ -36,6 +36,7 @@ export const Route = createFileRoute("/2fa/")({
 
 function TwoFactorPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -59,6 +60,7 @@ function TwoFactorPage() {
     setLoading(true);
     try {
       await verify2FA(code);
+      await queryClient.invalidateQueries({ queryKey: ["currentAdmin"] });
       navigate({ to: "/dashboard" });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Verification failed.";

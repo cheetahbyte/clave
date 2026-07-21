@@ -6,21 +6,17 @@ import { getCurrentAdmin } from "@/features/admin/api";
 
 export const Route = createFileRoute("/_dash")({
   beforeLoad: async ({ context }) => {
+    let admin;
     try {
-      const admin = await context.queryClient.ensureQueryData({
+      admin = await context.queryClient.ensureQueryData({
         queryKey: ["currentAdmin"],
         queryFn: getCurrentAdmin,
       });
-      if (!admin.mfaVerified) {
-        throw redirect({ to: "/2fa" });
-      }
-    } catch (err) {
-      if (
-        err instanceof Error &&
-        "redirect" in (err as unknown as Record<string, unknown>)
-      )
-        throw err;
+    } catch {
       throw redirect({ to: "/login" });
+    }
+    if (!admin.mfaVerified) {
+      throw redirect({ to: "/2fa" });
     }
   },
   component: DashLayout,

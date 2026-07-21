@@ -15,6 +15,7 @@ import { Route as DashRouteImport } from './routes/_dash'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as R2faIndexRouteImport } from './routes/2fa/index'
 import { Route as InviteTokenRouteImport } from './routes/invite/$token'
+import { Route as DashSigningKeyRouteImport } from './routes/_dash/signing-key'
 import { Route as DashDashboardRouteImport } from './routes/_dash/dashboard'
 import { Route as DashAccountRouteImport } from './routes/_dash/account'
 import { Route as SelfserviceOrgSlugIndexRouteImport } from './routes/selfservice/$orgSlug/index'
@@ -63,6 +64,11 @@ const InviteTokenRoute = InviteTokenRouteImport.update({
   id: '/invite/$token',
   path: '/invite/$token',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DashSigningKeyRoute = DashSigningKeyRouteImport.update({
+  id: '/signing-key',
+  path: '/signing-key',
+  getParentRoute: () => DashRoute,
 } as any)
 const DashDashboardRoute = DashDashboardRouteImport.update({
   id: '/dashboard',
@@ -166,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/selfservice': typeof SelfserviceRouteWithChildren
   '/account': typeof DashAccountRoute
   '/dashboard': typeof DashDashboardRoute
+  '/signing-key': typeof DashSigningKeyRoute
   '/invite/$token': typeof InviteTokenRoute
   '/2fa/': typeof R2faIndexRoute
   '/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
@@ -192,6 +199,7 @@ export interface FileRoutesByTo {
   '/selfservice': typeof SelfserviceRouteWithChildren
   '/account': typeof DashAccountRoute
   '/dashboard': typeof DashDashboardRoute
+  '/signing-key': typeof DashSigningKeyRoute
   '/invite/$token': typeof InviteTokenRoute
   '/2fa': typeof R2faIndexRoute
   '/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
@@ -220,6 +228,7 @@ export interface FileRoutesById {
   '/selfservice': typeof SelfserviceRouteWithChildren
   '/_dash/account': typeof DashAccountRoute
   '/_dash/dashboard': typeof DashDashboardRoute
+  '/_dash/signing-key': typeof DashSigningKeyRoute
   '/invite/$token': typeof InviteTokenRoute
   '/2fa/': typeof R2faIndexRoute
   '/_dash/licenses/$licenseId': typeof DashLicensesLicenseIdRoute
@@ -248,6 +257,7 @@ export interface FileRouteTypes {
     | '/selfservice'
     | '/account'
     | '/dashboard'
+    | '/signing-key'
     | '/invite/$token'
     | '/2fa/'
     | '/licenses/$licenseId'
@@ -274,6 +284,7 @@ export interface FileRouteTypes {
     | '/selfservice'
     | '/account'
     | '/dashboard'
+    | '/signing-key'
     | '/invite/$token'
     | '/2fa'
     | '/licenses/$licenseId'
@@ -301,6 +312,7 @@ export interface FileRouteTypes {
     | '/selfservice'
     | '/_dash/account'
     | '/_dash/dashboard'
+    | '/_dash/signing-key'
     | '/invite/$token'
     | '/2fa/'
     | '/_dash/licenses/$licenseId'
@@ -374,6 +386,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/invite/$token'
       preLoaderRoute: typeof InviteTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_dash/signing-key': {
+      id: '/_dash/signing-key'
+      path: '/signing-key'
+      fullPath: '/signing-key'
+      preLoaderRoute: typeof DashSigningKeyRouteImport
+      parentRoute: typeof DashRoute
     }
     '/_dash/dashboard': {
       id: '/_dash/dashboard'
@@ -514,6 +533,7 @@ declare module '@tanstack/react-router' {
 interface DashRouteChildren {
   DashAccountRoute: typeof DashAccountRoute
   DashDashboardRoute: typeof DashDashboardRoute
+  DashSigningKeyRoute: typeof DashSigningKeyRoute
   DashLicensesLicenseIdRoute: typeof DashLicensesLicenseIdRoute
   DashProductsProductIdRoute: typeof DashProductsProductIdRoute
   DashUpdatesAdoptionRoute: typeof DashUpdatesAdoptionRoute
@@ -534,6 +554,7 @@ interface DashRouteChildren {
 const DashRouteChildren: DashRouteChildren = {
   DashAccountRoute: DashAccountRoute,
   DashDashboardRoute: DashDashboardRoute,
+  DashSigningKeyRoute: DashSigningKeyRoute,
   DashLicensesLicenseIdRoute: DashLicensesLicenseIdRoute,
   DashProductsProductIdRoute: DashProductsProductIdRoute,
   DashUpdatesAdoptionRoute: DashUpdatesAdoptionRoute,
