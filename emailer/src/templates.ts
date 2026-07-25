@@ -80,8 +80,8 @@ export async function renderEmail(event: EmailEvent): Promise<Rendered> {
       })
 
       const subject = d.isTrial
-        ? "Your Clave trial key"
-        : "Your Clave license key"
+        ? `Your ${d.productName} trial key`
+        : `Your ${d.productName} license key`
 
       const html = await render(component)
       const text = toPlainText(html)
@@ -98,8 +98,8 @@ export async function renderEmail(event: EmailEvent): Promise<Rendered> {
         portalLink: d.portalLink,
       })
 
-      const product = d.productName ? ` for ${d.productName}` : ""
-      const subject = `Your Clave license key has been replaced${product}`
+      const product = d.productName ? `for ${d.productName}` : ""
+      const subject = `Your license key ${product} has been replaced`
 
       const html = await render(component)
       const text = toPlainText(html)
