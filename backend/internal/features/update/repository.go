@@ -3,21 +3,25 @@ package update
 import (
 	"context"
 	"encoding/json"
-	"time"
+	"errors"
 
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Repository struct {
-	q    *db.Queries
-	pool *pgxpool.Pool
+type transactionBeginner interface {
+	Begin(context.Context) (pgx.Tx, error)
 }
 
-func NewRepository(q *db.Queries, pool *pgxpool.Pool) *Repository {
-	return &Repository{q: q, pool: pool}
+type Repository struct {
+	q  *db.Queries
+	db transactionBeginner
+}
+
+func NewRepository(q *db.Queries, database transactionBeginner) *Repository {
+	return &Repository{q: q, db: database}
 }
 
 func (r *Repository) GetProductByIDAndOrganization(ctx context.Context, orgID, id uuid.UUID) (db.Product, error) {
@@ -202,8 +206,80 @@ func (r *Repository) FindPreviousPublishedRelease(ctx context.Context, release d
 	})
 }
 
+var (
+	ErrReleaseAlreadyHasArtifacts = errors.New("target release already has artifacts")
+	ErrArtifactsOnlyAddedToDraft  = errors.New("artifacts can only be added to a draft release")
+)
+
 func (r *Repository) InsertUpdateArtifact(ctx context.Context, params db.InsertUpdateArtifactParams) (db.UpdateArtifact, error) {
-	return r.q.InsertUpdateArtifact(ctx, params)
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return db.UpdateArtifact{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var status string
+	if err := tx.QueryRow(ctx, "SELECT status FROM update_releases WHERE id = $1 FOR UPDATE", params.ReleaseID).Scan(&status); err != nil {
+		return db.UpdateArtifact{}, err
+	}
+	if status != "draft" {
+		return db.UpdateArtifact{}, ErrArtifactsOnlyAddedToDraft
+	}
+	artifact, err := r.q.WithTx(tx).InsertUpdateArtifact(ctx, params)
+	if err != nil {
+		return db.UpdateArtifact{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return db.UpdateArtifact{}, err
+	}
+	return artifact, nil
+}
+
+// InsertUpdateArtifactsIfReleaseEmpty atomically verifies that releaseID has no
+// artifacts and inserts the supplied artifacts. Locking the parent release row
+// serializes competing reuse requests before the empty-release check.
+func (r *Repository) InsertUpdateArtifactsIfReleaseEmpty(ctx context.Context, releaseID uuid.UUID, artifacts []db.InsertUpdateArtifactParams) ([]db.UpdateArtifact, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	// Acquiring a FOR UPDATE lock on the parent release serializes this guard
+	// with other reuse attempts for the same release.
+	if err := tx.QueryRow(ctx, "SELECT id FROM update_releases WHERE id = $1 FOR UPDATE", releaseID).Scan(new(uuid.UUID)); err != nil {
+		return nil, err
+	}
+
+	qtx := r.q.WithTx(tx)
+	release, err := qtx.GetUpdateRelease(ctx, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	if release.Status != "draft" {
+		return nil, ErrArtifactsOnlyAddedToDraft
+	}
+
+	existing, err := qtx.ListArtifactsForRelease(ctx, releaseID)
+	if err != nil {
+		return nil, err
+	}
+	if len(existing) != 0 {
+		return nil, ErrReleaseAlreadyHasArtifacts
+	}
+
+	inserted := make([]db.UpdateArtifact, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		insertedArtifact, err := qtx.InsertUpdateArtifact(ctx, artifact)
+		if err != nil {
+			return nil, err
+		}
+		inserted = append(inserted, insertedArtifact)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return inserted, nil
 }
 
 func (r *Repository) GetArtifact(ctx context.Context, id uuid.UUID) (db.UpdateArtifact, error) {
@@ -247,7 +323,7 @@ func (r *Repository) ListCompletedDeltaArtifactsForRelease(ctx context.Context, 
 }
 
 func (r *Repository) CompleteDeltaJobWithArtifact(ctx context.Context, artifact db.InsertUpdateArtifactParams, complete db.CompleteDeltaJobParams) (db.UpdateDeltaJob, error) {
-	tx, err := r.pool.Begin(ctx)
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return db.UpdateDeltaJob{}, err
 	}
@@ -353,15 +429,4 @@ func MustParseProviderConfig(raw []byte) map[string]any {
 		return nil
 	}
 	return m
-}
-
-func timePtr(t pgtype.Timestamptz) *time.Time {
-	if t.Valid {
-		return &t.Time
-	}
-	return nil
-}
-
-func uuidToPG(id uuid.UUID) pgtype.UUID {
-	return pgtype.UUID{Bytes: [16]byte(id), Valid: true}
 }

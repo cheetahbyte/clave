@@ -87,6 +87,13 @@ type CreateReleaseRequest struct {
 	ChangelogID  string `json:"changelogId,omitempty"`
 }
 
+// ReuseArtifactsRequest links the target draft to the payloads of another
+// release. It creates new artifact records, but they share the existing stored
+// object rather than uploading or copying the binary again.
+type ReuseArtifactsRequest struct {
+	SourceReleaseID string `json:"sourceReleaseId" validate:"required"`
+}
+
 type ChangelogDTO struct {
 	ID        string  `json:"id"`
 	ProductID string  `json:"productId"`

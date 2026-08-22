@@ -516,6 +516,46 @@ func (h *Handler) AdminUploadArtifact(w http.ResponseWriter, r *http.Request) {
 	helpers.WriteJSON(w, http.StatusCreated, artifact)
 }
 
+func (h *Handler) AdminReuseArtifacts(w http.ResponseWriter, r *http.Request) {
+	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
+	if !ok {
+		helpers.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	targetReleaseID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid release id"})
+		return
+	}
+	if err := h.verifyReleaseOwnership(r.Context(), orgID, targetReleaseID); err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "release not found"})
+		return
+	}
+
+	var req ReuseArtifactsRequest
+	if !helpers.DecodeValidated(w, r, &req) {
+		return
+	}
+	sourceReleaseID, err := uuid.Parse(req.SourceReleaseID)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid source release id"})
+		return
+	}
+	if err := h.verifyReleaseOwnership(r.Context(), orgID, sourceReleaseID); err != nil {
+		helpers.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "source release not found"})
+		return
+	}
+
+	artifacts, err := h.svc.ReuseArtifacts(r.Context(), targetReleaseID, sourceReleaseID)
+	if err != nil {
+		helpers.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	h.audit(r, "release.artifacts_reused", "release", &targetReleaseID)
+	helpers.WriteJSON(w, http.StatusCreated, artifacts)
+}
+
 func (h *Handler) AdminPublishRelease(w http.ResponseWriter, r *http.Request) {
 	orgID, ok := middleware.AdminOrganizationIDFromContext(r.Context())
 	if !ok {
