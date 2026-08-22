@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -98,9 +99,13 @@ func getEnvIntRange(key string, fallback, min, max int) (int, error) {
 
 func Load() (*Config, error) {
 	databaseMaxConns, err := getEnvInt("DATABASE_MAX_CONNS", 20)
-	if err != nil || databaseMaxConns == 0 {
+	if err != nil || databaseMaxConns == 0 || databaseMaxConns > math.MaxInt32 {
 		if err == nil {
-			err = fmt.Errorf("DATABASE_MAX_CONNS must be greater than zero")
+			if databaseMaxConns == 0 {
+				err = fmt.Errorf("DATABASE_MAX_CONNS must be greater than zero")
+			} else {
+				err = fmt.Errorf("DATABASE_MAX_CONNS must be less than or equal to %d", math.MaxInt32)
+			}
 		}
 		return nil, err
 	}
