@@ -43,7 +43,7 @@ func TestDeltaJobGenerationAndStateTransitionsIntegration(t *testing.T) {
 	storageRoot := t.TempDir()
 
 	noPredecessor := seedSingleRelease(t, tx)
-	svc := newDeltaIntegrationService(q, storageRoot)
+	svc := newDeltaIntegrationService(q, tx, storageRoot)
 	jobs, err := svc.GenerateDeltaJobs(t.Context(), noPredecessor)
 	if err != nil {
 		t.Fatalf("generate without predecessor: %v", err)
@@ -135,7 +135,7 @@ func TestDeltaJobGenerationAndStateTransitionsIntegration(t *testing.T) {
 func TestDeltaWorkerAndAdminRoutesIntegration(t *testing.T) {
 	tx, q := openDeltaIntegrationTx(t)
 	storageRoot := t.TempDir()
-	svc := newDeltaIntegrationService(q, storageRoot)
+	svc := newDeltaIntegrationService(q, tx, storageRoot)
 	fixture := seedDeltaFixture(t, tx, svc, storageRoot)
 	handler := NewHandler(svc, nil)
 
@@ -233,8 +233,8 @@ func openDeltaIntegrationTx(t *testing.T) (pgx.Tx, *db.Queries) {
 	return tx, db.New(tx)
 }
 
-func newDeltaIntegrationService(q *db.Queries, storageRoot string) *Service {
-	return NewService(nil, nil, NewRepository(q, nil), nil, "http://clave.test", storageRoot)
+func newDeltaIntegrationService(q *db.Queries, tx pgx.Tx, storageRoot string) *Service {
+	return NewService(nil, nil, NewRepository(q, tx), nil, "http://clave.test", storageRoot)
 }
 
 func seedSingleRelease(t *testing.T, tx pgx.Tx) uuid.UUID {

@@ -761,6 +761,19 @@ export function uploadArtifact(
   );
 }
 
+export function reuseArtifacts(
+  releaseId: string,
+  sourceReleaseId: string,
+): Promise<ArtifactFullDTO[]> {
+  return adminFetch<ArtifactFullDTO[]>(
+    `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}/artifacts/reuse`,
+    {
+      method: "POST",
+      body: JSON.stringify({ sourceReleaseId }),
+    },
+  );
+}
+
 export function publishRelease(releaseId: string): Promise<ReleaseDTO> {
   return adminFetch<ReleaseDTO>(
     `/api/v1/admin/update-releases/${encodeURIComponent(releaseId)}/publish`,

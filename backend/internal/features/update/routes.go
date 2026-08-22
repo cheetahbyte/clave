@@ -22,6 +22,7 @@ func (h *Handler) RegisterAdminRoutes(r chi.Router) {
 	r.Get("/update-releases", h.AdminListReleases)
 	r.Post("/update-releases", h.AdminCreateRelease)
 	r.Post("/update-releases/{id}/artifacts", h.AdminUploadArtifact)
+	r.Post("/update-releases/{id}/artifacts/reuse", h.AdminReuseArtifacts)
 	r.Post("/update-releases/{id}/publish", h.AdminPublishRelease)
 	r.Get("/update-releases/{id}/delta-jobs", h.AdminListDeltaJobs)
 	r.Post("/update-releases/{id}/delta-jobs/retry", h.AdminRetryDeltaJobs)

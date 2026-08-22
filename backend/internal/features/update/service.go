@@ -904,6 +904,84 @@ func (svc *Service) UploadArtifact(ctx context.Context, releaseID uuid.UUID, rea
 	}, nil
 }
 
+// ReuseArtifacts creates artifact records for targetReleaseID that reference the
+// source release's existing storage objects. The binary is never read, copied,
+// or uploaded again, so a build can be promoted to another channel cheaply.
+func (svc *Service) ReuseArtifacts(ctx context.Context, targetReleaseID, sourceReleaseID uuid.UUID) ([]ArtifactDTOFull, error) {
+	if targetReleaseID == sourceReleaseID {
+		return nil, fmt.Errorf("choose a different source release")
+	}
+
+	target, err := svc.repo.GetUpdateRelease(ctx, targetReleaseID)
+	if err != nil {
+		return nil, fmt.Errorf("target release not found: %w", err)
+	}
+	if target.Status != "draft" {
+		return nil, fmt.Errorf("artifacts can only be added to a draft release")
+	}
+	source, err := svc.repo.GetUpdateRelease(ctx, sourceReleaseID)
+	if err != nil {
+		return nil, fmt.Errorf("source release not found: %w", err)
+	}
+	if target.ProductID != source.ProductID || target.Platform != source.Platform {
+		return nil, fmt.Errorf("source release must be for the same product and platform")
+	}
+	sourceArtifacts, err := svc.repo.ListArtifactsForRelease(ctx, sourceReleaseID)
+	if err != nil {
+		return nil, fmt.Errorf("list source artifacts: %w", err)
+	}
+	artifactsToInsert := make([]db.InsertUpdateArtifactParams, 0, len(sourceArtifacts))
+	for _, sourceArtifact := range sourceArtifacts {
+		// Delta contracts are tied to source/target versions. Publishing the new
+		// release generates fresh deltas for its channel instead.
+		if sourceArtifact.ArtifactType == "delta" {
+			continue
+		}
+		artifactID := uuid.New()
+		storageKey := svc.artifactStorageKey(sourceArtifact)
+		artifactsToInsert = append(artifactsToInsert, db.InsertUpdateArtifactParams{
+			ID:                   artifactID,
+			ReleaseID:            targetReleaseID,
+			ArtifactType:         sourceArtifact.ArtifactType,
+			Os:                   sourceArtifact.Os,
+			Arch:                 sourceArtifact.Arch,
+			Url:                  svc.artifactDownloadURL(artifactID),
+			SizeBytes:            sourceArtifact.SizeBytes,
+			ChecksumSha256:       sourceArtifact.ChecksumSha256,
+			Signature:            sourceArtifact.Signature,
+			Metadata:             sourceArtifact.Metadata,
+			Filename:             sourceArtifact.Filename,
+			MimeType:             sourceArtifact.MimeType,
+			MinimumSystemVersion: sourceArtifact.MinimumSystemVersion,
+			StorageBackend:       sourceArtifact.StorageBackend,
+			StorageKey:           &storageKey,
+		})
+	}
+	if len(artifactsToInsert) == 0 {
+		return nil, fmt.Errorf("source release has no reusable artifacts")
+	}
+
+	inserted, err := svc.repo.InsertUpdateArtifactsIfReleaseEmpty(ctx, targetReleaseID, artifactsToInsert)
+	if err != nil {
+		if errors.Is(err, ErrReleaseAlreadyHasArtifacts) || errors.Is(err, ErrArtifactsOnlyAddedToDraft) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("link artifacts: %w", err)
+	}
+
+	result := make([]ArtifactDTOFull, 0, len(inserted))
+	for _, artifact := range inserted {
+		result = append(result, ArtifactDTOFull{
+			ID: artifact.ID.String(), ReleaseID: artifact.ReleaseID.String(), ArtifactType: artifact.ArtifactType,
+			OS: artifact.Os, Arch: artifact.Arch, URL: artifact.Url, SizeBytes: artifact.SizeBytes,
+			ChecksumSHA256: artifact.ChecksumSha256, Signature: artifact.Signature, Filename: artifact.Filename,
+			MimeType: artifact.MimeType, MinimumSystemVersion: artifact.MinimumSystemVersion,
+		})
+	}
+	svc.feedCache.invalidateProduct(target.ProductID)
+	return result, nil
+}
+
 func (svc *Service) PublishRelease(ctx context.Context, releaseID uuid.UUID) (*ReleaseDTO, error) {
 	artifacts, err := svc.repo.ListArtifactsForRelease(ctx, releaseID)
 	if err != nil {
