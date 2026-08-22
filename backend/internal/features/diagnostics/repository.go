@@ -7,14 +7,16 @@ import (
 	"github.com/cheetahbyte/clave/internal/db"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository struct {
-	q *db.Queries
+	q    *db.Queries
+	pool *pgxpool.Pool
 }
 
-func NewRepository(q *db.Queries) *Repository {
-	return &Repository{q: q}
+func NewRepository(q *db.Queries, pool *pgxpool.Pool) *Repository {
+	return &Repository{q: q, pool: pool}
 }
 
 func optionalString(value string) *string {
@@ -25,8 +27,8 @@ func optionalString(value string) *string {
 	return &value
 }
 
-func (r *Repository) InsertCheckin(ctx context.Context, checkin Checkin) error {
-	_, err := r.q.InsertClientCheckin(ctx, db.InsertClientCheckinParams{
+func (r *Repository) RecordCheckin(ctx context.Context, checkin Checkin) error {
+	return r.q.RecordClientCheckin(ctx, db.RecordClientCheckinParams{
 		OrganizationID: checkin.OrganizationID,
 		ProductID:      checkin.ProductID,
 		LicenseID:      checkin.LicenseID,
@@ -37,15 +39,44 @@ func (r *Repository) InsertCheckin(ctx context.Context, checkin Checkin) error {
 		Arch:           optionalString(checkin.Arch),
 		OsVersion:      optionalString(checkin.OSVersion),
 	})
-	return err
 }
 
-func (r *Repository) DeleteExpiredCheckins(ctx context.Context, retentionDays int) (int64, error) {
-	return r.q.DeleteExpiredClientCheckins(ctx, int32(retentionDays))
+// AggregateClosedDatesAndCleanup recomputes every closed UTC date still in raw
+// storage before deleting expired rows. The transaction makes retries safe and
+// ensures raw data is only deleted after its aggregate was persisted.
+func (r *Repository) AggregateClosedDatesAndCleanup(ctx context.Context, retentionDays int) (int64, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	qtx := r.q.WithTx(tx)
+
+	dates, err := qtx.ListClosedClientCheckinDates(ctx)
+	if err != nil {
+		return 0, err
+	}
+	for _, date := range dates {
+		if err := qtx.DeleteDailyVersionAdoptionForDate(ctx, date); err != nil {
+			return 0, err
+		}
+		if err := qtx.InsertDailyVersionAdoptionForDate(ctx, date); err != nil {
+			return 0, err
+		}
+	}
+
+	deleted, err := qtx.DeleteExpiredClientCheckins(ctx, int32(retentionDays))
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, err
+	}
+	return deleted, nil
 }
 
-func (r *Repository) ListLatestCheckins(ctx context.Context, orgID uuid.UUID, productID pgtype.UUID, days int) ([]LatestCheckin, error) {
-	rows, err := r.q.ListLatestClientCheckins(ctx, db.ListLatestClientCheckinsParams{
+func (r *Repository) ListCurrentStates(ctx context.Context, orgID uuid.UUID, productID pgtype.UUID, days int) ([]LatestCheckin, error) {
+	rows, err := r.q.ListCurrentClientStates(ctx, db.ListCurrentClientStatesParams{
 		OrganizationID: orgID,
 		Days:           int32(days),
 		ProductID:      productID,
@@ -58,19 +89,26 @@ func (r *Repository) ListLatestCheckins(ctx context.Context, orgID uuid.UUID, pr
 		result = append(result, LatestCheckin{
 			ActivationID: row.ActivationID,
 			Hostname:     row.Hostname,
-			Version:      row.Version,
+			Version:      valueOrEmpty(row.Version),
 			Build:        row.Build,
 			Platform:     row.Platform,
 			Arch:         row.Arch,
 			OSVersion:    row.OsVersion,
-			CreatedAt:    row.CreatedAt.Time,
+			CreatedAt:    row.LastSeenAt.Time,
 		})
 	}
 	return result, nil
 }
 
+func valueOrEmpty(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 func (r *Repository) ListDailyVersions(ctx context.Context, orgID uuid.UUID, productID pgtype.UUID, days int) ([]DailyVersion, error) {
-	rows, err := r.q.ListDailyLatestClientVersions(ctx, db.ListDailyLatestClientVersionsParams{
+	rows, err := r.q.ListDailyVersionAdoption(ctx, db.ListDailyVersionAdoptionParams{
 		OrganizationID: orgID,
 		Days:           int32(days),
 		ProductID:      productID,

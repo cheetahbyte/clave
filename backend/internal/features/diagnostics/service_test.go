@@ -17,7 +17,7 @@ type fakeAdoptionRepository struct {
 	dailyErr  error
 }
 
-func (f *fakeAdoptionRepository) ListLatestCheckins(context.Context, uuid.UUID, pgtype.UUID, int) ([]LatestCheckin, error) {
+func (f *fakeAdoptionRepository) ListCurrentStates(context.Context, uuid.UUID, pgtype.UUID, int) ([]LatestCheckin, error) {
 	return f.latest, f.latestErr
 }
 

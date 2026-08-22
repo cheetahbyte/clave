@@ -13,10 +13,14 @@ import (
 type Service struct {
 	validation *validation.Service
 	updates    *update.Service
-	recorder   interface{ Record(diagnostics.Checkin) }
+	recorder   interface {
+		Record(context.Context, diagnostics.Checkin) error
+	}
 }
 
-func NewService(validationSvc *validation.Service, updateSvc *update.Service, recorder interface{ Record(diagnostics.Checkin) }) *Service {
+func NewService(validationSvc *validation.Service, updateSvc *update.Service, recorder interface {
+	Record(context.Context, diagnostics.Checkin) error
+}) *Service {
 	return &Service{validation: validationSvc, updates: updateSvc, recorder: recorder}
 }
 
@@ -26,8 +30,8 @@ func (svc *Service) Sync(ctx context.Context, token string, req Request) (Respon
 		return Response{}, err
 	}
 	version := strings.TrimSpace(req.Version)
-	if version != "" && svc.recorder != nil {
-		svc.recorder.Record(diagnostics.Checkin{
+	if svc.recorder != nil {
+		if err := svc.recorder.Record(ctx, diagnostics.Checkin{
 			OrganizationID: auth.OrganizationID,
 			ProductID:      auth.License.ProductID,
 			LicenseID:      auth.LicenseID,
@@ -37,7 +41,9 @@ func (svc *Service) Sync(ctx context.Context, token string, req Request) (Respon
 			Platform:       req.Platform,
 			Arch:           req.Arch,
 			OSVersion:      req.OSVersion,
-		})
+		}); err != nil {
+			return Response{}, err
+		}
 	}
 	refreshed, err := svc.validation.Refresh(ctx, auth)
 	if err != nil {

@@ -19,6 +19,12 @@ type Activation struct {
 	LicenseID          uuid.UUID          `json:"license_id"`
 	DeactivatedAt      pgtype.Timestamptz `json:"deactivated_at"`
 	DeactivationReason *string            `json:"deactivation_reason"`
+	LastSeenAt         pgtype.Timestamptz `json:"last_seen_at"`
+	CurrentVersion     *string            `json:"current_version"`
+	CurrentBuild       *string            `json:"current_build"`
+	Platform           *string            `json:"platform"`
+	Arch               *string            `json:"arch"`
+	OsVersion          *string            `json:"os_version"`
 }
 
 type AdminAuditLog struct {
@@ -77,6 +83,14 @@ type ClientCheckin struct {
 	Arch           *string            `json:"arch"`
 	OsVersion      *string            `json:"os_version"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type DailyVersionAdoption struct {
+	Date           pgtype.Date `json:"date"`
+	OrganizationID uuid.UUID   `json:"organization_id"`
+	ProductID      uuid.UUID   `json:"product_id"`
+	Version        string      `json:"version"`
+	DeviceCount    int64       `json:"device_count"`
 }
 
 type Device struct {

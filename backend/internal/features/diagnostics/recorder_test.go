@@ -2,50 +2,63 @@ package diagnostics
 
 import (
 	"context"
-	"sync/atomic"
+	"errors"
 	"testing"
 	"time"
 )
 
-type blockingCheckinStore struct {
-	started chan struct{}
-	release chan struct{}
-	inserts atomic.Int32
+type checkinStoreStub struct {
+	recordErr     error
+	recorded      chan Checkin
+	cleanupCalled chan int
 }
 
-func (s *blockingCheckinStore) InsertCheckin(context.Context, Checkin) error {
-	if s.inserts.Add(1) == 1 {
-		close(s.started)
+func (s *checkinStoreStub) RecordCheckin(_ context.Context, checkin Checkin) error {
+	if s.recorded != nil {
+		s.recorded <- checkin
 	}
-	<-s.release
-	return nil
+	return s.recordErr
 }
 
-func (*blockingCheckinStore) DeleteExpiredCheckins(context.Context, int) (int64, error) {
+func (s *checkinStoreStub) AggregateClosedDatesAndCleanup(_ context.Context, retentionDays int) (int64, error) {
+	if s.cleanupCalled != nil {
+		s.cleanupCalled <- retentionDays
+	}
 	return 0, nil
 }
 
-func TestRecorderDropsWhenFullWithoutBlocking(t *testing.T) {
-	store := &blockingCheckinStore{started: make(chan struct{}), release: make(chan struct{})}
-	recorder := NewRecorder(store, 0, 1)
-	recorder.Record(Checkin{})
-	<-store.started
-	recorder.Record(Checkin{})
+func TestRecorderPersistsCheckinSynchronously(t *testing.T) {
+	store := &checkinStoreStub{recorded: make(chan Checkin, 1)}
+	recorder := NewRecorder(store, 7)
+	want := Checkin{Version: "2.0.0"}
+	if err := recorder.Record(t.Context(), want); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-store.recorded; got.Version != want.Version {
+		t.Fatalf("recorded version = %q, want %q", got.Version, want.Version)
+	}
+	recorder.Close(t.Context())
+}
 
-	start := time.Now()
-	recorder.Record(Checkin{})
-	if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
-		t.Fatalf("full recorder blocked request path for %s", elapsed)
+func TestRecorderReturnsWriteError(t *testing.T) {
+	want := errors.New("database unavailable")
+	recorder := NewRecorder(&checkinStoreStub{recordErr: want}, 7)
+	if err := recorder.Record(t.Context(), Checkin{}); !errors.Is(err, want) {
+		t.Fatalf("error = %v, want %v", err, want)
 	}
-	if got := recorder.dropped.Load(); got != 1 {
-		t.Fatalf("dropped = %d, want 1", got)
-	}
+	recorder.Close(t.Context())
+}
 
-	close(store.release)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	recorder.Close(ctx)
-	if got := store.inserts.Load(); got != 2 {
-		t.Fatalf("inserts = %d, want 2", got)
+func TestRecorderRunsDailyWorkAtStartupWithConfiguredRetention(t *testing.T) {
+	called := make(chan int, 1)
+	recorder := NewRecorder(&checkinStoreStub{cleanupCalled: called}, 7)
+	select {
+	case got := <-called:
+		if got != 7 {
+			t.Fatalf("retention = %d, want 7", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("startup aggregation was not called")
 	}
+	recorder.Close(t.Context())
 }

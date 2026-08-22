@@ -145,6 +145,7 @@ names is overridden.
 | `PORT` | no | `8000` | API listen port inside the container. Changing it also requires changing the published port. |
 | `DATABASE_MAX_CONNS` | no | `20` | PostgreSQL pool size. Must be greater than zero. |
 | `UPDATE_CHECK_RETENTION_DAYS` | no | `90` | Days of update-check history retained. `0` disables pruning. |
+| `CLIENT_CHECKIN_RETENTION_DAYS` | no | `7` | Days of device-linked raw check-ins retained for diagnostics and aggregate retries. Closed UTC dates are aggregated daily before eligible rows are deleted. |
 | `SELF_SERVICE_RETURN_TOKEN` | no | `false` | Returns self-service tokens in API responses. Debug aid — leave off in production. |
 | `DEV` | no | unset | Development mode; relaxes key requirements. **Leave unset in production.** |
 | `LOG_LEVEL` | no | `info` | `debug`, `verbose`, or `trace` enable debug logging. |
@@ -154,6 +155,24 @@ names is overridden.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | no | unset | OTLP collector endpoint, e.g. `http://collector:4318`. Required when `OTEL_ENABLED=true`. |
 
 Truthy values are `true`, `1`, and `yes`.
+
+### Client check-in data lifecycle
+
+An authorized client sync updates device-linked current state on the activation:
+`last_seen_at`, version, build, platform, architecture, and OS version. Device
+hostname and HMAC-protected HWID remain on the registered device for licensing,
+support, and self-service deactivation.
+
+A sync that reports a version also creates a raw device-linked check-in without
+IP address or User-Agent data. A daily worker aggregates every closed UTC date, normally
+making yesterday's adoption counts available the next day. Each activation
+counts once per date under its final reported version. Recomputing a date
+replaces its aggregate, so retries cannot double-count devices.
+
+Raw check-ins remain for `CLIENT_CHECKIN_RETENTION_DAYS` as a diagnostic and
+retry window, then are deleted only after aggregation succeeds. Long-term
+`daily_version_adoption` rows retain organization, product, date, version, and
+count, but no activation, license, HWID, hostname, or customer identifier.
 
 Ensure `RUN_MIGRATIONS=true` for exactly one backend instance during a
 deployment, then start it:

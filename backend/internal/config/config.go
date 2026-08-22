@@ -49,8 +49,9 @@ type Config struct {
 
 	TrustProxyHeaders bool
 
-	UpdateArtifactStoragePath string
-	UpdateCheckRetentionDays  int
+	UpdateArtifactStoragePath  string
+	UpdateCheckRetentionDays   int
+	ClientCheckinRetentionDays int
 
 	MigrationsDir        string
 	OTELEnabled          bool
@@ -94,31 +95,39 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	checkinRetentionDays, err := getEnvInt("CLIENT_CHECKIN_RETENTION_DAYS", 7)
+	if err != nil || checkinRetentionDays == 0 {
+		if err == nil {
+			err = fmt.Errorf("CLIENT_CHECKIN_RETENTION_DAYS must be greater than zero")
+		}
+		return nil, err
+	}
 	cfg := &Config{
-		DatabaseURL:               getEnv("DATABASE_URL", "postgres://clave@localhost:54321/clave?sslmode=disable"),
-		DatabaseMaxConns:          int32(databaseMaxConns),
-		RunMigrations:             truthy(os.Getenv("RUN_MIGRATIONS")),
-		VerboseLogging:            verboseLoggingEnabled(),
-		Dev:                       truthy(os.Getenv("DEV")),
-		MigrationsDir:             getEnv("MIGRATIONS_DIR", "./migrations"),
-		LicenseHMACSecret:         os.Getenv("LICENSE_HMAC_SECRET"),
-		OTELEnabled:               truthy(os.Getenv("OTEL_ENABLED")),
-		OTELServiceName:           getEnv("OTEL_SERVICE_NAME", "clave-api"),
-		OTELExporterEndpoint:      os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-		SelfServiceTokenPepper:    os.Getenv("SELF_SERVICE_TOKEN_PEPPER"),
-		SelfServiceReturnToken:    strings.ToLower(os.Getenv("SELF_SERVICE_RETURN_TOKEN")) == "true",
-		SMTPHost:                  os.Getenv("SMTP_HOST"),
-		SMTPPort:                  getEnv("SMTP_PORT", "587"),
-		SMTPUser:                  os.Getenv("SMTP_USER"),
-		SMTPPass:                  os.Getenv("SMTP_PASS"),
-		MailFrom:                  getEnv("MAIL_FROM", "noreply@clave.app"),
-		RabbitMQURL:               os.Getenv("RABBITMQ_URL"),
-		WorkerToken:               os.Getenv("WORKER_TOKEN"),
-		PublicAppURL:              os.Getenv("PUBLIC_APP_URL"),
-		Port:                      getEnv("PORT", "8000"),
-		TrustProxyHeaders:         truthy(os.Getenv("TRUST_PROXY_HEADERS")),
-		UpdateArtifactStoragePath: getEnv("UPDATE_ARTIFACT_STORAGE_PATH", "./data/update-artifacts"),
-		UpdateCheckRetentionDays:  retentionDays,
+		DatabaseURL:                getEnv("DATABASE_URL", "postgres://clave@localhost:54321/clave?sslmode=disable"),
+		DatabaseMaxConns:           int32(databaseMaxConns),
+		RunMigrations:              truthy(os.Getenv("RUN_MIGRATIONS")),
+		VerboseLogging:             verboseLoggingEnabled(),
+		Dev:                        truthy(os.Getenv("DEV")),
+		MigrationsDir:              getEnv("MIGRATIONS_DIR", "./migrations"),
+		LicenseHMACSecret:          os.Getenv("LICENSE_HMAC_SECRET"),
+		OTELEnabled:                truthy(os.Getenv("OTEL_ENABLED")),
+		OTELServiceName:            getEnv("OTEL_SERVICE_NAME", "clave-api"),
+		OTELExporterEndpoint:       os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		SelfServiceTokenPepper:     os.Getenv("SELF_SERVICE_TOKEN_PEPPER"),
+		SelfServiceReturnToken:     strings.ToLower(os.Getenv("SELF_SERVICE_RETURN_TOKEN")) == "true",
+		SMTPHost:                   os.Getenv("SMTP_HOST"),
+		SMTPPort:                   getEnv("SMTP_PORT", "587"),
+		SMTPUser:                   os.Getenv("SMTP_USER"),
+		SMTPPass:                   os.Getenv("SMTP_PASS"),
+		MailFrom:                   getEnv("MAIL_FROM", "noreply@clave.app"),
+		RabbitMQURL:                os.Getenv("RABBITMQ_URL"),
+		WorkerToken:                os.Getenv("WORKER_TOKEN"),
+		PublicAppURL:               os.Getenv("PUBLIC_APP_URL"),
+		Port:                       getEnv("PORT", "8000"),
+		TrustProxyHeaders:          truthy(os.Getenv("TRUST_PROXY_HEADERS")),
+		UpdateArtifactStoragePath:  getEnv("UPDATE_ARTIFACT_STORAGE_PATH", "./data/update-artifacts"),
+		UpdateCheckRetentionDays:   retentionDays,
+		ClientCheckinRetentionDays: checkinRetentionDays,
 	}
 
 	cfg.DevSkip2FA = cfg.Dev && !truthy(os.Getenv("DEV_FORCE_2FA"))
