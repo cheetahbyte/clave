@@ -25,6 +25,7 @@ import (
 	"github.com/cheetahbyte/clave/internal/features/update/providers/native"
 	"github.com/cheetahbyte/clave/internal/features/validation"
 	"github.com/cheetahbyte/clave/internal/observability"
+	"github.com/cheetahbyte/clave/internal/retention"
 	"github.com/cheetahbyte/clave/internal/shared/events"
 	"github.com/cheetahbyte/clave/internal/shared/helpers"
 	"github.com/cheetahbyte/clave/internal/shared/middleware"
@@ -42,6 +43,7 @@ var (
 	publisher       *events.Publisher
 	updateRecorder  *update.UpdateCheckRecorder
 	checkinRecorder *diagnostics.Recorder
+	retentionWorker *retention.Worker
 )
 
 func Close() {
@@ -52,6 +54,9 @@ func Close() {
 	}
 	if checkinRecorder != nil {
 		checkinRecorder.Close(ctx)
+	}
+	if retentionWorker != nil {
+		retentionWorker.Close(ctx)
 	}
 	observability.Shutdown(ctx)
 	if publisher != nil {
@@ -105,6 +110,11 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	observability.StartDBPoolMetrics(context.Background(), pool, 30*time.Second)
 
 	q := db.New(pool)
+	retentionWorker = retention.NewWorker(q, retention.Policies{
+		AuditMetadataDays: cfg.AuditMetadataRetentionDays,
+		AuditLogDays:      cfg.AuditLogRetentionDays,
+		UpdateCheckDays:   cfg.UpdateCheckRetentionDays,
+	})
 
 	signer := signing.New(cfg.LicenseJWTPublicKey, cfg.LicenseJWTPrivateKey, cfg.LicenseHMACSecret)
 
@@ -117,7 +127,7 @@ func NewRouter(cfg *config.Config) (http.Handler, error) {
 	)
 
 	updateSvc := update.NewService(licenseSvc, signer, updateRepo, updateRegistry, cfg.PublicAppURL, cfg.UpdateArtifactStoragePath)
-	updateRecorder = update.NewUpdateCheckRecorder(updateRepo, cfg.UpdateCheckRetentionDays, 256)
+	updateRecorder = update.NewUpdateCheckRecorder(updateRepo, 256)
 	updateSvc.SetCheckRecorder(updateRecorder)
 	validationSvc := validation.NewService(q, signer, licenseSvc, updateSvc)
 	activationSvc := activation.NewService(q, pool, signer, licenseSvc, updateSvc, validationSvc)

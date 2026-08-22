@@ -78,14 +78,75 @@ func (q *Queries) CreateOrganizationMember(ctx context.Context, arg CreateOrgani
 	return err
 }
 
-const deleteExpiredAdminEmailCodes = `-- name: DeleteExpiredAdminEmailCodes :exec
+const deleteStaleAdminEmailCodes = `-- name: DeleteStaleAdminEmailCodes :execrows
 DELETE FROM admin_email_codes
 WHERE expires_at < now() - INTERVAL '1 day'
+   OR used_at < now() - INTERVAL '1 day'
 `
 
-func (q *Queries) DeleteExpiredAdminEmailCodes(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, deleteExpiredAdminEmailCodes)
-	return err
+func (q *Queries) DeleteStaleAdminEmailCodes(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStaleAdminEmailCodes)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStaleAuditLogs = `-- name: DeleteStaleAuditLogs :execrows
+DELETE FROM admin_audit_log
+WHERE created_at < now() - make_interval(days => $1::int)
+`
+
+func (q *Queries) DeleteStaleAuditLogs(ctx context.Context, retentionDays int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStaleAuditLogs, retentionDays)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStaleOrganizationInvites = `-- name: DeleteStaleOrganizationInvites :execrows
+DELETE FROM organization_invites
+WHERE (accepted_at IS NOT NULL AND accepted_at < now() - INTERVAL '30 days')
+   OR (accepted_at IS NULL AND expires_at < now() - INTERVAL '30 days')
+`
+
+func (q *Queries) DeleteStaleOrganizationInvites(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStaleOrganizationInvites)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStaleSelfServiceTokens = `-- name: DeleteStaleSelfServiceTokens :execrows
+
+DELETE FROM self_service_tokens
+WHERE expires_at < now() - INTERVAL '1 day'
+   OR used_at < now() - INTERVAL '1 day'
+`
+
+// Retention maintenance queries are centralized here so one generated query
+// adapter can run the database lifecycle worker.
+func (q *Queries) DeleteStaleSelfServiceTokens(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStaleSelfServiceTokens)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteStaleUpdateChecks = `-- name: DeleteStaleUpdateChecks :execrows
+DELETE FROM update_checks
+WHERE created_at < now() - make_interval(days => $1::int)
+`
+
+func (q *Queries) DeleteStaleUpdateChecks(ctx context.Context, retentionDays int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteStaleUpdateChecks, retentionDays)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getAdminByEmail = `-- name: GetAdminByEmail :one
@@ -332,6 +393,22 @@ WHERE id = $1
 func (q *Queries) MarkAdminEmailCodeUsed(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markAdminEmailCodeUsed, id)
 	return err
+}
+
+const scrubStaleAuditSecurityMetadata = `-- name: ScrubStaleAuditSecurityMetadata :execrows
+UPDATE admin_audit_log
+SET ip = NULL,
+    user_agent = NULL
+WHERE created_at < now() - make_interval(days => $1::int)
+  AND (ip IS NOT NULL OR user_agent IS NOT NULL)
+`
+
+func (q *Queries) ScrubStaleAuditSecurityMetadata(ctx context.Context, retentionDays int32) (int64, error) {
+	result, err := q.db.Exec(ctx, scrubStaleAuditSecurityMetadata, retentionDays)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateLastLogin = `-- name: UpdateLastLogin :exec

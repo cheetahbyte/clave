@@ -17,6 +17,7 @@ var (
 	bizAuditEvents            metric.Int64Counter
 	bizUpdateCheckTelemetry   metric.Int64Counter
 	bizClientCheckinTelemetry metric.Int64Counter
+	bizRetentionCleanup       metric.Int64Counter
 	bizDeltaJobs              metric.Int64Counter
 	bizDeltaPatchRatio        metric.Float64Histogram
 )
@@ -75,6 +76,11 @@ func initBusinessMetrics(m metric.Meter) {
 	if err != nil {
 		panic(err)
 	}
+	bizRetentionCleanup, err = m.Int64Counter("biz.retention_cleanup_runs_total",
+		metric.WithDescription("Retention cleanup operation outcomes"))
+	if err != nil {
+		panic(err)
+	}
 	bizDeltaJobs, err = m.Int64Counter("biz.delta_jobs_total", metric.WithDescription("Delta job state transitions"))
 	if err != nil {
 		panic(err)
@@ -82,6 +88,15 @@ func initBusinessMetrics(m metric.Meter) {
 	bizDeltaPatchRatio, err = m.Float64Histogram("biz.delta_patch_ratio", metric.WithDescription("Delta patch bytes divided by target artifact bytes"))
 	if err != nil {
 		panic(err)
+	}
+}
+
+func CountRetentionCleanup(ctx context.Context, dataset, outcome string) {
+	if bizRetentionCleanup != nil {
+		bizRetentionCleanup.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("dataset", dataset),
+			attribute.String("outcome", outcome),
+		))
 	}
 }
 

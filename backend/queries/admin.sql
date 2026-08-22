@@ -42,10 +42,6 @@ SET used_at = now()
 WHERE admin_user_id = sqlc.arg(admin_user_id)
   AND used_at IS NULL;
 
--- name: DeleteExpiredAdminEmailCodes :exec
-DELETE FROM admin_email_codes
-WHERE expires_at < now() - INTERVAL '1 day';
-
 -- name: InsertAuditLog :exec
 INSERT INTO admin_audit_log (admin_user_id, organization_id, action, resource_type, resource_id, metadata, ip, user_agent)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
@@ -72,3 +68,36 @@ WHERE organization_id = $1 AND admin_user_id = $2;
 
 -- name: GetOrganizationBySlug :one
 SELECT * FROM organizations WHERE slug = $1;
+
+-- Retention maintenance queries are centralized here so one generated query
+-- adapter can run the database lifecycle worker.
+
+-- name: DeleteStaleSelfServiceTokens :execrows
+DELETE FROM self_service_tokens
+WHERE expires_at < now() - INTERVAL '1 day'
+   OR used_at < now() - INTERVAL '1 day';
+
+-- name: DeleteStaleOrganizationInvites :execrows
+DELETE FROM organization_invites
+WHERE (accepted_at IS NOT NULL AND accepted_at < now() - INTERVAL '30 days')
+   OR (accepted_at IS NULL AND expires_at < now() - INTERVAL '30 days');
+
+-- name: DeleteStaleAdminEmailCodes :execrows
+DELETE FROM admin_email_codes
+WHERE expires_at < now() - INTERVAL '1 day'
+   OR used_at < now() - INTERVAL '1 day';
+
+-- name: ScrubStaleAuditSecurityMetadata :execrows
+UPDATE admin_audit_log
+SET ip = NULL,
+    user_agent = NULL
+WHERE created_at < now() - make_interval(days => sqlc.arg('retention_days')::int)
+  AND (ip IS NOT NULL OR user_agent IS NOT NULL);
+
+-- name: DeleteStaleAuditLogs :execrows
+DELETE FROM admin_audit_log
+WHERE created_at < now() - make_interval(days => sqlc.arg('retention_days')::int);
+
+-- name: DeleteStaleUpdateChecks :execrows
+DELETE FROM update_checks
+WHERE created_at < now() - make_interval(days => sqlc.arg('retention_days')::int);

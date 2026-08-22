@@ -144,8 +144,10 @@ names is overridden.
 | `RUN_MIGRATIONS` | recommended | `false` | Run DB migrations at startup. Enable for exactly one instance per deployment. |
 | `PORT` | no | `8000` | API listen port inside the container. Changing it also requires changing the published port. |
 | `DATABASE_MAX_CONNS` | no | `20` | PostgreSQL pool size. Must be greater than zero. |
-| `UPDATE_CHECK_RETENTION_DAYS` | no | `90` | Days of update-check history retained. `0` disables pruning. |
-| `CLIENT_CHECKIN_RETENTION_DAYS` | no | `7` | Days of device-linked raw check-ins retained for diagnostics and aggregate retries. Closed UTC dates are aggregated daily before eligible rows are deleted. |
+| `UPDATE_CHECK_RETENTION_DAYS` | no | `90` | Days of update-check history retained; must be 7–365. |
+| `CLIENT_CHECKIN_RETENTION_DAYS` | no | `7` | Days of device-linked raw check-ins retained for diagnostics and aggregate retries; must be 1–30. Closed UTC dates are aggregated daily before eligible rows are deleted. |
+| `AUDIT_LOG_RETENTION_DAYS` | no | `180` | Days core admin audit events remain identifiable; must be 90–365. |
+| `AUDIT_METADATA_RETENTION_DAYS` | no | `90` | Days audit IP addresses and User-Agent strings are retained; must be 30–180 and no greater than audit-log retention. |
 | `SELF_SERVICE_RETURN_TOKEN` | no | `false` | Returns self-service tokens in API responses. Debug aid — leave off in production. |
 | `DEV` | no | unset | Development mode; relaxes key requirements. **Leave unset in production.** |
 | `LOG_LEVEL` | no | `info` | `debug`, `verbose`, or `trace` enable debug logging. |
@@ -173,6 +175,30 @@ Raw check-ins remain for `CLIENT_CHECKIN_RETENTION_DAYS` as a diagnostic and
 retry window, then are deleted only after aggregation succeeds. Long-term
 `daily_version_adoption` rows retain organization, product, date, version, and
 count, but no activation, license, HWID, hostname, or customer identifier.
+
+### Persisted data retention
+
+A centralized worker runs at startup and daily. Cleanup statements are
+idempotent, failures are isolated per dataset, and affected row counts are
+logged. OpenTelemetry records cleanup outcomes by dataset. Cleanup never runs
+on request paths.
+
+| Data | Purpose and sensitivity | Lifecycle |
+| --- | --- | --- |
+| Self-service tokens | Email, hashed token, expiry, consumption time, creation IP, and optional User-Agent for passwordless access and abuse investigation. | Delete one day after expiry or consumption. |
+| Admin sessions | Opaque token and serialized admin session used for authenticated access. | Absolute lifetime 12 hours, idle timeout 30 minutes, immediate deletion on logout, and pgxstore cleanup of expired rows every five minutes. |
+| Organization invites | Invitee email, role, hashed token, inviter, expiry, and acceptance time. | Delete accepted invites after 30 days; delete unaccepted invites 30 days after expiry. |
+| Admin MFA codes | Admin reference, HMAC code, attempts, expiry, and use time. | Delete one day after expiry or consumption. |
+| Admin audit events | Actor, organization, action, resource, timestamp, IP, and User-Agent for accountability and incident investigation. | Scrub IP and User-Agent after `AUDIT_METADATA_RETENTION_DAYS`; delete the core event after `AUDIT_LOG_RETENTION_DAYS`. |
+| Update checks | Organization/product/license references and software environment used for update diagnostics. | Delete after `UPDATE_CHECK_RETENTION_DAYS`. |
+| Email queue messages | Recipient and transactional payload, which may include MFA codes, links, or license keys. | RabbitMQ removes successful messages immediately. Per-message expiry is 10 minutes for MFA, 15 minutes for self-service links, and seven days for organization invites and license emails. No completed-delivery table is kept. |
+| MCP tokens | Hashed organization credential plus creator and last-use metadata. | Retain until regeneration or organization deletion. |
+| Delta jobs | Release/artifact checksums and operational status used for idempotency and diagnostics. | Retain with the referenced release/artifact lifecycle. |
+
+Expired and revoked licenses, their devices, and admin accounts are deliberately
+excluded from automated retention. Their identity supports licensing, abuse
+prevention, customer support, and multi-organization access. They require a
+separate product/legal decision before deletion or de-identification.
 
 Ensure `RUN_MIGRATIONS=true` for exactly one backend instance during a
 deployment, then start it:

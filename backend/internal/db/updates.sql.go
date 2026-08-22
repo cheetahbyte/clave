@@ -156,19 +156,6 @@ func (q *Queries) CreateUpdateChannel(ctx context.Context, arg CreateUpdateChann
 	return i, err
 }
 
-const deleteExpiredUpdateChecks = `-- name: DeleteExpiredUpdateChecks :execrows
-DELETE FROM update_checks
-WHERE created_at < now() - make_interval(days => $1::int)
-`
-
-func (q *Queries) DeleteExpiredUpdateChecks(ctx context.Context, retentionDays int32) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteExpiredUpdateChecks, retentionDays)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const deleteProductUpdateConfig = `-- name: DeleteProductUpdateConfig :one
 DELETE FROM product_update_configs
 WHERE id = $1 AND organization_id = $2

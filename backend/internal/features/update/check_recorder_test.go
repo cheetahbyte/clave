@@ -22,13 +22,9 @@ func (s *blockingRecordStore) InsertUpdateCheck(context.Context, uuid.UUID, uuid
 	<-s.release
 	return nil
 }
-func (*blockingRecordStore) DeleteExpiredUpdateChecks(context.Context, int) (int64, error) {
-	return 0, nil
-}
-
 func TestUpdateCheckRecorderDropsWhenFullWithoutBlocking(t *testing.T) {
 	store := &blockingRecordStore{started: make(chan struct{}), release: make(chan struct{})}
-	recorder := NewUpdateCheckRecorder(store, 0, 1)
+	recorder := NewUpdateCheckRecorder(store, 1)
 	recorder.Record(UpdateCheckRecord{})
 	<-store.started
 	recorder.Record(UpdateCheckRecord{})

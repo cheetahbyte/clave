@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/cheetahbyte/clave/internal/observability"
 	"github.com/google/uuid"
@@ -20,24 +19,22 @@ type UpdateCheckRecord struct {
 
 type checkRecordStore interface {
 	InsertUpdateCheck(context.Context, uuid.UUID, uuid.UUID, uuid.UUID, string, string, string, string, string, string, string, string, *uuid.UUID) error
-	DeleteExpiredUpdateChecks(context.Context, int) (int64, error)
 }
 
 type UpdateCheckRecorder struct {
-	store         checkRecordStore
-	retentionDays int
-	records       chan UpdateCheckRecord
-	cancel        context.CancelFunc
-	wg            sync.WaitGroup
-	dropped       atomic.Uint64
+	store   checkRecordStore
+	records chan UpdateCheckRecord
+	cancel  context.CancelFunc
+	wg      sync.WaitGroup
+	dropped atomic.Uint64
 }
 
-func NewUpdateCheckRecorder(store checkRecordStore, retentionDays, capacity int) *UpdateCheckRecorder {
+func NewUpdateCheckRecorder(store checkRecordStore, capacity int) *UpdateCheckRecorder {
 	if capacity < 1 {
 		capacity = 256
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	r := &UpdateCheckRecorder{store: store, retentionDays: retentionDays, records: make(chan UpdateCheckRecord, capacity), cancel: cancel}
+	r := &UpdateCheckRecorder{store: store, records: make(chan UpdateCheckRecord, capacity), cancel: cancel}
 	r.wg.Add(1)
 	go r.run(ctx)
 	return r
@@ -54,13 +51,6 @@ func (r *UpdateCheckRecorder) Record(record UpdateCheckRecord) {
 
 func (r *UpdateCheckRecorder) run(ctx context.Context) {
 	defer r.wg.Done()
-	var cleanup <-chan time.Time
-	if r.retentionDays > 0 {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		cleanup = ticker.C
-		r.cleanup(ctx)
-	}
 	for {
 		select {
 		case record, ok := <-r.records:
@@ -75,17 +65,9 @@ func (r *UpdateCheckRecorder) run(ctx context.Context) {
 			} else {
 				observability.CountUpdateCheckTelemetry(context.Background(), "recorded")
 			}
-		case <-cleanup:
-			r.cleanup(ctx)
 		case <-ctx.Done():
 			return
 		}
-	}
-}
-
-func (r *UpdateCheckRecorder) cleanup(ctx context.Context) {
-	if _, err := r.store.DeleteExpiredUpdateChecks(ctx, r.retentionDays); err != nil {
-		slog.Warn("failed to clean old update checks", "err", err)
 	}
 }
 

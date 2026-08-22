@@ -46,6 +46,19 @@ func TestGetEnvInt(t *testing.T) {
 	}
 }
 
+func TestGetEnvIntRange(t *testing.T) {
+	t.Setenv("CLAVE_TEST_RANGE", "")
+	if got, err := getEnvIntRange("CLAVE_TEST_RANGE", 90, 7, 365); err != nil || got != 90 {
+		t.Fatalf("default = %d, %v", got, err)
+	}
+	for _, value := range []string{"0", "366", "invalid"} {
+		t.Setenv("CLAVE_TEST_RANGE", value)
+		if _, err := getEnvIntRange("CLAVE_TEST_RANGE", 90, 7, 365); err == nil {
+			t.Fatalf("expected %q to fail", value)
+		}
+	}
+}
+
 func TestLoadEd25519PrivateKeyFileErrors(t *testing.T) {
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

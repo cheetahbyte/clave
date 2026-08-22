@@ -165,10 +165,6 @@ WHERE release_id = $1;
 SELECT * FROM update_release_policies
 WHERE release_id = ANY($1::uuid[]);
 
--- name: DeleteExpiredUpdateChecks :execrows
-DELETE FROM update_checks
-WHERE created_at < now() - make_interval(days => sqlc.arg('retention_days')::int);
-
 -- name: InsertUpdateCheck :one
 INSERT INTO update_checks (
     organization_id, product_id, license_id, platform, channel,

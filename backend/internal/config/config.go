@@ -52,6 +52,8 @@ type Config struct {
 	UpdateArtifactStoragePath  string
 	UpdateCheckRetentionDays   int
 	ClientCheckinRetentionDays int
+	AuditLogRetentionDays      int
+	AuditMetadataRetentionDays int
 
 	MigrationsDir        string
 	OTELEnabled          bool
@@ -83,6 +85,17 @@ func getEnvInt(key string, fallback int) (int, error) {
 	return value, nil
 }
 
+func getEnvIntRange(key string, fallback, min, max int) (int, error) {
+	value, err := getEnvInt(key, fallback)
+	if err != nil {
+		return 0, err
+	}
+	if value < min || value > max {
+		return 0, fmt.Errorf("%s must be between %d and %d", key, min, max)
+	}
+	return value, nil
+}
+
 func Load() (*Config, error) {
 	databaseMaxConns, err := getEnvInt("DATABASE_MAX_CONNS", 20)
 	if err != nil || databaseMaxConns == 0 {
@@ -91,16 +104,24 @@ func Load() (*Config, error) {
 		}
 		return nil, err
 	}
-	retentionDays, err := getEnvInt("UPDATE_CHECK_RETENTION_DAYS", 90)
+	retentionDays, err := getEnvIntRange("UPDATE_CHECK_RETENTION_DAYS", 90, 7, 365)
 	if err != nil {
 		return nil, err
 	}
-	checkinRetentionDays, err := getEnvInt("CLIENT_CHECKIN_RETENTION_DAYS", 7)
-	if err != nil || checkinRetentionDays == 0 {
-		if err == nil {
-			err = fmt.Errorf("CLIENT_CHECKIN_RETENTION_DAYS must be greater than zero")
-		}
+	checkinRetentionDays, err := getEnvIntRange("CLIENT_CHECKIN_RETENTION_DAYS", 7, 1, 30)
+	if err != nil {
 		return nil, err
+	}
+	auditLogRetentionDays, err := getEnvIntRange("AUDIT_LOG_RETENTION_DAYS", 180, 90, 365)
+	if err != nil {
+		return nil, err
+	}
+	auditMetadataRetentionDays, err := getEnvIntRange("AUDIT_METADATA_RETENTION_DAYS", 90, 30, 180)
+	if err != nil {
+		return nil, err
+	}
+	if auditMetadataRetentionDays > auditLogRetentionDays {
+		return nil, errors.New("AUDIT_METADATA_RETENTION_DAYS must not exceed AUDIT_LOG_RETENTION_DAYS")
 	}
 	cfg := &Config{
 		DatabaseURL:                getEnv("DATABASE_URL", "postgres://clave@localhost:54321/clave?sslmode=disable"),
@@ -128,6 +149,8 @@ func Load() (*Config, error) {
 		UpdateArtifactStoragePath:  getEnv("UPDATE_ARTIFACT_STORAGE_PATH", "./data/update-artifacts"),
 		UpdateCheckRetentionDays:   retentionDays,
 		ClientCheckinRetentionDays: checkinRetentionDays,
+		AuditLogRetentionDays:      auditLogRetentionDays,
+		AuditMetadataRetentionDays: auditMetadataRetentionDays,
 	}
 
 	cfg.DevSkip2FA = cfg.Dev && !truthy(os.Getenv("DEV_FORCE_2FA"))
