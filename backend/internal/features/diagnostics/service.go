@@ -11,7 +11,7 @@ import (
 )
 
 type adoptionRepository interface {
-	ListLatestCheckins(context.Context, uuid.UUID, pgtype.UUID, int) ([]LatestCheckin, error)
+	ListCurrentStates(context.Context, uuid.UUID, pgtype.UUID, int) ([]LatestCheckin, error)
 	ListDailyVersions(context.Context, uuid.UUID, pgtype.UUID, int) ([]DailyVersion, error)
 }
 
@@ -29,7 +29,7 @@ func (svc *Service) VersionAdoption(ctx context.Context, orgID uuid.UUID, produc
 	group, groupCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
 		var err error
-		latest, err = svc.repo.ListLatestCheckins(groupCtx, orgID, productID, days)
+		latest, err = svc.repo.ListCurrentStates(groupCtx, orgID, productID, days)
 		return err
 	})
 	group.Go(func() error {

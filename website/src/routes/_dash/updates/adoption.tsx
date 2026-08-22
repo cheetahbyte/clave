@@ -334,7 +334,7 @@ function DeviceTable({ data }: { data: VersionAdoptionResponse }) {
       <CardHeader>
         <CardTitle>Reporting devices</CardTitle>
         <CardDescription>
-          Newest check-in per activation during the last {DAYS} days
+          Current state for devices seen during the last {DAYS} days
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -49,8 +50,11 @@ type Config struct {
 
 	TrustProxyHeaders bool
 
-	UpdateArtifactStoragePath string
-	UpdateCheckRetentionDays  int
+	UpdateArtifactStoragePath  string
+	UpdateCheckRetentionDays   int
+	ClientCheckinRetentionDays int
+	AuditLogRetentionDays      int
+	AuditMetadataRetentionDays int
 
 	MigrationsDir        string
 	OTELEnabled          bool
@@ -82,43 +86,76 @@ func getEnvInt(key string, fallback int) (int, error) {
 	return value, nil
 }
 
+func getEnvIntRange(key string, fallback, min, max int) (int, error) {
+	value, err := getEnvInt(key, fallback)
+	if err != nil {
+		return 0, err
+	}
+	if value < min || value > max {
+		return 0, fmt.Errorf("%s must be between %d and %d", key, min, max)
+	}
+	return value, nil
+}
+
 func Load() (*Config, error) {
 	databaseMaxConns, err := getEnvInt("DATABASE_MAX_CONNS", 20)
-	if err != nil || databaseMaxConns == 0 {
+	if err != nil || databaseMaxConns == 0 || databaseMaxConns > math.MaxInt32 {
 		if err == nil {
-			err = fmt.Errorf("DATABASE_MAX_CONNS must be greater than zero")
+			if databaseMaxConns == 0 {
+				err = fmt.Errorf("DATABASE_MAX_CONNS must be greater than zero")
+			} else {
+				err = fmt.Errorf("DATABASE_MAX_CONNS must be less than or equal to %d", math.MaxInt32)
+			}
 		}
 		return nil, err
 	}
-	retentionDays, err := getEnvInt("UPDATE_CHECK_RETENTION_DAYS", 90)
+	retentionDays, err := getEnvIntRange("UPDATE_CHECK_RETENTION_DAYS", 90, 7, 365)
 	if err != nil {
 		return nil, err
 	}
+	checkinRetentionDays, err := getEnvIntRange("CLIENT_CHECKIN_RETENTION_DAYS", 7, 1, 30)
+	if err != nil {
+		return nil, err
+	}
+	auditLogRetentionDays, err := getEnvIntRange("AUDIT_LOG_RETENTION_DAYS", 180, 90, 365)
+	if err != nil {
+		return nil, err
+	}
+	auditMetadataRetentionDays, err := getEnvIntRange("AUDIT_METADATA_RETENTION_DAYS", 90, 30, 180)
+	if err != nil {
+		return nil, err
+	}
+	if auditMetadataRetentionDays > auditLogRetentionDays {
+		return nil, errors.New("AUDIT_METADATA_RETENTION_DAYS must not exceed AUDIT_LOG_RETENTION_DAYS")
+	}
 	cfg := &Config{
-		DatabaseURL:               getEnv("DATABASE_URL", "postgres://clave@localhost:54321/clave?sslmode=disable"),
-		DatabaseMaxConns:          int32(databaseMaxConns),
-		RunMigrations:             truthy(os.Getenv("RUN_MIGRATIONS")),
-		VerboseLogging:            verboseLoggingEnabled(),
-		Dev:                       truthy(os.Getenv("DEV")),
-		MigrationsDir:             getEnv("MIGRATIONS_DIR", "./migrations"),
-		LicenseHMACSecret:         os.Getenv("LICENSE_HMAC_SECRET"),
-		OTELEnabled:               truthy(os.Getenv("OTEL_ENABLED")),
-		OTELServiceName:           getEnv("OTEL_SERVICE_NAME", "clave-api"),
-		OTELExporterEndpoint:      os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-		SelfServiceTokenPepper:    os.Getenv("SELF_SERVICE_TOKEN_PEPPER"),
-		SelfServiceReturnToken:    strings.ToLower(os.Getenv("SELF_SERVICE_RETURN_TOKEN")) == "true",
-		SMTPHost:                  os.Getenv("SMTP_HOST"),
-		SMTPPort:                  getEnv("SMTP_PORT", "587"),
-		SMTPUser:                  os.Getenv("SMTP_USER"),
-		SMTPPass:                  os.Getenv("SMTP_PASS"),
-		MailFrom:                  getEnv("MAIL_FROM", "noreply@clave.app"),
-		RabbitMQURL:               os.Getenv("RABBITMQ_URL"),
-		WorkerToken:               os.Getenv("WORKER_TOKEN"),
-		PublicAppURL:              os.Getenv("PUBLIC_APP_URL"),
-		Port:                      getEnv("PORT", "8000"),
-		TrustProxyHeaders:         truthy(os.Getenv("TRUST_PROXY_HEADERS")),
-		UpdateArtifactStoragePath: getEnv("UPDATE_ARTIFACT_STORAGE_PATH", "./data/update-artifacts"),
-		UpdateCheckRetentionDays:  retentionDays,
+		DatabaseURL:                getEnv("DATABASE_URL", "postgres://clave@localhost:54321/clave?sslmode=disable"),
+		DatabaseMaxConns:           int32(databaseMaxConns),
+		RunMigrations:              truthy(os.Getenv("RUN_MIGRATIONS")),
+		VerboseLogging:             verboseLoggingEnabled(),
+		Dev:                        truthy(os.Getenv("DEV")),
+		MigrationsDir:              getEnv("MIGRATIONS_DIR", "./migrations"),
+		LicenseHMACSecret:          os.Getenv("LICENSE_HMAC_SECRET"),
+		OTELEnabled:                truthy(os.Getenv("OTEL_ENABLED")),
+		OTELServiceName:            getEnv("OTEL_SERVICE_NAME", "clave-api"),
+		OTELExporterEndpoint:       os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		SelfServiceTokenPepper:     os.Getenv("SELF_SERVICE_TOKEN_PEPPER"),
+		SelfServiceReturnToken:     strings.ToLower(os.Getenv("SELF_SERVICE_RETURN_TOKEN")) == "true",
+		SMTPHost:                   os.Getenv("SMTP_HOST"),
+		SMTPPort:                   getEnv("SMTP_PORT", "587"),
+		SMTPUser:                   os.Getenv("SMTP_USER"),
+		SMTPPass:                   os.Getenv("SMTP_PASS"),
+		MailFrom:                   getEnv("MAIL_FROM", "noreply@clave.app"),
+		RabbitMQURL:                os.Getenv("RABBITMQ_URL"),
+		WorkerToken:                os.Getenv("WORKER_TOKEN"),
+		PublicAppURL:               os.Getenv("PUBLIC_APP_URL"),
+		Port:                       getEnv("PORT", "8000"),
+		TrustProxyHeaders:          truthy(os.Getenv("TRUST_PROXY_HEADERS")),
+		UpdateArtifactStoragePath:  getEnv("UPDATE_ARTIFACT_STORAGE_PATH", "./data/update-artifacts"),
+		UpdateCheckRetentionDays:   retentionDays,
+		ClientCheckinRetentionDays: checkinRetentionDays,
+		AuditLogRetentionDays:      auditLogRetentionDays,
+		AuditMetadataRetentionDays: auditMetadataRetentionDays,
 	}
 
 	cfg.DevSkip2FA = cfg.Dev && !truthy(os.Getenv("DEV_FORCE_2FA"))

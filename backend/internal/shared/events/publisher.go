@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -15,6 +16,13 @@ import (
 // exchange mirrors the topic exchange the emailer worker binds to. Events are
 // routed by their Type (e.g. "license.created").
 const exchange = "clave.events"
+
+const (
+	mfaEmailTTL       = 10 * time.Minute
+	magicLinkEmailTTL = 15 * time.Minute
+	inviteEmailTTL    = 7 * 24 * time.Hour
+	licenseEmailTTL   = 7 * 24 * time.Hour
+)
 
 // EmailEvent is the wire shape consumed by the emailer worker. It must stay in
 // sync with EmailEvent in emailer/src/templates.ts.
@@ -99,12 +107,35 @@ func (p *Publisher) publish(ctx context.Context, routingKey string, event any) e
 	pubCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	return ch.PublishWithContext(pubCtx, exchange, routingKey, false, false, amqp.Publishing{
+	publishing := amqp.Publishing{
 		ContentType:  "application/json",
 		DeliveryMode: amqp.Persistent,
 		Timestamp:    time.Now(),
 		Body:         body,
-	})
+	}
+	if expiration := eventExpiration(event); expiration > 0 {
+		publishing.Expiration = strconv.FormatInt(expiration.Milliseconds(), 10)
+	}
+	return ch.PublishWithContext(pubCtx, exchange, routingKey, false, false, publishing)
+}
+
+func eventExpiration(event any) time.Duration {
+	email, ok := event.(EmailEvent)
+	if !ok {
+		return 0
+	}
+	switch email.Type {
+	case "admin.2fa_code":
+		return mfaEmailTTL
+	case "selfservice.magic_link":
+		return magicLinkEmailTTL
+	case "organization.invite":
+		return inviteEmailTTL
+	case "license.created", "license.replaced":
+		return licenseEmailTTL
+	default:
+		return 0
+	}
 }
 
 // PublishLicenseCreated emits a "license.created" event for the emailer worker.

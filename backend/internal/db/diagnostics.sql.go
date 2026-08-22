@@ -12,6 +12,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteDailyVersionAdoptionForDate = `-- name: DeleteDailyVersionAdoptionForDate :exec
+DELETE FROM daily_version_adoption
+WHERE date = $1::date
+`
+
+func (q *Queries) DeleteDailyVersionAdoptionForDate(ctx context.Context, date pgtype.Date) error {
+	_, err := q.db.Exec(ctx, deleteDailyVersionAdoptionForDate, date)
+	return err
+}
+
 const deleteExpiredClientCheckins = `-- name: DeleteExpiredClientCheckins :execrows
 DELETE FROM client_checkins
 WHERE created_at < now() - make_interval(days => $1::int)
@@ -25,99 +35,159 @@ func (q *Queries) DeleteExpiredClientCheckins(ctx context.Context, retentionDays
 	return result.RowsAffected(), nil
 }
 
-const insertClientCheckin = `-- name: InsertClientCheckin :one
-INSERT INTO client_checkins (
-    organization_id, product_id, license_id, activation_id,
-    version, build, platform, arch, os_version
-)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, organization_id, product_id, license_id, activation_id, version, build, platform, arch, os_version, created_at
-`
-
-type InsertClientCheckinParams struct {
-	OrganizationID uuid.UUID `json:"organization_id"`
-	ProductID      uuid.UUID `json:"product_id"`
-	LicenseID      uuid.UUID `json:"license_id"`
-	ActivationID   uuid.UUID `json:"activation_id"`
-	Version        string    `json:"version"`
-	Build          *string   `json:"build"`
-	Platform       *string   `json:"platform"`
-	Arch           *string   `json:"arch"`
-	OsVersion      *string   `json:"os_version"`
-}
-
-func (q *Queries) InsertClientCheckin(ctx context.Context, arg InsertClientCheckinParams) (ClientCheckin, error) {
-	row := q.db.QueryRow(ctx, insertClientCheckin,
-		arg.OrganizationID,
-		arg.ProductID,
-		arg.LicenseID,
-		arg.ActivationID,
-		arg.Version,
-		arg.Build,
-		arg.Platform,
-		arg.Arch,
-		arg.OsVersion,
-	)
-	var i ClientCheckin
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProductID,
-		&i.LicenseID,
-		&i.ActivationID,
-		&i.Version,
-		&i.Build,
-		&i.Platform,
-		&i.Arch,
-		&i.OsVersion,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const listDailyLatestClientVersions = `-- name: ListDailyLatestClientVersions :many
-SELECT date, version, count(*)::bigint AS device_count
+const insertDailyVersionAdoptionForDate = `-- name: InsertDailyVersionAdoptionForDate :exec
+INSERT INTO daily_version_adoption (date, organization_id, product_id, version, device_count)
+SELECT observed_date, organization_id, product_id, version, count(*)
 FROM (
-    SELECT DISTINCT ON (c.created_at::date, c.activation_id)
-        c.created_at::date AS date,
-        c.activation_id,
-        c.version
-    FROM client_checkins c
-    JOIN activations a ON a.id = c.activation_id
-    WHERE c.organization_id = $1::uuid
-      AND c.created_at >= now() - make_interval(days => $2::int)
-      AND (
-          $3::uuid IS NULL
-          OR c.product_id = $3::uuid
-      )
-      AND a.deactivated_at IS NULL
-    ORDER BY c.created_at::date, c.activation_id, c.created_at DESC, c.id DESC
-) latest
-GROUP BY date, version
-ORDER BY date, version
+    SELECT DISTINCT ON (activation_id)
+        (created_at AT TIME ZONE 'UTC')::date AS observed_date,
+        organization_id,
+        product_id,
+        activation_id,
+        version
+    FROM client_checkins
+    WHERE (created_at AT TIME ZONE 'UTC')::date = $1::date
+    ORDER BY activation_id, created_at DESC, id DESC
+) latest_daily
+GROUP BY observed_date, organization_id, product_id, version
 `
 
-type ListDailyLatestClientVersionsParams struct {
+func (q *Queries) InsertDailyVersionAdoptionForDate(ctx context.Context, date pgtype.Date) error {
+	_, err := q.db.Exec(ctx, insertDailyVersionAdoptionForDate, date)
+	return err
+}
+
+const listClosedClientCheckinDates = `-- name: ListClosedClientCheckinDates :many
+SELECT DISTINCT (created_at AT TIME ZONE 'UTC')::date AS date
+FROM client_checkins
+WHERE (created_at AT TIME ZONE 'UTC')::date < (now() AT TIME ZONE 'UTC')::date
+ORDER BY date
+`
+
+func (q *Queries) ListClosedClientCheckinDates(ctx context.Context) ([]pgtype.Date, error) {
+	rows, err := q.db.Query(ctx, listClosedClientCheckinDates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.Date{}
+	for rows.Next() {
+		var date pgtype.Date
+		if err := rows.Scan(&date); err != nil {
+			return nil, err
+		}
+		items = append(items, date)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCurrentClientStates = `-- name: ListCurrentClientStates :many
+SELECT
+    a.id AS activation_id,
+    d.hostname,
+    a.current_version AS version,
+    a.current_build AS build,
+    a.platform,
+    a.arch,
+    a.os_version,
+    a.last_seen_at
+FROM activations a
+JOIN devices d ON d.id = a.device_id
+JOIN licenses l ON l.id = a.license_id
+WHERE l.organization_id = $1::uuid
+  AND a.deactivated_at IS NULL
+  AND a.last_seen_at >= now() - make_interval(days => $2::int)
+  AND a.current_version IS NOT NULL
+  AND (
+      $3::uuid IS NULL
+      OR l.product_id = $3::uuid
+  )
+ORDER BY a.last_seen_at DESC, a.id
+`
+
+type ListCurrentClientStatesParams struct {
 	OrganizationID uuid.UUID   `json:"organization_id"`
 	Days           int32       `json:"days"`
 	ProductID      pgtype.UUID `json:"product_id"`
 }
 
-type ListDailyLatestClientVersionsRow struct {
+type ListCurrentClientStatesRow struct {
+	ActivationID uuid.UUID          `json:"activation_id"`
+	Hostname     *string            `json:"hostname"`
+	Version      *string            `json:"version"`
+	Build        *string            `json:"build"`
+	Platform     *string            `json:"platform"`
+	Arch         *string            `json:"arch"`
+	OsVersion    *string            `json:"os_version"`
+	LastSeenAt   pgtype.Timestamptz `json:"last_seen_at"`
+}
+
+func (q *Queries) ListCurrentClientStates(ctx context.Context, arg ListCurrentClientStatesParams) ([]ListCurrentClientStatesRow, error) {
+	rows, err := q.db.Query(ctx, listCurrentClientStates, arg.OrganizationID, arg.Days, arg.ProductID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCurrentClientStatesRow{}
+	for rows.Next() {
+		var i ListCurrentClientStatesRow
+		if err := rows.Scan(
+			&i.ActivationID,
+			&i.Hostname,
+			&i.Version,
+			&i.Build,
+			&i.Platform,
+			&i.Arch,
+			&i.OsVersion,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listDailyVersionAdoption = `-- name: ListDailyVersionAdoption :many
+SELECT date, version, sum(device_count)::bigint AS device_count
+FROM daily_version_adoption
+WHERE organization_id = $1::uuid
+  AND date >= ((now() AT TIME ZONE 'UTC')::date - ($2::int - 1))
+  AND (
+      $3::uuid IS NULL
+      OR product_id = $3::uuid
+  )
+GROUP BY date, version
+ORDER BY date, version
+`
+
+type ListDailyVersionAdoptionParams struct {
+	OrganizationID uuid.UUID   `json:"organization_id"`
+	Days           int32       `json:"days"`
+	ProductID      pgtype.UUID `json:"product_id"`
+}
+
+type ListDailyVersionAdoptionRow struct {
 	Date        pgtype.Date `json:"date"`
 	Version     string      `json:"version"`
 	DeviceCount int64       `json:"device_count"`
 }
 
-func (q *Queries) ListDailyLatestClientVersions(ctx context.Context, arg ListDailyLatestClientVersionsParams) ([]ListDailyLatestClientVersionsRow, error) {
-	rows, err := q.db.Query(ctx, listDailyLatestClientVersions, arg.OrganizationID, arg.Days, arg.ProductID)
+func (q *Queries) ListDailyVersionAdoption(ctx context.Context, arg ListDailyVersionAdoptionParams) ([]ListDailyVersionAdoptionRow, error) {
+	rows, err := q.db.Query(ctx, listDailyVersionAdoption, arg.OrganizationID, arg.Days, arg.ProductID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListDailyLatestClientVersionsRow{}
+	items := []ListDailyVersionAdoptionRow{}
 	for rows.Next() {
-		var i ListDailyLatestClientVersionsRow
+		var i ListDailyVersionAdoptionRow
 		if err := rows.Scan(&i.Date, &i.Version, &i.DeviceCount); err != nil {
 			return nil, err
 		}
@@ -129,81 +199,55 @@ func (q *Queries) ListDailyLatestClientVersions(ctx context.Context, arg ListDai
 	return items, nil
 }
 
-const listLatestClientCheckins = `-- name: ListLatestClientCheckins :many
-WITH ranked AS (
-    SELECT
-        c.id, c.organization_id, c.product_id, c.license_id, c.activation_id, c.version, c.build, c.platform, c.arch, c.os_version, c.created_at,
-        row_number() OVER (
-            PARTITION BY c.activation_id
-            ORDER BY c.created_at DESC, c.id DESC
-        ) AS position
-    FROM client_checkins c
-    WHERE c.organization_id = $1::uuid
-      AND c.created_at >= now() - make_interval(days => $2::int)
-      AND (
-          $3::uuid IS NULL
-          OR c.product_id = $3::uuid
-      )
+const recordClientCheckin = `-- name: RecordClientCheckin :exec
+WITH updated AS (
+    UPDATE activations a
+    SET last_seen_at = now(),
+        current_version = CASE WHEN $4 <> '' THEN $4 ELSE a.current_version END,
+        current_build = CASE WHEN $4 <> '' THEN $5 ELSE a.current_build END,
+        platform = CASE WHEN $4 <> '' THEN $6 ELSE a.platform END,
+        arch = CASE WHEN $4 <> '' THEN $7 ELSE a.arch END,
+        os_version = CASE WHEN $4 <> '' THEN $8 ELSE a.os_version END
+    WHERE a.id = $9
+      AND a.license_id = $3
+      AND a.deactivated_at IS NULL
+    RETURNING a.id
+)
+INSERT INTO client_checkins (
+    organization_id, product_id, license_id, activation_id,
+    version, build, platform, arch, os_version
 )
 SELECT
-    ranked.activation_id,
-    d.hostname,
-    ranked.version,
-    ranked.build,
-    ranked.platform,
-    ranked.arch,
-    ranked.os_version,
-    ranked.created_at
-FROM ranked
-JOIN activations a ON a.id = ranked.activation_id
-JOIN devices d ON d.id = a.device_id
-WHERE ranked.position = 1
-  AND a.deactivated_at IS NULL
-ORDER BY ranked.created_at DESC
+    $1, $2, $3, updated.id,
+    $4, $5, $6,
+    $7, $8
+FROM updated
+WHERE $4 <> ''
 `
 
-type ListLatestClientCheckinsParams struct {
-	OrganizationID uuid.UUID   `json:"organization_id"`
-	Days           int32       `json:"days"`
-	ProductID      pgtype.UUID `json:"product_id"`
+type RecordClientCheckinParams struct {
+	OrganizationID uuid.UUID `json:"organization_id"`
+	ProductID      uuid.UUID `json:"product_id"`
+	LicenseID      uuid.UUID `json:"license_id"`
+	Version        string    `json:"version"`
+	Build          *string   `json:"build"`
+	Platform       *string   `json:"platform"`
+	Arch           *string   `json:"arch"`
+	OsVersion      *string   `json:"os_version"`
+	ActivationID   uuid.UUID `json:"activation_id"`
 }
 
-type ListLatestClientCheckinsRow struct {
-	ActivationID uuid.UUID          `json:"activation_id"`
-	Hostname     *string            `json:"hostname"`
-	Version      string             `json:"version"`
-	Build        *string            `json:"build"`
-	Platform     *string            `json:"platform"`
-	Arch         *string            `json:"arch"`
-	OsVersion    *string            `json:"os_version"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) ListLatestClientCheckins(ctx context.Context, arg ListLatestClientCheckinsParams) ([]ListLatestClientCheckinsRow, error) {
-	rows, err := q.db.Query(ctx, listLatestClientCheckins, arg.OrganizationID, arg.Days, arg.ProductID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListLatestClientCheckinsRow{}
-	for rows.Next() {
-		var i ListLatestClientCheckinsRow
-		if err := rows.Scan(
-			&i.ActivationID,
-			&i.Hostname,
-			&i.Version,
-			&i.Build,
-			&i.Platform,
-			&i.Arch,
-			&i.OsVersion,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) RecordClientCheckin(ctx context.Context, arg RecordClientCheckinParams) error {
+	_, err := q.db.Exec(ctx, recordClientCheckin,
+		arg.OrganizationID,
+		arg.ProductID,
+		arg.LicenseID,
+		arg.Version,
+		arg.Build,
+		arg.Platform,
+		arg.Arch,
+		arg.OsVersion,
+		arg.ActivationID,
+	)
+	return err
 }

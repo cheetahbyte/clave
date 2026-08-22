@@ -416,10 +416,6 @@ func (r *Repository) InsertUpdateCheck(ctx context.Context, orgID, productID, li
 	return err
 }
 
-func (r *Repository) DeleteExpiredUpdateChecks(ctx context.Context, retentionDays int) (int64, error) {
-	return r.q.DeleteExpiredUpdateChecks(ctx, int32(retentionDays))
-}
-
 func MustParseProviderConfig(raw []byte) map[string]any {
 	if len(raw) == 0 {
 		return nil
