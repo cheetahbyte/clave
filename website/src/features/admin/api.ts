@@ -635,7 +635,7 @@ export interface ReleaseDTO {
   changelogId?: string;
   publishedAt?: string;
   createdAt?: string;
-  artifacts: ReleaseArtifactDTO[];
+  artifacts?: ReleaseArtifactDTO[];
 }
 
 export interface ArtifactFullDTO {

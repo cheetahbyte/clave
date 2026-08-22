@@ -569,7 +569,7 @@ function UploadArtifactDialog({
     (release) =>
       release.id !== releaseId &&
       release.platform === targetRelease?.platform &&
-      release.artifacts.some((artifact) => artifact.type !== "delta"),
+      release.artifacts?.some((artifact) => artifact.type !== "delta"),
   );
 
   return (
@@ -634,7 +634,7 @@ function UploadArtifactDialog({
           </div>
         </div>
         {targetRelease &&
-        targetRelease.artifacts.length === 0 &&
+        !targetRelease.artifacts?.length &&
         compatibleSources.length > 0 ? (
           <div className="border-t pt-4 space-y-2">
             <Label>Or reuse artifacts from a release</Label>
