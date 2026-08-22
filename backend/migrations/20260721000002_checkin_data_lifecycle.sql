@@ -44,7 +44,7 @@ WHERE a.id = latest.activation_id;
 INSERT INTO daily_version_adoption (date, organization_id, product_id, version, device_count)
 SELECT observed_date, organization_id, product_id, version, count(*)
 FROM (
-    SELECT DISTINCT ON (created_at::date, activation_id)
+    SELECT DISTINCT ON ((created_at AT TIME ZONE 'UTC')::date, activation_id)
         (created_at AT TIME ZONE 'UTC')::date AS observed_date,
         organization_id,
         product_id,
