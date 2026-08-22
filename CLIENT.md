@@ -87,7 +87,7 @@ avoids expiry races. Deduplicate refreshes inside the process so concurrent
 features share one request. After transient failures, retry with exponential
 backoff and random jitter rather than on every foreground event.
 
-```
+```http
 Authorization: Bearer <activation-jwt>
 ```
 
@@ -123,7 +123,7 @@ If the cached token has only recently expired (within the same seven-day window 
 optional update check. Prefer it for scheduled background work because the
 server authorizes the license and activation only once.
 
-```
+```http
 Authorization: Bearer <activation-jwt>
 ```
 
@@ -134,6 +134,7 @@ Authorization: Bearer <activation-jwt>
   "build": "140",
   "platform": "macos",
   "arch": "arm64",
+  "osVersion": "15.0",
   "channel": "stable",
   "clientId": "<stable rollout id>"
 }
@@ -144,12 +145,14 @@ The response always contains `token`, `validUntil`, `updateChannels`, and
 `updateStatus`. `updateStatus` is `not_requested`, `ok`, or `unavailable`; an
 `ok` response also includes the normal update-check payload in `update`.
 
-When `version` is present and the license is authorized, Clave also records a
-best-effort client check-in for the Version Adoption dashboard. This happens
-independently of update resolution, so the check-in still counts when no update
-source is configured or the update provider is temporarily unavailable. Build,
-platform, architecture, and OS version are optional diagnostics. Check-in
-recording never changes the synchronization response or failure behavior.
+Every authorized synchronization updates the activation's last-seen time. When
+`version` is present, Clave also stores the current version, build, platform,
+architecture, and OS version and records a check-in for the Version Adoption
+dashboard. The update happens before update resolution, so the check-in still
+counts when no update source is configured or the update provider is temporarily
+unavailable. Build, platform, architecture, and OS version are optional. If
+Clave can't persist this state, synchronization fails rather than returning
+success with stale device data.
 
 ---
 
@@ -282,7 +285,7 @@ resume with `Range`, verify the published SHA-256, then rename the completed
 file atomically. S3-backed artifacts redirect to short-lived presigned URLs and
 should use the same resume and checksum workflow.
 
-```
+```http
 Authorization: Bearer <activation-jwt>
 ```
 
@@ -315,7 +318,7 @@ Use `name` as the `channel` value in update checks. If you're not giving users a
 
 Use your license JWT to check if a newer version is available. The server resolves which update backend to use based on the product's configuration.
 
-```
+```http
 Authorization: Bearer <activation-jwt>
 ```
 
