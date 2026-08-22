@@ -3,6 +3,7 @@ package retention
 import (
 	"context"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -64,7 +65,30 @@ func (w *Worker) run(ctx context.Context) {
 	}
 }
 
+func toInt32(value int) (int32, bool) {
+	if value < math.MinInt32 || value > math.MaxInt32 {
+		return 0, false
+	}
+	return int32(value), true
+}
+
 func (w *Worker) cleanup(ctx context.Context) {
+	auditMetadataDays, ok := toInt32(w.policies.AuditMetadataDays)
+	if !ok {
+		slog.Warn("retention cleanup skipped due to invalid policy value", "policy", "AuditMetadataDays", "value", w.policies.AuditMetadataDays)
+		return
+	}
+	auditLogDays, ok := toInt32(w.policies.AuditLogDays)
+	if !ok {
+		slog.Warn("retention cleanup skipped due to invalid policy value", "policy", "AuditLogDays", "value", w.policies.AuditLogDays)
+		return
+	}
+	updateCheckDays, ok := toInt32(w.policies.UpdateCheckDays)
+	if !ok {
+		slog.Warn("retention cleanup skipped due to invalid policy value", "policy", "UpdateCheckDays", "value", w.policies.UpdateCheckDays)
+		return
+	}
+
 	operations := []struct {
 		name string
 		run  func(context.Context) (int64, error)
@@ -73,13 +97,13 @@ func (w *Worker) cleanup(ctx context.Context) {
 		{"organization_invites", w.store.DeleteStaleOrganizationInvites},
 		{"admin_email_codes", w.store.DeleteStaleAdminEmailCodes},
 		{"audit_security_metadata", func(ctx context.Context) (int64, error) {
-			return w.store.ScrubStaleAuditSecurityMetadata(ctx, int32(w.policies.AuditMetadataDays))
+			return w.store.ScrubStaleAuditSecurityMetadata(ctx, auditMetadataDays)
 		}},
 		{"audit_logs", func(ctx context.Context) (int64, error) {
-			return w.store.DeleteStaleAuditLogs(ctx, int32(w.policies.AuditLogDays))
+			return w.store.DeleteStaleAuditLogs(ctx, auditLogDays)
 		}},
 		{"update_checks", func(ctx context.Context) (int64, error) {
-			return w.store.DeleteStaleUpdateChecks(ctx, int32(w.policies.UpdateCheckDays))
+			return w.store.DeleteStaleUpdateChecks(ctx, updateCheckDays)
 		}},
 	}
 	for _, operation := range operations {

@@ -2,6 +2,8 @@ package diagnostics
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"strings"
 
 	"github.com/cheetahbyte/clave/internal/db"
@@ -65,7 +67,12 @@ func (r *Repository) AggregateClosedDatesAndCleanup(ctx context.Context, retenti
 		}
 	}
 
-	deleted, err := qtx.DeleteExpiredClientCheckins(ctx, int32(retentionDays))
+	if retentionDays < 0 || retentionDays > math.MaxInt32 {
+		return 0, fmt.Errorf("retentionDays must be between 0 and %d", math.MaxInt32)
+	}
+	retentionDays32 := int32(retentionDays)
+
+	deleted, err := qtx.DeleteExpiredClientCheckins(ctx, retentionDays32)
 	if err != nil {
 		return 0, err
 	}
